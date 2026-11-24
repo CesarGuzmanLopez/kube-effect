@@ -20,7 +20,16 @@ export SONAR_TOKEN
 
 space := $(subst ,, )
 
-.PHONY: lint lint-ci check quality sonar-scan sonar-up sonar-down deps format install nested
+NATIVE_DIR := native
+NATIVE := $(NATIVE_DIR)/build.sh
+# Sources shipped inside the package so a store install can compile Plus on
+# demand (ADR-018). native/ stays the source of truth; rsync keeps them equal.
+NATIVE_PACKAGE_DIR := $(QML_DIR)/contents/native
+# Anchored on the transfer root so build.sh is copied: only build trees are excluded.
+NATIVE_SYNC_EXCLUDES := --exclude '/build/' --exclude '/build-system/' --exclude '*.o' --exclude 'CMakeFiles' --exclude '.cache'
+
+.PHONY: lint lint-ci check quality sonar-scan sonar-up sonar-down deps format install nested \
+	sync-package-native native native-install native-clean native-status
 
 # Gate obligatorio en local: checks + análisis en el Sonar de localhost:9000.
 lint: check sonar-scan
@@ -38,8 +47,18 @@ lint-ci: check
 # check-ui.py construye el formulario con QUiLoader (lo que hace el KCM) para
 # comprobar que cada widget se crea de verdad y su propiedad USER lleva el tipo
 # del esquema. check-constants.py prueba los helpers de constants.js bajo el
-# motor QML (modo de fondo, mapeo de imagen y valor Url real). Ambos se saltan
-# (exit 0) si falta PySide6: CI no depende de ellos.
+# motor QML (modo de fondo, mapeo de imagen, ajuste, atenuación y valor Url
+# real). Ambos se saltan (exit 0) si falta PySide6: CI no depende de ellos.
+# check-scene-environment.py instancia en un motor QML real el SceneEnvironment
+# del SkyBox con probeExposure (1.0 quieto, 0.4 girando con atenuación del 40 %)
+# y falla si la propiedad no existe o el binding muere al animarla; su --selftest
+# comprueba que una propiedad inexistente sí falla.
+# check-features.py valida el catálogo features.json (campos obligatorios,
+# status válido, ids únicos y dependencias conocidas); un JSON inválido rompe
+# el gate. Su --selftest comprueba el propio validador (JSON inválido, id
+# duplicado, status inválido, entrada no-objeto). Además, rsync en seco verifica
+# que package/contents/native/ coincide con native/ (ADR-018). `make deps`
+# sondea el sistema y avisa (sin fallar) de los módulos opcionales que falten.
 check:
 	@files=$$(find $(QML_DIR) -name '*.qml'); \
 	if [ -n "$$files" ]; then \
@@ -47,11 +66,31 @@ check:
 		bad=$$(grep -oE '\[[a-z-]+\]$$' /tmp/kube-effect-qmllint.log | tr -d '[]' | sort -u \
 			| grep -vE "^($(subst $(space),|,$(QMLLINT_ALLOWED)))$$" || true); \
 		if [ -n "$$bad" ]; then echo "qmllint: reglas nuevas sin revisar: $$bad"; cat /tmp/kube-effect-qmllint.log; exit 1; fi; \
-		$(QMLFORMAT) -i $$files && git diff --exit-code -- $(QML_DIR); \
+		$(QMLFORMAT) -i $$files; \
+		untracked=$$(git ls-files --others --exclude-standard -- $(QML_DIR) | grep -E '\.qml$$' || true); \
+		if ! git diff --exit-code -- $(QML_DIR) || [ -n "$$untracked" ]; then \
+			echo "qmlformat: el árbol no está formateado o hay QML nuevos sin trackear (git add):"; \
+			git diff --stat -- $(QML_DIR); \
+			if [ -n "$$untracked" ]; then echo "$$untracked"; fi; \
+			exit 1; \
+		fi; \
 	fi
 	@python3 scripts/check-schema.py
 	@if [ -f $(QML_DIR)/contents/ui/config.ui ]; then python3 scripts/check-ui.py; else echo "check-ui: skipped (no config.ui, generic KCM)"; fi
 	@if grep -q '^function ' $(QML_DIR)/contents/ui/constants.js 2>/dev/null; then python3 scripts/check-constants.py; else echo "check-constants: skipped (no helpers in constants.js)"; fi
+	@python3 scripts/check-scene-environment.py
+	@python3 scripts/check-scene-environment.py --selftest
+	@python3 scripts/check-features.py
+	@python3 scripts/check-features.py --selftest
+	@if [ ! -d $(NATIVE_PACKAGE_DIR) ]; then \
+		echo "native: falta $(NATIVE_PACKAGE_DIR) (run: make sync-package-native)"; exit 1; \
+	fi; \
+	changes=$$(rsync -a --delete --dry-run --itemize-changes $(NATIVE_SYNC_EXCLUDES) \
+		$(NATIVE_DIR)/ $(NATIVE_PACKAGE_DIR)/); \
+	if [ -n "$$changes" ]; then \
+		echo "native: $(NATIVE_PACKAGE_DIR) diverge de $(NATIVE_DIR):"; echo "$$changes"; \
+		echo "run: make sync-package-native"; exit 1; \
+	fi
 	python3 -c "import json;json.load(open('$(QML_DIR)/metadata.json'))"
 	python3 -c "import yaml;yaml.safe_load(open('.github/workflows/ci.yml'))"
 
@@ -92,7 +131,7 @@ format:
 # machine still passes; `make deps` lists what is missing.
 quality:
 	@echo "quality: optional checks (skipped when the tool is absent)"
-	@command -v shfmt >/dev/null && shfmt -d scripts/*.sh || echo "  shfmt: omitido"
+	@command -v shfmt >/dev/null && shfmt -d scripts/*.sh $(NATIVE) || echo "  shfmt: omitido"
 	@for f in package/contents/config/main.xml package/contents/ui/config.ui; do \
 		command -v xmllint >/dev/null && xmllint --noout "$$f" || echo "  xmllint: omitido"; \
 	done
@@ -106,9 +145,38 @@ quality:
 deps:
 	@./scripts/check-deps.sh
 
-install:
+# Copy native/ (source of truth) into the package, without build trees. Safe to
+# run repeatedly; `make install` does it first so the shipped sources never go
+# stale (ADR-018).
+sync-package-native:
+	@mkdir -p $(NATIVE_PACKAGE_DIR)
+	@rsync -a --delete $(NATIVE_SYNC_EXCLUDES) $(NATIVE_DIR)/ $(NATIVE_PACKAGE_DIR)/
+	@echo "native: fuentes sincronizadas en $(NATIVE_PACKAGE_DIR)"
+
+install: sync-package-native
 	kpackagetool6 --type KWin/Effect --upgrade $(QML_DIR)/ || \
 		kpackagetool6 --type KWin/Effect --install $(QML_DIR)/
+
+# Optional Kube Effect Plus KCM (ADR-011/ADR-012/ADR-018). Never needed for the
+# QML effect: its settings menu is the generic KCM and always works without
+# compiling anything.
+# `make native` installs into ~/.local (no root) and writes
+# ~/.local/share/kube-effect/{native-stamp.json,prefix.sh}.
+native:
+	@./$(NATIVE)
+
+# System-wide install: one sudo, and only for the install step. The stamp is
+# written as the calling user so `make native-status` keeps working.
+native-install:
+	@./$(NATIVE) --system
+
+native-clean:
+	@rm -rf $(NATIVE_DIR)/build $(NATIVE_DIR)/build-system
+	@echo "native: build trees removed"
+
+# Exit 1 when the stamp is missing or the compiled Plasma/Qt no longer matches.
+native-status:
+	@./scripts/native-status.sh
 
 nested:
 	kwin_wayland --xwayland :2 &

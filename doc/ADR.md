@@ -47,6 +47,8 @@ cilindro (elegible).
 Video (360) / Image (fija o girando con el centro) hay que mantener estatico el fondo o puede ser jirable , más `CascoDim`.
 **Porqué**: el usuario quiere un casco rico, no limitado a dos fondos.
 
+**Nota** (ADR-013): el tipo `Circular` queda fuera; `Radial` se implementa con `QtQuick.Shapes.RadialGradient`.
+
 ## ADR-007 — Interior = objetos decorativos 3D/2D.
 
 **Decisión**: objetos dentro del sólido: 3D animado (planetas), 3D estático
@@ -74,3 +76,145 @@ recompila.
 un `real` (pulso/órbita) y derivar el `vector3d`.
 **Porqué**: animar un vector3d escribe un solo double y llena el journal de
 `QVariant(double, nan/0)`, corrompiendo la escena.
+
+## ADR-011 — Distribución híbrida: QML baseline + Kube Effect Plus independiente.
+
+**Decisión**: el efecto SIEMPRE declara `X-KDE-ConfigModule: kcm_kwin4_genericscripted`
+(menú QML = `config.ui`, funciona sin compilar). Verificado en
+`plasma/kwin/src/kcms/common/effectsmodel.cpp`: KF6 **no hace fallback** al
+genérico si el módulo declarado no existe, así que apuntar la metadata a un
+`.so` opcional rompería el botón Configurar. El nativo es **Kube Effect Plus**,
+un módulo **independiente** (`kcm_kube_effect_plus`, título «Kube Effect Plus»,
+`X-KDE-System-Settings-Parent-Category: windowmanagement`), no un gemelo de
+todas las pestañas: solo features nativas, diagnóstico, comprobación de
+dependencias y `reconfigureEffect`.
+**Porqué**: cero duplicación de UI (dos UIs que sincronizar con `main.xml`), y si el
+`.so` falta o es incompatible el cubo QML sigue intacto. Precedente upstream:
+`kdeplasma-addons/kwin/effects/cube` (efecto QML `declarativescript` + KCM C++
+`kwin_cube_config`).
+
+## ADR-012 — El código nativo se compila bajo demanda; nunca automático.
+
+**Decisión**: el paquete que se distribuye (KDE Store) viaja con `native/` (fuentes
+CMake). El usuario compila cuando quiere (referente real: `kde-shader-wallpaper`,
+que incluye `contents/source/` y ofrece «Build and Install» con `build.sh`).
+Instalación por defecto en `~/.local` con prefijo privado + `prefix.sh` (sin root);
+integración permanente requiere `sudo` una vez o el paquete de distro. Verificado:
+`systemsettings` KF6 descubre KCMs vía `KPluginMetaData::findPlugins` sobre los Qt
+plugin paths; `~/.local/share/kservices6` NO basta y `~/.local/lib/qt6/plugins` no se
+escanea sin `prefix.sh`/`QT_PLUGIN_PATH`. Sin ABI estable en KWin: el `.so` se
+estampa con `KUBE_PLASMA_VERSION`, `KUBE_QT_VERSION`, `KUBE_PKG_VERSION` y escribe
+`~/.local/share/kube-effect/native-stamp.json` (`plasma`, `qt`, `pkg`, `built`,
+`prefix`) en `build.sh`. Tras actualizar Plasma: **nunca** se recompila solo; el KCM
+detecta la discrepancia y muestra «compilado para X, tienes Y → recompila». El estado
+(«no compilado», «desactualizado», «faltan dependencias») se muestra SOLO en el KCM
+nativo: `config.ui` es estático (QUiLoader) y no puede leer ficheros ni pintar estado.
+Paquetes por distro (AUR `-bin`, COPR, PPA, OBS) quedan como canal futuro; no ahora.
+**Porqué**: compilar es un acto voluntario y explícito, nunca un efecto secundario de
+instalar el paquete. Así el KDE Store sigue entregando solo QML y el usuario decide si
+quiere el menú avanzado.
+
+## ADR-013 — Degradado: radial real sin cónico; el usuario define la proporción de la imagen.
+
+**Decisión**: `Radial` real con `QtQuick.Shapes.RadialGradient` (verificado: expone
+`centerX/centerY/centerRadius/focal*` y `stops` en Qt 6.12). Deja de caer a vertical.
+**No** hay tipo cónico/circular. Se elimina `BackgroundImageMapping.Auto` (adivinaba
+mal): quedan `Equirect` y `Flat` explícitos, más `BackgroundImageFit`
+(`Cover`/`Contain`/`Stretch`, default `Cover`) para la imagen plana.
+**Nota (rename)**: la clave pasa de `BackgroundImageMapping` a
+`BackgroundImageLayout` (`Equirect`=0 / `Flat`=1, misma semántica). El cambio de
+**clave** es deliberado: kwinrc guarda el índice, así que un
+`BackgroundImageMapping=1` viejo (que entonces era Equirect) queda huérfano y se
+ignora, en vez de convertirse en `Flat`.
+**Porqué**: el usuario decide qué es panorama y cómo encaja; el efecto deja de adivinar
+la proporción de una imagen que no puede medir sin decodificarla.
+
+## ADR-014 — Pestaña Advanced: solo tres claves avanzadas.
+
+**Decisión**: `DimWhileRotating` (Bool, default false) + `DimWhileRotatingAmount` (Int
+0–100, default 40): oscurece el fondo SOLO mientras el cubo gira y vuelve al soltar.
+`CursorScreenOnly` (Bool, default **false** = todas las pantallas): el cubo se dibuja
+solo en el monitor donde está el cursor al lanzarse; el resto de pantallas quedan
+normales. Advanced es el único sitio donde viven las opciones avanzadas (no repartirlas
+por otras pestañas).
+**Nota (ADR-018)**: la pestaña se organiza en tres bloques con separadores
+(`QFrame::HLine`): «Atenuar mientras gira», «Pantalla» y una sección plegable
+«Funciones extra (Kube Effect Plus)». La intensidad de atenuación empieza
+deshabilitada y se habilita con `toggled(bool)` de su casilla.
+**Porqué**: las opciones avanzadas se agrupan en una sola pestaña para que las básicas
+queden limpias y no se dispersen por la UI.
+
+## ADR-015 — Arnés anidado: compila siempre antes, aborta si falla.
+
+**Decisión**: `scripts/kwin-nested-test.sh` ejecuta `make native` antes de arrancar; si
+falla, **aborta** (no se prueba con binario viejo). Tras arrancar, lanza
+`kcmshell6 kcm_kube_effect_plus` con `prefix.sh` y el `XDG_CONFIG_HOME` del anidado (el
+KCM escribe en el kwinrc del anidado, no en el del host). El comando de compilación que
+muestra el menú QML se **oculta en pruebas** (se compila a mano al lanzar el arnés);
+documentarlo como paso obligatorio cada vez que se cree un menú nuevo.
+**Porqué**: nunca se prueba contra un binario desactualizado; el arnés garantiza que lo
+que se ve es lo recién compilado.
+
+## ADR-016 — `features.json`: catálogo de features y dependencias.
+
+**Decisión**: `package/contents/config/features.json` con `id`, `label`,
+`requires[]`, `native` (bool), `notes`, `status` (stable/planned/needs-native),
+`since`. Consumidores: `scripts/check-deps.sh` / `make deps` (Python) y el KCM
+nativo (pinta palomitas de dependencias). **El QML no lo lee** (sin validación en runtime
+ni avisos en pantalla).
+**Porqué**: una sola fuente para «qué feature necesita qué» y para saber qué puede correr.
+
+## ADR-017 — Degradado giratorio: tres orientaciones y el radial mueve el foco.
+
+**Decisión**: nueva clave `BackgroundGradientRotation` (Enum → entero en kwinrc):
+`Fixed` (0, default: el degradado no gira), `FollowCube` (1: gira con el yaw de la
+cámara/cubo) y `FollowCubeInverse` (2: gira al revés). Solo afecta al **casco
+degradado** (`Background=Gradient`); el color, la imagen y el SkyBox no cambian.
+La rotación lineal es un `Rotation` (transform) sobre un `Rectangle`
+sobredimensionado al diagonal de la pantalla, así que **no se crea ningún objeto por
+frame**; los stops del `Gradient` se remapean a la franja visible para que `Fixed`
+se vea exactamente igual que antes. Un `RadialGradient` centrado es simétrico, así
+que girarlo no se notaría: en `FollowCube`/`FollowCubeInverse` se desplaza el
+**foco** (`focalX`/`focalY`) sobre una circunferencia de radio `0.25 · max(w, h)`
+con ese mismo ángulo; con `Fixed` el foco queda en el centro del item.
+**Porqué**: el usuario quiere que el fondo pueda «seguir» al cubo mientras gira, sin
+shaders ni C++ y sin coste por frame; el radial necesitaba una solución distinta de
+la rotación porque no se puede percibir girando.
+**Nota**: el menú QML (`config.ui`, página Degradado) gana el combo; el KCM nativo
+(`kcm_kube_effect_plus`, «Kube Effect Plus») **sigue siendo solo diagnóstico** hasta
+que exista una feature que QML no pueda hacer (ADR-011).
+
+## ADR-018 — «Kube Effect Plus»: nombre, fuentes en el paquete y Advanced en lenguaje llano.
+
+**Decisión**:
+1. El módulo nativo pasa a llamarse **Kube Effect Plus**: id de plugin
+   `kcm_kube_effect_plus`, nombre visible «Kube Effect Plus». El directorio
+   sigue siendo `native/` y los targets `make native*` no cambian.
+2. El paquete distribuible incluye las **fuentes** para compilar bajo demanda en
+   `package/contents/native/` (copia de `native/`, sin árboles de build,
+   `*.o`, `CMakeFiles` ni `.cache`). `native/` sigue siendo la fuente de verdad:
+   `make sync-package-native` copia (y `make install` lo invoca antes de
+   `kpackagetool6`); `make check` falla si `package/contents/native/` no
+   coincide. KWin no carga nada de esa carpeta.
+3. `native/build.sh` funciona también desde la copia instalada
+   (`.../contents/native/build.sh`): calcula todas sus rutas desde su propia
+   ubicación y, si no encuentra el `Makefile` + `package/metadata.json` del
+   repo al lado, guarda esa carpeta como `source` en el stamp.
+4. La pestaña **Advanced** del menú QML se rehace en tres bloques con separadores
+   y lenguaje llano, sin nombres de API: «Atenuar mientras gira» (casilla,
+   ayuda y una intensidad que empieza **gris/deshabilitada** hasta marcar la
+   casilla), «Pantalla» (solo en la pantalla del puntero, con su explicación) y
+   una sección **desplegable** «Funciones extra (Kube Effect Plus)» que hoy dice
+   la verdad: Plus aún no añade funciones; aquí aparecerán cuando exista alguna
+   que el efecto no pueda hacer por sí solo. La sección incluye los comandos
+   válidos desde el paquete instalado (`cd .../contents/native`, `./build.sh`,
+   `./build.sh --system`).
+
+**Porqué**: el nombre «(avanzado)» sonaba a opciones ocultas cuando el módulo
+solo añade diagnóstico y herramientas nativas; «Plus» describe lo que es. Llevar
+las fuentes dentro del paquete permite compilar sin el repositorio sin duplicar
+la fuente de verdad (`native/`), y el rediseño de Advanced deja claro qué hace
+cada opción sin exponer la API interna de KWin.
+**Verificación**: `scripts/check-ui.py` carga el `.ui` con QUiLoader y
+comprueba que la intensidad empieza deshabilitada, que sigue a su casilla, que
+`plusSection` empieza oculto y que sus dos separadores son `QFrame::HLine`.

@@ -1,5 +1,9 @@
 # build/dev
 build/
+build-system/
+# Sources shipped inside the package: a user build there must stay local.
+package/contents/native/build/
+package/contents/native/build-system/
 __pycache__/
 *.pyc
 

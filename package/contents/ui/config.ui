@@ -5,8 +5,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 Formulario del KCM genérico (kcm_kwin4_genericscripted) para kube-effect.
 Pestañas fijas (Shape & center, Background, Windows 3D, Appearance, Input,
-Presets); las que aún no tienen claves quedan vacías con un aviso, hasta que la
-fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
+Presets, Advanced); las que aún no tienen claves quedan vacías con un aviso,
+hasta que la fase correspondiente del ROADMAP las rellene. Las opciones
+avanzadas viven SOLO en Advanced (ADR-014), en grupos de lenguaje llano y con
+una sección plegable de Kube Effect Plus (ADR-018). Cada widget = kcfg_<Entry>.
 -->
 <ui version="4.0">
     <class>KubeEffectConfigForm</class>
@@ -23,7 +25,7 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
             <item>
                 <widget class="QLabel" name="versionLabel">
                     <property name="text">
-                        <string>kube-effect 0.0.0.1</string>
+                        <string>kube-effect 0.0.0.2</string>
                     </property>
                     <property name="alignment">
                         <set>Qt::AlignRight|Qt::AlignVCenter</set>
@@ -42,13 +44,13 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
                     <!-- 1. Shape & center -->
                     <widget class="QWidget" name="tabShape">
                         <attribute name="title">
-                            <string>Shape &amp; center</string>
+                            <string>Shape</string>
                         </attribute>
                         <layout class="QVBoxLayout" name="tabShapeLayout">
                             <item>
                                 <widget class="QLabel" name="tabShapePlaceholder">
                                     <property name="text">
-                                        <string>Forma e interior se añaden en fases posteriores (ver doc/ROADMAP.md).</string>
+                                        <string>Forma e interior se añaden en fases posteriores (ver doc/requerimientos.md).</string>
                                     </property>
                                     <property name="wordWrap">
                                         <bool>true</bool>
@@ -139,7 +141,7 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
                                             <item row="0" column="0">
                                                 <widget class="QLabel" name="bgImageLabel">
                                                     <property name="text">
-                                                        <string>Imagen de fondo (2:1 = 360; foto normal = Mapeo Plano):</string>
+                                                        <string>Imagen de fondo (2:1 = panorama 360; foto normal = Plano):</string>
                                                     </property>
                                                 </widget>
                                             </item>
@@ -154,12 +156,7 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
                                                 </widget>
                                             </item>
                                             <item row="1" column="1">
-                                                <widget class="QComboBox" name="kcfg_BackgroundImageMapping">
-                                                    <item>
-                                                        <property name="text">
-                                                            <string>Auto</string>
-                                                        </property>
-                                                    </item>
+                                                <widget class="QComboBox" name="kcfg_BackgroundImageLayout">
                                                     <item>
                                                         <property name="text">
                                                             <string>Equirect (360)</string>
@@ -172,10 +169,46 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
                                                     </item>
                                                 </widget>
                                             </item>
-                                            <item row="2" column="0" colspan="2">
+                                            <item row="2" column="0">
+                                                <widget class="QLabel" name="bgImageFitLabel">
+                                                    <property name="text">
+                                                        <string>Ajuste de la imagen plana:</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                            <item row="2" column="1">
+                                                <widget class="QComboBox" name="kcfg_BackgroundImageFit">
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Cubrir (Cover)</string>
+                                                        </property>
+                                                    </item>
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Contener (Contain)</string>
+                                                        </property>
+                                                    </item>
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Estirar (Stretch)</string>
+                                                        </property>
+                                                    </item>
+                                                </widget>
+                                            </item>
+                                            <item row="3" column="0" colspan="2">
                                                 <widget class="QCheckBox" name="kcfg_BackgroundImageRotate">
                                                     <property name="text">
                                                         <string>Girar con el centro (solo 360)</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                            <item row="4" column="0" colspan="2">
+                                                <widget class="QLabel" name="bgImageHint">
+                                                    <property name="text">
+                                                        <string>Equirect envuelve la escena como SkyBox (con «Girar con el centro») o la pinta plana si se desactiva. El ajuste se aplica a la imagen plana (incluye el equirect sin girar).</string>
+                                                    </property>
+                                                    <property name="wordWrap">
+                                                        <bool>true</bool>
                                                     </property>
                                                 </widget>
                                             </item>
@@ -237,14 +270,40 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
                                                         <number>100</number>
                                                     </property>
                                                     <property name="suffix">
-                                                        <string>%</string>
+                                                        <string> %</string>
                                                     </property>
                                                 </widget>
                                             </item>
-                                            <item row="3" column="0" colspan="2">
+                                            <item row="3" column="0">
+                                                <widget class="QLabel" name="bgGradientRotationLabel">
+                                                    <property name="text">
+                                                        <string>Orientación del fondo:</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                            <item row="3" column="1">
+                                                <widget class="QComboBox" name="kcfg_BackgroundGradientRotation">
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Fija (Fixed)</string>
+                                                        </property>
+                                                    </item>
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Seguir al cubo (FollowCube)</string>
+                                                        </property>
+                                                    </item>
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Seguir al cubo, invertido (FollowCubeInverse)</string>
+                                                        </property>
+                                                    </item>
+                                                </widget>
+                                            </item>
+                                            <item row="4" column="0" colspan="2">
                                                 <widget class="QLabel" name="bgGradientHint">
                                                     <property name="text">
-                                                        <string>El primer color es el color de fondo de arriba. El tipo Radial aún se dibuja como vertical.</string>
+                                                        <string>El primer color es el color de fondo de arriba. El tipo Radial se dibuja centrado en la pantalla con QtQuick.Shapes (sin shaders). La orientación solo afecta al degradado: «Fixed» lo deja quieto; «FollowCube» gira el degradado con el cubo y «FollowCubeInverse» en sentido contrario; con Radial se mueve el punto focal, porque girar un radial centrado no se nota.</string>
                                                     </property>
                                                     <property name="wordWrap">
                                                         <bool>true</bool>
@@ -261,13 +320,13 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
                     <!-- 3. Windows 3D -->
                     <widget class="QWidget" name="tabWindows">
                         <attribute name="title">
-                            <string>Windows 3D</string>
+                            <string>Windows</string>
                         </attribute>
                         <layout class="QVBoxLayout" name="tabWindowsLayout">
                             <item>
                                 <widget class="QLabel" name="tabWindowsPlaceholder">
                                     <property name="text">
-                                        <string>Capas de ventana (z-index) en una fase posterior (ver doc/ROADMAP.md).</string>
+                                        <string>Capas de ventana (z-index) en una fase posterior (ver doc/requerimientos.md).</string>
                                     </property>
                                     <property name="wordWrap">
                                         <bool>true</bool>
@@ -384,6 +443,25 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
                                     </layout>
                                 </widget>
                             </item>
+                            <item>
+                                <widget class="QGroupBox" name="shortcutGroup">
+                                    <property name="title">
+                                        <string>Atajo de teclado</string>
+                                    </property>
+                                    <layout class="QVBoxLayout" name="shortcutLayout">
+                                        <item>
+                                            <widget class="QLabel" name="shortcutHint">
+                                                <property name="text">
+                                                    <string>Se cambia en Preferencias del sistema → Atajos de teclado → KWin → «Toggle Kube Effect» (Meta+K por defecto). KWin guarda el atajo con KGlobalAccel; por eso no se duplica aquí.</string>
+                                                </property>
+                                                <property name="wordWrap">
+                                                    <bool>true</bool>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                    </layout>
+                                </widget>
+                            </item>
                         </layout>
                     </widget>
 
@@ -396,11 +474,179 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
                             <item>
                                 <widget class="QLabel" name="tabPresetsPlaceholder">
                                     <property name="text">
-                                        <string>Presets en una fase posterior (ver doc/ROADMAP.md).</string>
+                                        <string>Presets en una fase posterior (ver doc/requerimientos.md).</string>
                                     </property>
                                     <property name="wordWrap">
                                         <bool>true</bool>
                                     </property>
+                                </widget>
+                            </item>
+                        </layout>
+                    </widget>
+
+                    <!-- 7. Advanced: the only place for advanced options (ADR-014) -->
+                    <widget class="QWidget" name="tabAdvanced">
+                        <attribute name="title">
+                            <string>Advanced</string>
+                        </attribute>
+                        <layout class="QVBoxLayout" name="tabAdvancedLayout">
+                            <item>
+                                <widget class="QGroupBox" name="advancedDimGroup">
+                                    <property name="title">
+                                        <string>Atenuar mientras gira</string>
+                                    </property>
+                                    <layout class="QVBoxLayout" name="advancedDimLayout">
+                                        <item>
+                                            <widget class="QCheckBox" name="kcfg_DimWhileRotating">
+                                                <property name="text">
+                                                    <string>Atenuar el fondo mientras gira</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item>
+                                            <widget class="QLabel" name="advancedDimHint">
+                                                <property name="text">
+                                                    <string>Oscurece el fondo del cubo mientras lo giras para que las ventanas destaquen; al soltar vuelve a la normalidad.</string>
+                                                </property>
+                                                <property name="wordWrap">
+                                                    <bool>true</bool>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item>
+                                            <layout class="QFormLayout" name="advancedDimForm">
+                                                <item row="0" column="0">
+                                                    <widget class="QLabel" name="dimAmountLabel">
+                                                        <property name="text">
+                                                            <string>Intensidad de la atenuación:</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="0" column="1">
+                                                    <widget class="QSpinBox" name="kcfg_DimWhileRotatingAmount">
+                                                        <property name="enabled">
+                                                            <bool>false</bool>
+                                                        </property>
+                                                        <property name="minimum">
+                                                            <number>0</number>
+                                                        </property>
+                                                        <property name="maximum">
+                                                            <number>100</number>
+                                                        </property>
+                                                        <property name="suffix">
+                                                            <string> %</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                            </layout>
+                                        </item>
+                                    </layout>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QFrame" name="advancedSeparator1">
+                                    <property name="frameShape">
+                                        <enum>QFrame::HLine</enum>
+                                    </property>
+                                    <property name="frameShadow">
+                                        <enum>QFrame::Sunken</enum>
+                                    </property>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QGroupBox" name="advancedScreenGroup">
+                                    <property name="title">
+                                        <string>Pantalla</string>
+                                    </property>
+                                    <layout class="QVBoxLayout" name="advancedScreenLayout">
+                                        <item>
+                                            <widget class="QCheckBox" name="kcfg_CursorScreenOnly">
+                                                <property name="text">
+                                                    <string>Mostrar el cubo solo en la pantalla donde está el puntero</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item>
+                                            <widget class="QLabel" name="advancedScreenHint">
+                                                <property name="text">
+                                                    <string>Si mueves el puntero después de abrirlo, el cubo se queda en la pantalla donde lo abriste hasta la próxima vez.</string>
+                                                </property>
+                                                <property name="wordWrap">
+                                                    <bool>true</bool>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                    </layout>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QFrame" name="advancedSeparator2">
+                                    <property name="frameShape">
+                                        <enum>QFrame::HLine</enum>
+                                    </property>
+                                    <property name="frameShadow">
+                                        <enum>QFrame::Sunken</enum>
+                                    </property>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QCheckBox" name="showPlusSection">
+                                    <property name="text">
+                                        <string>¿Quieres funciones extra? (Kube Effect Plus)</string>
+                                    </property>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QGroupBox" name="plusSection">
+                                    <property name="visible">
+                                        <bool>false</bool>
+                                    </property>
+                                    <property name="title">
+                                        <string>Funciones extra (Kube Effect Plus)</string>
+                                    </property>
+                                    <layout class="QVBoxLayout" name="plusSectionLayout">
+                                        <item>
+                                            <widget class="QLabel" name="plusIntro">
+                                                <property name="text">
+                                                    <string>Kube Effect Plus aún no añade funciones; aquí aparecerán cuando exista alguna que el efecto no pueda hacer por sí solo.</string>
+                                                </property>
+                                                <property name="wordWrap">
+                                                    <bool>true</bool>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item>
+                                            <widget class="QPlainTextEdit" name="plusCommands">
+                                                <property name="font">
+                                                    <font>
+                                                        <family>Monospace</family>
+                                                        <pointsize>10</pointsize>
+                                                    </font>
+                                                </property>
+                                                <property name="lineWrapMode">
+                                                    <enum>QPlainTextEdit::NoWrap</enum>
+                                                </property>
+                                                <property name="readOnly">
+                                                    <bool>true</bool>
+                                                </property>
+                                                <property name="plainText">
+                                                    <string>cd ~/.local/share/kwin/effects/kube-effect/contents/native
+./build.sh            # solo para tu usuario
+./build.sh --system   # aparece en Preferencias (pide contraseña)</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item>
+                                            <widget class="QLabel" name="plusRepoNote">
+                                                <property name="text">
+                                                    <string>Si compilaste desde el repositorio, «make native» y «make native-install» equivalen.</string>
+                                                </property>
+                                                <property name="wordWrap">
+                                                    <bool>true</bool>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                    </layout>
                                 </widget>
                             </item>
                         </layout>
@@ -430,6 +676,22 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
             <signal>currentIndexChanged(int)</signal>
             <receiver>bgModeStack</receiver>
             <slot>setCurrentIndex(int)</slot>
+        </connection>
+        <!-- The dim amount only means something when dimming is on: start
+             disabled and follow the checkbox (KConfigDialogManager applies the
+             saved value with setChecked, so toggled() fires on load too). -->
+        <connection>
+            <sender>kcfg_DimWhileRotating</sender>
+            <signal>toggled(bool)</signal>
+            <receiver>kcfg_DimWhileRotatingAmount</receiver>
+            <slot>setEnabled(bool)</slot>
+        </connection>
+        <!-- The Plus block is opt-in: hidden until the user asks for it. -->
+        <connection>
+            <sender>showPlusSection</sender>
+            <signal>toggled(bool)</signal>
+            <receiver>plusSection</receiver>
+            <slot>setVisible(bool)</slot>
         </connection>
     </connections>
 </ui>

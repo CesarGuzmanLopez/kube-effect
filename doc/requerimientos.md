@@ -102,20 +102,18 @@ panorámica 360.
 | Modo (`Background`)        | Qué pinta                                                                                                                     | Claves reales (tipo, rango, default)                                                                                                 |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | **Color** (0, default)         | Un color sólido                                                                                                               | `Background` Enum; `BackgroundColor` Color, default `#1b3fd8`                                                                     |
-| **Image** (1)                  | Imagen de fondo. Si el mapeo resuelve equirect **y** gira con el centro es **SkyBox** (entorno 360); si no, capa plana fullscreen estática | `SkyBox` Url (vacío = sin imagen); `BackgroundImageMapping` Enum (ver abajo); `BackgroundImageRotate` Bool default true; `BackgroundColor` actúa de color de respaldo |
-| **Gradient** (2)               | Degradado de dos colores sin shaders (Rectangle + Gradient QML). Tipos: vertical (arriba→abajo), horizontal, radial (aún cae a vertical) | `Background` Enum; `BackgroundGradientType` Enum (ver abajo); `BackgroundColor` Color `#1b3fd8`; `BackgroundColor2` Color `#ff8a00`; `BackgroundGradientStop` Int 0–100, default 50 (posición del corte: 0 = todo color2 salvo borde, 100 = transición hasta el final) |
+| **Image** (1)                  | Imagen de fondo. Si el mapeo resuelve equirect **y** gira con el centro es **SkyBox** (entorno 360); si no, capa plana fullscreen estática | `SkyBox` Url (vacío = sin imagen); `BackgroundImageLayout` Enum (ver abajo); `BackgroundImageRotate` Bool default true; `BackgroundColor` actúa de color de respaldo |
+| **Gradient** (2)               | Degradado de dos colores sin shaders (Rectangle + Gradient QML). Tipos: vertical (arriba→abajo), horizontal, radial (real, con Shapes) | `Background` Enum; `BackgroundGradientType` Enum (ver abajo); `BackgroundColor` Color `#1b3fd8`; `BackgroundColor2` Color `#ff8a00`; `BackgroundGradientStop` Int 0–100, default 50 (posición del corte: 0 = todo color2 salvo borde, 100 = transición hasta el final) |
 | **Vídeo** (futuro)             | Vídeo 360 equirectangular envolvente (skydome animado). Requiere QtMultimedia; sin él degrada a color + aviso                 | (sin clave aún) `CascoVideo` reservado                                                                                            |
 | (arena, futuro)                | Atenuación global del casco (0 = sin atenuar, 1 = negro)                                                                      | (sin clave aún) `CascoDim` reservado                                                                                              |
 
 - `BackgroundColor` (#1b3fd8 azul) y `BackgroundColor2` (#ff8a00 naranja) son los
   defaults **nuevos** de `main.xml`, elegidos para que el degradado se note de un
   vistazo.
-- Enum `BackgroundImageMapping`: `Auto` (0, default) / `Equirect` (1, forzar 360) / `Flat` (2, forzar plano).
+- Enum `BackgroundImageLayout`: `Equirect` (forzar 360) / `Flat` (forzar plano). Ya no existe `Auto`: el usuario elige explícitamente si la imagen es panorámica o plana. La **clave** se renombró a propósito (antes `BackgroundImageMapping`): kwinrc guarda el índice, así que un valor viejo queda huérfano y se ignora en vez de reinterpretarse como `Flat`.
+- `BackgroundImageFit` (Enum, default `Cover`): `Cover` / `Contain` / `Stretch`. Solo aplica a la imagen plana (incluye equirect sin rotación); decide cómo encaja en pantalla.
 - `BackgroundImageRotate` (Bool, default `true`): solo aplica al mapeo equirect. `true` = entorno 360 que gira con el centro (SkyBox); `false` = imagen plana estática fullscreen que no rota al mover la cámara.
 - Solo se aceptan recursos **locales** (`file:` o `image:`); una URL de red se ignora (el compositor no descarga contenido al activar el efecto).
-- **Auto no mide la proporción**: para saber si la imagen es 2:1 habría que decodificarla en QML
-  (una `Image` oculta la cargaría entera y doblaría su memoria). Por eso `Auto` trata cualquier
-  imagen configurada como panorámica 2:1 → equirect; una foto normal debe marcarse `Flat` a mano.
 - **KCM genérico con UI dinámica, sin C++**: `kcm_kwin4_genericscripted` solo carga
   `config/main.xml` y `config.ui` con QUiLoader; no hay `config.qml` ni lógica propia y
   `KConfigDialogManager` no admite dependencias entre entries. La pestaña Background usa un combo
@@ -127,7 +125,14 @@ panorámica 360.
 - Al desactivar el efecto no queda nada pintado: el casco (color, degradado o imagen) se dibuja en
   la escena del efecto, no en el color de la ventana, y desaparece con él.
 - Enum `BackgroundGradientType`: `LinearVertical` (0, default, arriba→abajo) / `LinearHorizontal` (1) / `Radial` (2, centrado). Enum = entero en kwinrc (grupo `[Effect-kube-effect]`).
-- **Radial sin shader**: QtQuick `Gradient` solo ofrece lineal (`Gradient.Horizontal` / `Gradient.Vertical`); `Radial` se implementa como `LinearVertical` + comentario TODO en `ScreenView.qml` hasta que QtQuick ofrezca un primitivo circular sin shaders. No se inventan shaders ni C++.
+- **Radial sin shader**: se implementa con `QtQuick.Shapes.RadialGradient` (expone `centerX/centerY/centerRadius/focal*` y `stops` en Qt 6.12); deja de caer a vertical. **No** hay tipo cónico/circular. No se inventan shaders ni C++.
+- `BackgroundGradientRotation` (Enum, default `Fixed`, solo casco degradado):
+  `Fixed` (0) no gira; `FollowCube` (1) gira el degradado con el yaw del cubo;
+  `FollowCubeInverse` (2) gira en sentido contrario. La rotación lineal es un
+  `Rotation` sobre un `Rectangle` sobredimensionado (no se recrean objetos por
+  frame). En `Radial` no se gira (un radial centrado es simétrico): se desplaza el
+  **punto focal** sobre un círculo de radio `0.25 · max(w, h)`; con `Fixed` el foco
+  queda en el centro.
 - **SkyBox** = casco con imagen 360 equirectangular (entorno que envuelve la escena y gira con el centro). **Vídeo 360** = su versión animada (futura).
 - Nombres antiguos del spec (`CascoColor`, `CascoColor2`, `CascoGradientType`, `CascoMode`): equivalen a `BackgroundColor`, `BackgroundColor2`, `BackgroundGradientType`, `Background`. Se documentan con las claves reales para no romper compatibilidad con kwinrc existente (`Background=0/1/2` conserva su significado; el índice 1
   pasó a llamarse `Image`).
@@ -154,12 +159,64 @@ panorámica 360.
 | `TouchBorderActivate`  | String | "5"         | vacío   | Igual, con toque                                                                                             |
 | `MouseInvertedX`       | Bool   | —           | false   | Invertir eje X del arrastre                                                                                  |
 | `MouseInvertedY`       | Bool   | —           | false   | Invertir eje Y del arrastre                                                                                  |
-| `AllScreens`           | Bool   | —           | true    | Dibujar en todas las pantallas; false = solo la del cursor                                                   |
+| `CursorScreenOnly`     | Bool   | —           | false   | Dibuja el cubo solo en el monitor donde está el cursor al lanzarse; el resto de pantallas quedan normales. Sustituye al antiguo «casco por pantalla»; default `false` = todas las pantallas |
 | `CubeFaceDisplacement` | Double | −500…500 px | 100     | Separación entre caras. 0 = caras pegadas; **negativo = se solapan** (el polígono encoge); positivo = huecos |
 | `DistanceFactor`       | Double | 0.5–5       | 1.75    | Distancia de la cámara al activar                                                                            |
 
-- Atajo por defecto: **Meta+K**.
+- Atajo por defecto: **Meta+K**. Se registra con `ShortcutHandler` → **KGlobalAccel**, y se
+  cambia en **Preferencias del sistema → Atajos de teclado → KWin → «Toggle Kube Effect»**
+  (estándar KDE). No se duplica en el KCM del efecto a propósito: `KGlobalAccel` guarda el
+  valor en `kglobalshortcutsrc` y ese valor **pisa** al `sequence` del QML, así que una clave
+  en `main.xml` sería una segunda fuente que nunca manda. El KCM solo muestra un aviso.
 - Giro por arrastre del ratón y teclado; zoom por rueda.
+
+## 5.1 Advanced (opciones avanzadas)
+
+Estas claves viven SOLO aquí; no se reparten por otras pestañas. **Advanced es el
+único sitio para opciones avanzadas.**
+
+| Clave                    | Tipo | Rango | Default | Requerimiento                                                              |
+| ------------------------ | ---- | ----- | ------- | -------------------------------------------------------------------------- |
+| `DimWhileRotating`       | Bool | —     | false   | Oscurece el fondo SOLO mientras el cubo gira; vuelve al soltar             |
+| `DimWhileRotatingAmount` | Int  | 0–100 | 40      | Cuánto se oscurece el fondo al girar (solo con `DimWhileRotating`)        |
+| `CursorScreenOnly`       | Bool | —     | false   | Cubo solo en el monitor del cursor al lanzarse; default `false` = todas las pantallas |
+
+Implementación (QML puro, sin C++):
+
+- **Atenuar al girar**: cubre los **cuatro** modos de casco, pero no siempre
+  con el mismo objeto:
+    - **Color / Degradado / imagen plana** → un velo negro (`hullDim`) pintado
+      entre el casco y la escena 3D, así que oscurece el fondo y no las caras.
+    - **Imagen 360 equirectangular (SkyBox 3D)** → `SceneEnvironment.probeExposure`
+      (brillo del entorno): el SkyBox lo pinta el entorno 3D, no la capa 2D, así
+      que el velo no lo alcanza y ponerlo delante del `View3D` taparía las caras.
+  Se enciende mientras «el cubo se mueve»: `CubeCameraController.busy` (arrastre
+  con el puntero) **o** la animación de rotación (`Behavior on rotation`, que
+  cubre flechas, activación y cambio de escritorio). El zoom con la rueda no se
+  considera giro. Un `Behavior` de 120 ms funde tanto el velo como la exposición
+  para que no parpadeen cuando el puntero se detiene un frame.
+  Fórmula única en `constants.js`: `skyBoxExposure(enabled, rotating, amount)` =
+  `1.0` (sin atenuar) si `DimWhileRotating` está apagado o el cubo no gira; si
+  no, `1 - dimOpacity(...)` recortado a `[0, 1]` — la misma cantidad que el velo
+  2D. Nunca se aplican los dos a la vez sobre lo mismo: con el SkyBox ya pintado
+  el velo 2D queda apagado (solo cubre el color de respaldo mientras la sonda
+  decodifica).
+- **Dónde está Kube Effect Plus**: el diagnóstico, las dependencias y la versión
+  compilada viven en **Preferencias del sistema → Gestión de ventanas → «Kube Effect
+  Plus»** (`kcm_kube_effect_plus`), que solo aparece si se compiló `native/`. El
+  engranaje del efecto sigue abriendo el menú QML de siempre: compilar **no** cambia
+  ese botón. La pestaña Advanced del menú QML agrupa las tres claves avanzadas y una
+  sección plegable que remite a Plus; no duplica las opciones del nativo.
+
+- **Pantalla del cursor**: al activar se captura la pantalla bajo el puntero con
+  `KWinComponents.Workspace.screenAt(KWinComponents.Workspace.cursorPos)` (API
+  QML de `org.kde.kwin`, disponible en KWin 6.8) y se guarda su nombre. Cada
+  `SceneView` compara `SceneView.screen.name` con ese nombre: la que no
+  coincide no pinta nada y deja ver el escritorio en vivo. **Limitación**: la
+  pantalla se fija en la activación; si el puntero se mueve con el cubo abierto,
+  el cubo no salta de monitor hasta la siguiente activación. Si un KWin no
+  tuviera `screenAt`, la aproximación es la pantalla de la ventana activa
+  (`Workspace.activeScreen`) — TODO: revisar en cada subida de Plasma.
 
 ## 6. Configuración (referencia)
 
@@ -168,14 +225,22 @@ Enum `Shape`: `Polygon` (default) / `Cylinder`. El número de escritorios manda:
 
 Enum `Background`: `Color` (0, default) / `Image` (1) / `Gradient` (2). El índice 1 se
 llamaba `SkyBox`; kwinrc guarda el entero, así que el valor no cambia.
-Enum `BackgroundImageMapping`: `Auto` (0, default) / `Equirect` (1) / `Flat` (2).
+Enum `BackgroundImageLayout`: `Equirect` / `Flat` (sin `Auto`: el usuario elige explícitamente). `BackgroundImageFit`: `Cover` (default) / `Contain` / `Stretch` (imagen plana, incluido equirect sin rotación).
 `BackgroundImageRotate`: Bool, default `true` (solo aplica a equirect).
 Enum `BackgroundGradientType`: `LinearVertical` (0, default) / `LinearHorizontal` (1) / `Radial` (2).
+Enum `BackgroundGradientRotation`: `Fixed` (0, default) / `FollowCube` (1) / `FollowCubeInverse` (2); solo el degradado.
 Enum `InteriorObject`: `Off` / `Planets` / `MiniCube` / … (extensible).
 
 Las claves exactas y sus defaults para el MVP están en
 `package/contents/config/main.xml`. El config arranca con el del cubo virgen y
 crece a medida que se implementan las features de este spec.
+
+Existe además **Kube Effect Plus**, un **módulo nativo opcional**
+(`kcm_kube_effect_plus`, «Kube Effect Plus»), compilado bajo demanda desde
+`native/` (y desde `package/contents/native/` en la copia instalada). El menú QML
+(`config.ui` vía `kcm_kwin4_genericscripted`) **siempre funciona solo**, sin
+compilar nada; el KCM nativo añade diagnóstico, comprobación de dependencias y
+`reconfigureEffect`.
 
 ## 7. Fuera de alcance (y por qué)
 

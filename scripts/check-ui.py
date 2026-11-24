@@ -17,7 +17,10 @@ carry the KConfigXT type. It verifies, against contents/config/main.xml:
   * enum combos are not editable and list the choices in schema order;
   * the background mode combo really switches its QStackedWidget, i.e. the
     <connections> block survived QUiLoader (the generic KCM has no logic of its
-    own, so this connection is the whole dynamic behaviour).
+    own, so this connection is the whole dynamic behaviour);
+  * the Advanced tab behaves as designed: the dim amount starts disabled and
+    follows its checkbox, the Plus block starts hidden and follows its toggle,
+    and the two separators are real horizontal lines (ADR-018).
 
 config.ui needs the KF6 designer plugins (kio6widgets, kwidgetsaddons6widgets)
 for the pickers, and PySide6 for this script. Without PySide6 the check is
@@ -33,8 +36,11 @@ try:
     from PySide6.QtUiTools import QUiLoader
     from PySide6.QtWidgets import (
         QApplication,
+        QCheckBox,
         QComboBox,
+        QFrame,
         QSlider,
+        QSpinBox,
         QStackedWidget,
         QWidget,
     )
@@ -221,6 +227,52 @@ def _check_mode_stack(form, problems):
             )
 
 
+def _check_advanced_behaviour(form, problems):
+    """The Advanced tab is the only dynamic part left besides the mode stack.
+
+    Nothing here is kcfg-bound logic: the whole behaviour is the <connections>
+    block, so it has to be exercised, not just parsed.
+    """
+    dim = form.findChild(QCheckBox, "kcfg_DimWhileRotating")
+    amount = form.findChild(QSpinBox, "kcfg_DimWhileRotatingAmount")
+    if dim is None or amount is None:
+        problems.append("config.ui: dim checkbox and amount spin box are required")
+    else:
+        if amount.isEnabled():
+            problems.append("kcfg_DimWhileRotatingAmount: must start disabled")
+        dim.setChecked(True)
+        if not amount.isEnabled():
+            problems.append(
+                "kcfg_DimWhileRotatingAmount: toggled(true) does not enable it"
+            )
+        dim.setChecked(False)
+        if amount.isEnabled():
+            problems.append(
+                "kcfg_DimWhileRotatingAmount: toggled(false) does not disable it"
+            )
+
+    toggle = form.findChild(QCheckBox, "showPlusSection")
+    section = form.findChild(QWidget, "plusSection")
+    if toggle is None or section is None:
+        problems.append("config.ui: showPlusSection and plusSection are required")
+    else:
+        if not section.isHidden():
+            problems.append("plusSection: must start hidden")
+        toggle.setChecked(True)
+        if section.isHidden():
+            problems.append("plusSection: toggled(true) does not show it")
+        toggle.setChecked(False)
+        if not section.isHidden():
+            problems.append("plusSection: toggled(false) does not hide it")
+
+    for name in ("advancedSeparator1", "advancedSeparator2"):
+        separator = form.findChild(QFrame, name)
+        if separator is None:
+            problems.append(f"config.ui: missing separator {name}")
+        elif separator.frameShape() != QFrame.Shape.HLine:
+            problems.append(f"{name}: frameShape is not HLine")
+
+
 def _check_widget(name, widget, info, problems):
     meta = _check_widget_type(name, widget, info, problems)
     if meta is None:
@@ -250,6 +302,7 @@ def main():
         _check_widget(name, widget, info, problems)
 
     _check_mode_stack(form, problems)
+    _check_advanced_behaviour(form, problems)
 
     print(f"check-ui: {len(entries)} entries, {len(widgets)} widgets created")
     if problems:
@@ -259,7 +312,7 @@ def main():
         return 1
     print(
         "check-ui: OK (widgets, user property types, bounds, combo order, "
-        "mode combo -> stacked pages)"
+        "mode combo -> stacked pages, Advanced toggles and separators)"
     )
     return 0
 

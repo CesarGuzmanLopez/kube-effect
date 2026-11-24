@@ -3,9 +3,12 @@
 #
 # Required entries are shipped with Plasma 6; if one is missing the effect
 # cannot load. Optional entries only enable extra features (user glTF models,
-# 360 video background). Re-run this whenever you want to re-check:
-# `make deps` or scripts/check-deps.sh.
+# 360 video background). The feature catalog at the end (features.json) is
+# informational too: a missing module disables a feature, it never aborts.
+# Re-run this whenever you want to re-check: `make deps` or scripts/check-deps.sh.
 set -u
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 fail=0
 optional_missing=()
@@ -33,6 +36,9 @@ echo "KKube dependency check"
 echo
 echo "Required (shipped with Plasma 6; no extra installs needed):"
 check "QtQuick3D" "$QML/QtQuick3D/qmldir" required qt6-quick3d qml6-module-qtquick3d
+# HullGradient.qml imports QtQuick.Shapes unconditionally (radial hull gradient,
+# ADR-013), so the whole effect needs it even when the background is a colour.
+check "QtQuick.Shapes" "$QML/QtQuick/Shapes/qmldir" required qt6-declarative qml6-module-qtquick-shapes
 check "org.kde.kwin" "$QML/org/kde/kwin" required kwin kwin-wayland
 check "org.kde.kirigami" "$QML/org/kde/kirigami/qmldir" required kirigami qml6-module-org-kde-kirigami
 check "plasma.components" "$QML/org/kde/plasma/components/qmldir" required libplasma qml6-module-org-kde-plasma-components
@@ -100,6 +106,14 @@ for tool in shfmt xmllint jq yamllint reuse codespell typos; do
         printf '  [absent]  %-34s %s\n' "$tool" "not installed (optional)"
     fi
 done
+
+echo
+echo "Feature catalog (package/contents/config/features.json):"
+if ! python3 "$SCRIPT_DIR/check-features.py" --deps; then
+    echo
+    echo "RESULT: features.json is invalid — fix the catalog (make check fails too)."
+    exit 1
+fi
 
 echo
 if [ ${#optional_missing[@]} -gt 0 ]; then

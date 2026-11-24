@@ -1,0 +1,6 @@
+{
+    "plasma": "@KUBE_PLASMA_VERSION@",
+    "qt": "@Qt6_VERSION@",
+    "pkg": "@PROJECT_VERSION@",
+    "plugindir": "@KDE_INSTALL_FULL_PLUGINDIR@"
+}

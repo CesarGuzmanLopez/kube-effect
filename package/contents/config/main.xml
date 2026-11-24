@@ -35,13 +35,28 @@
                 <choice name="Gradient" />
             </choices>
         </entry>
-        <entry name="BackgroundImageMapping" type="Enum">
-            <!-- Auto: any configured image is treated as a 2:1 panorama (QML cannot probe the ratio without decoding it). -->
-            <default>Auto</default>
+        <entry name="BackgroundImageLayout" type="Enum">
+            <!-- How the picture wraps the scene (ADR-013). Auto was removed
+                 because QML cannot probe the image ratio without decoding it.
+                 The KEY is new on purpose: kwinrc stores the index, so an old
+                 BackgroundImageMapping=1 (Equirect under the former
+                 0=Auto, 1=Equirect, 2=Flat order) is orphaned and ignored
+                 instead of being reinterpreted as Flat. Old values stay
+                 untouched in kwinrc; constants.js treats any unknown value as
+                 Equirect. -->
+            <default>Equirect</default>
             <choices>
-                <choice name="Auto" />
                 <choice name="Equirect" />
                 <choice name="Flat" />
+            </choices>
+        </entry>
+        <entry name="BackgroundImageFit" type="Enum">
+            <!-- Only used by the Flat mapping: how the picture fills the screen. -->
+            <default>Cover</default>
+            <choices>
+                <choice name="Cover" />
+                <choice name="Contain" />
+                <choice name="Stretch" />
             </choices>
         </entry>
         <entry name="BackgroundImageRotate" type="Bool">
@@ -65,6 +80,30 @@
             <default>50</default>
             <min>0</min>
             <max>100</max>
+        </entry>
+        <entry name="BackgroundGradientRotation" type="Enum">
+            <!-- Only the Gradient hull uses this (ADR-017): whether the
+                 gradient turns with the cube (Fixed keeps it still). The
+                 radial variant cannot turn around its centre, so it moves the
+                 focal point instead (see HullGradient.qml). -->
+            <default>Fixed</default>
+            <choices>
+                <choice name="Fixed" />
+                <choice name="FollowCube" />
+                <choice name="FollowCubeInverse" />
+            </choices>
+        </entry>
+        <!-- Advanced tab only (ADR-014): these keys do not appear anywhere else. -->
+        <entry name="DimWhileRotating" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="DimWhileRotatingAmount" type="Int">
+            <default>40</default>
+            <min>0</min>
+            <max>100</max>
+        </entry>
+        <entry name="CursorScreenOnly" type="Bool">
+            <default>false</default>
         </entry>
     </group>
 </kcfg>

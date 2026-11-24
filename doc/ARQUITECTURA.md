@@ -119,18 +119,46 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
       `View3D` (nunca `window.color`, que pinta la superficie de la ventana; ver
       trucos).
     - **Degradado** lineal (arriba→abajo u horizontal): un `Rectangle` con
-      `Gradient` DENTRO de la escena. `Radial` aún **cae a vertical** (QtQuick no
-      tiene radial primitivo sin shader; ver requerimientos §3).
-    - **Imagen / SkyBox**: si la imagen es **360 equirectangular (2:1)** se usa
+      `Gradient` DENTRO de la escena. `Radial` es **real** con
+      `QtQuick.Shapes.RadialGradient` (expone `centerX/centerY/centerRadius/focal*`
+      y `stops` en Qt 6.12); no cae a vertical. Sin shaders ni C++.
+    - **Imagen / SkyBox**: si el mapeo es `Equirect` (panorámica 360) se usa
       `SceneEnvironment { backgroundMode: SkyBox; lightProbe: Texture { source } }`
-      → **SkyBox**: entorno que envuelve la escena y gira con el centro. Si no es
-      2:1, se pinta como **quad plano** (fondo fijo). `BackgroundImageMapping`
-      (Auto/Equirect/Flat) lo decide.
+      → **SkyBox**: entorno que envuelve la escena y gira con el centro. Si es
+      `Flat`, se pinta como **quad plano** (fondo fijo), con `BackgroundImageFit`
+      (`Cover`/`Contain`/`Stretch`, default `Cover`) para decidir cómo encaja
+      la imagen plana. Ya no hay `Auto`: el usuario elige explícitamente
+      (`BackgroundImageLayout`: `Equirect`/`Flat`).
     - **Vídeo 360**: entorno envolvente con el clip (skydome animado), equivalente en
       movimiento al SkyBox. Requiere QtMultimedia.
+- **Orientación del degradado** (`BackgroundGradientRotation`, ADR-017; solo el
+  casco degradado). `ScreenView.qml` pasa el yaw de la cámara
+  (`cameraController.rotation.toEulerAngles().y`) como propiedad `yaw` a
+  `HullGradient.qml`, que deriva el ángulo con `constants.js`
+  (`gradientRotationAngle`): `Fixed` (0) lo deja quieto, `FollowCube` copia el yaw y
+  `FollowCubeInverse` lo invierte. **Lineal**: la capa es un `Rectangle` con
+  `Gradient` y un `Rotation` (transform) con `origin` en su centro; el rectángulo se
+  sobredimensiona al diagonal (`Math.hypot(w, h)`) y se centra en el casco para que
+  al girar no queden esquinas sin pintar. Los tres stops se remapean a la franja
+  visible (`stopMargin`), así `Fixed` conserva el aspecto anterior. **Radial**:
+  girar un radial centrado no se ve (es radialmente simétrico), así que se desplazan
+  `focalX`/`focalY` sobre una circunferencia de radio `0.25 · max(w, h)` con ese
+  ángulo; con `Fixed` el foco queda en el centro. En ambos casos la rotación es una
+  **transformación** sobre objetos que ya existen: no se crea ni se destruye nada por
+  frame, y el único binding por frame es el yaw que ya se calculaba para el cubo.
+- **Atenuar al girar** (`DimWhileRotating`/`DimWhileRotatingAmount`) alcanza
+  los cuatro modos de casco, pero por dos vías distintas: color, degradado e imagen plana
+  usan el velo 2D (`hullDim`, un `Rectangle` negro entre el casco y el `View3D`);
+  el SkyBox 360 usa `SceneEnvironment.probeExposure` = `constants.js`
+  `skyBoxExposure(...)`, porque el entorno 3D no lo pinta la capa 2D y un velo
+  delante del `View3D` taparía las caras. Con el SkyBox ya pintado el velo 2D
+  queda apagado (solo cubre el color de respaldo mientras la sonda decodifica),
+  así que nunca se atenúa dos veces el mismo fondo; ambos usan la misma señal de
+  giro y un `Behavior` de 120 ms.
 - **SkyBox no es un modo aparte**: es la variante 360 de "Imagen"
   (`SceneEnvironment.SkyBox`, no un quad). "Vídeo 360" es su versión animada.
-- `BackgroundImageRotate`: si la imagen plana gira con el centro o queda fija.
+- `BackgroundImageRotate`: solo aplica al mapeo equirect — gira con el centro
+  (SkyBox) o queda fija como imagen plana. El mapeo `Flat` nunca gira.
 - El fondo (color, degradado o imagen plana) se pinta con `Rectangle`/`Image`
   DENTRO de la escena, detrás del `View3D`, y con `visible: effect.visible`.
   `window.color` no se toca: pinta la superficie de la ventana y deja el fondo
@@ -170,14 +198,173 @@ guardan como ENTERO en kwinrc. Grupo `[Effect-kube-effect]`.
   feature exige C++, iría a un repo nativo aparte con paquetes por distro
   (AUR `-bin`, COPR, PPA, OBS, Nix) y CI por versión de KWin; nunca un `.so`
   genérico ni dentro del KPackage.
-- **Qué NO exige C++** (se queda en QML): degradado radial (`ShaderEffect`/GLSL),
+- **Qué NO exige C++** (se queda en QML): degradado radial (`QtQuick.Shapes`),
   skybox, vídeo 360 (`QtMultimedia`), cilindro (`ProceduralMesh`), capas
   visuales. **C++ solo** para framebuffer real por escritorio, `EffectWindow`
   avanzado o `QQuick3DGeometry` de alto rendimiento. Decisión: seguir en QML y
   decidir C++ al llegar a la feature que lo exija.
 
+## 7.1 Distribución nativa (opcional)
+
+Además del QML puro, el paquete puede llevar **Kube Effect Plus**, un módulo
+nativo opcional compilado bajo demanda desde `native/` (fuentes CMake). No es
+necesario para que el efecto funcione: el menú QML (`config.ui` vía
+`kcm_kwin4_genericscripted`) siempre está.
+
+El paquete distribuible incluye una copia de esas fuentes en
+`package/contents/native/` (sin `build*`, `*.o`, `CMakeFiles` ni `.cache`).
+`native/` es la fuente de verdad: `make sync-package-native` la copia (lo hace
+`make install` antes de `kpackagetool6`) y `make check` falla si divergen.
+KWin no carga nada de ahí; existe para que quien instala desde KDE Store compile
+Plus desde la copia instalada con `./build.sh` / `./build.sh --system`
+(`build.sh` calcula todas las rutas desde su propia ubicación y no necesita el
+`Makefile` del repo).
+
+Estructura real:
+
+```
+native/
+  CMakeLists.txt           # proyecto kube_effect_native: versiones + stamp
+  kube-native-info.json.in  # versiones compiladas -> kube-native-info.json
+  build.sh                 # configure + build + install + stamp + prefix.sh
+  src/kcm/
+    CMakeLists.txt         # kcoreaddons_add_plugin -> plasma/kcms/systemsettings
+    kube_effect_kcm.h      # KubeEffectKcm : KCModule
+    kube_effect_kcm.cpp    # diagnóstico, reconfigure y «Recargar compositor»
+    kube_effect_reload.h   # helpers puros del reinicio (guarda anidado, comando)
+    kube_effect_reload.cpp
+    kube_effect_kcm.json   # metadatos del plugin (Id kcm_kube_effect_plus)
+    tests/                 # unit test de kube_effect_reload (Qt Test, sin proceso)
+```
+
+- Módulo: `kcm_kube_effect_plus`, «Kube Effect Plus»,
+  `X-KDE-System-Settings-Parent-Category: windowmanagement`, instalado con
+  `kcoreaddons_add_plugin(... INSTALL_NAMESPACE "plasma/kcms/systemsettings")`.
+  El `.so` lleva los metadatos embebidos: `KPluginMetaData::findPlugins`
+  sobre los Qt plugin paths es todo el registro.
+- Contenido (solo lo que QML no puede hacer):
+  a. Versiones compiladas (`KUBE_PLASMA_VERSION`, `KUBE_QT_VERSION`,
+     `KUBE_PKG_VERSION`), inyectadas con `add_compile_definitions`.
+     Plasma se detecta con `find_package(KWin)` (`KWin_VERSION`, autoritativo);
+     si no hay paquete CMake de KWin se ejecuta `kwin_wayland --version` en
+     configure time. `KWindowSystem` no sirve: da la versión del framework KF6.
+  b. Estado del stamp `~/.local/share/kube-effect/native-stamp.json`: si la
+     versión de Plasma/Qt no coincide con la compilada, aviso destacado con
+     «compilado para X, tienes Y → recompila» (etiqueta resaltada, sin diálogos).
+  c. Dependencias de `features.json`: lee
+     `kwin/effects/kube-effect/contents/config/features.json` con
+     `QStandardPaths::locate(GenericDataLocation, …)` y pinta palomita/cruz por
+     `requires` (mismos sondeos que `scripts/check-features.py`) + `notes` de las
+     features que no cumplen.
+  d. Dos botones, con una línea que explica cuándo usar cada uno
+     («Reconfigurar efecto: cambios de ajustes. Recargar compositor: cambios de
+     código (KWin guarda el QML en caché).»):
+     - **«Reconfigurar efecto»** → D-Bus
+       `org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect("kube-effect")`,
+       con el fallo visible en una etiqueta. Solo re-lee la config: **no**
+       recompila QML.
+     - **«Recargar compositor»** → `QProcess` con
+       `systemctl --user restart plasma-kwin_wayland.service` (unidad real de la
+       sesión; `Main PID: kwin_wayland_wr`). Es la única forma de descartar el
+       QML cacheado en memoria (bug KDE #514131); no se usa
+       `kwin_wayland --replace` porque pelea con systemd. Pide confirmación en
+       un `KMessageDialog` asíncrono (no bloquea el KCM) avisando de que las
+       ventanas se cierran y vuelven en ~10 s; deshabilita el botón y muestra una
+       barra indeterminada mientras corre; al terminar enseña `exitCode` y el
+       stderr recortado a 3 líneas. **Dos guardas** (la segunda solo puede
+       bloquear, nunca permitir):
+       1. Si `WAYLAND_DISPLAY` contiene `kube-effect-nested` o
+          `KUBE_NESTED=1` (el arnés exporta ese flag y usa ese socket; KCM
+          abierto dentro de `scripts/kwin-nested-test.sh`)
+          se niega y responde «No disponible en el compositor de pruebas:
+          reinícialo cerrando y volviendo a lanzar el script.».
+       2. PID de `org.kde.KWin` en el bus actual vs `MainPID` de la unidad
+          (`systemctl --user show`): en el anidado el bus lleva al KWin del
+          script mientras `systemctl --user` sigue hablando con el gestor del
+          host, así que un fallo de (1) lo caza (2). Se compara con
+          `isInProcessTree` porque en esta distro `MainPID` es el envoltorio
+          `kwin_wayland_wr` y el KWin bueno es su hijo.
+       Si no se puede confirmar (sin `/proc`, unidad caída) manda la guarda (1),
+       nunca se bloquea por duda.
+  e. El comando `bash native/build.sh` solo se muestra con
+     `-DKUBE_SHOW_BUILD_COMMAND=ON` (default OFF, ver ADR-015).
+- **Dos instalaciones del mismo KCM**, con comportamientos distintos:
+  1. **De sistema** (`make native-install`, prefijo `/usr`): el `.so` queda
+     en `/usr/lib/qt6/plugins/plasma/kcms/systemsettings/kcm_kube_effect_plus.so`,
+     dentro de los Qt plugin paths por defecto. `KPluginMetaData::findPlugins`
+     lo ve y System Settings lo lista en **Preferencias → Gestión de ventanas →
+     «Kube Effect Plus»** sin ninguna variable de entorno.
+  2. **De usuario** (`make native`, prefijo `~/.local`, sin root): el `.so` va a
+     `~/.local/lib/plugins/...` + `prefix.sh` (lo genera ECM en el build y
+     `build.sh` lo copia a `~/.local/share/kube-effect/prefix.sh`), que exporta
+     `QT_PLUGIN_PATH`/`XDG_DATA_DIRS` limitados al proceso. Sin ese
+     `prefix.sh` **no se descubre**: `~/.local/lib/plugins` no está en los Qt
+     plugin paths de la sesión, así que Preferencias no lo enseña y hay que
+     abrirlo con `prefix.sh` + `kcmshell6`/`systemsettings`.
+  `KDE_INSTALL_USE_QT_SYS_PATHS` solo se fuerza cuando el prefijo es `/usr`; los
+  QTPLUGINDIR absolutos de Qt exigen root y ADR-012 lo prohíbe para la
+  instalación por defecto.
+- El KCM dice en qué caso está: la sección «Instalación nativa» muestra siempre
+  la línea de instalación de sistema y, solo si `metaData().fileName()` **no**
+  empieza por `/usr` (`KubeInstall::isSystemInstall`, /usr cubre /usr/local),
+  un aviso destacado de que el módulo es solo del usuario y no sale en
+  Preferencias. Debajo, la sección **«Comandos»** ofrece un bloque
+  `QPlainTextEdit` read-only (fuente fija, sin `wordWrap`) con dos variantes
+  según el campo `source` del stamp: desde el repo, `cd <repo>` + `make native`
+  + `make native-install` + `make native-status`; desde la copia del paquete,
+  `cd ~/.local/share/kwin/effects/kube-effect/contents/native` + `./build.sh` +
+  `./build.sh --system` + `./build.sh --clean`. El botón **«Copiar comandos»**
+  (`QApplication::clipboard()`) pega la secuencia sin escribir rutas. Si el
+  stamp es antiguo y no tiene `source`, se imprime la ruta de la copia instalada
+  con un aviso de que hay que ajustarla.
+- `native-stamp.json` (`plasma`, `qt`, `pkg`, `built`, `prefix`, `source`) lo
+  escribe `build.sh` con las versiones que CMake registró en
+  `kube-native-info.json`, no con una consulta posterior: el stamp no puede
+  mentir sobre el `.so`. `source` es la ruta absoluta desde la que se ejecutó
+  `build.sh`: la raíz del repo cuando hay `Makefile` + `package/metadata.json`
+  al lado, o la propia carpeta `contents/native` cuando corre desde la copia
+  instalada. Alimenta el bloque de comandos del KCM; los stamps viejos sin ese
+  campo siguen siendo válidos (el KCM cae al placeholder).
+  `make native-status` compara ese stamp con el sistema y devuelve 1 si falta o
+  no coincide.
+- Comandos: `make native` (privado, sin root; se prueba con `prefix.sh`),
+  `make native-install` (sistema; es el único que aparece en Preferencias →
+  Gestión de ventanas → «Kube Effect Plus»), `make native-clean`,
+  `make native-status`. El target `native-install` compila como el usuario que
+  lo lanza y solo invoca `sudo` en `cmake --install` (la contraseña se pide una
+  vez, al final): no hay que anteponer `sudo` y el árbol de build no queda con
+  artefactos de root.
+- Arnés (`scripts/kwin-nested-test.sh`): compila `make native` antes de arrancar
+  y aborta si falla; si el KCM está en el prefijo privado, lo abre con
+  `kcmshell6 kcm_kube_effect_plus` en el bus y el `XDG_CONFIG_HOME` del anidado, así
+  que escribe en el kwinrc del test, nunca en el del host.
+- Qué NO rompe si falta el `.so`: nada del efecto QML. Kube Effect Plus es
+  independiente (ver ADR-011/012).
+
+## 7.2 features.json
+
+`package/contents/config/features.json` — catálogo de features y dependencias.
+
+- Campos: `id`, `label`, `requires[]`, `native` (bool), `notes`,
+  `status` (stable/planned/needs-native), `since`.
+- Consumidores: `scripts/check-features.py` (validación del JSON, también en
+  `make check`) y `scripts/check-deps.sh` / `make deps` (sondeo del sistema,
+  informativo) y el KCM nativo (palomitas de dependencias). **El QML no lo lee**
+  (sin validación en runtime ni avisos en pantalla).
+
 ## 8. Verificación
 
 - `make lint` (estático).
+- Nativo en prefijo privado: la página avisa de que es una instalación de
+  usuario; `DESTDIR=<stage> cmake --install native/build-system` (prefijo
+  `/usr`) deja el `.so` en `<stage>/usr/lib/qt6/plugins/plasma/kcms/systemsettings/`,
+  la ruta que System Settings escanea sin `prefix.sh`.
+- Nativo: `ctest --test-dir native/build` (smoke test del KCM + unit test de
+  `kube_effect_reload`, incluida la detección del anidado y del árbol de
+  procesos). Lo ejecutan `build.sh` / `make native` antes de instalar
+  (`KUBE_SKIP_TESTS=1` lo salta). Además
+  `kcmshell6 --smoke-test kcm_kube_effect_plus` con `WAYLAND_DISPLAY=kube-effect-nested-0`
+  para comprobar que el módulo carga y que la guarda no lanza nada.
 - KWin anidado (`scripts/kwin-nested-test.sh`): el usuario prueba a mano. KWin
-  cachea el QML; hay que usar un proceso nuevo (anidado) o reiniciar KWin.
+  cachea el QML; hay que usar un proceso nuevo (anidado) o reiniciar el
+  compositor con el botón del KCM.

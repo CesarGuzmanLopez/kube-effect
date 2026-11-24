@@ -14,6 +14,16 @@ KWinComponents.SceneEffect {
     property bool activated: false
     readonly property int animationDuration: Kirigami.Units.longDuration
 
+    // Output name under the pointer when the effect was last activated. The
+    // ScreenView delegate asks for it when CursorScreenOnly is on (ADR-014).
+    // Captured here, once per activation, because the requirement is "the
+    // screen the pointer was on at activation", not "wherever it is now".
+    // Workspace.cursorPos and Workspace.screenAt() exist in KWin 6.8
+    // (src/scripting/workspace_wrapper.h, both exposed to QML); if an older
+    // KWin lacks screenAt(), this falls back to the active window's output,
+    // which is only an approximation of the pointer position.
+    property string cursorScreenName: ""
+
     // stored as a property to keep the component alive and cleanup afterwards
     property var mainDelegate: KWinComponents.Workspace.desktops.length < 3 ? Qt.createComponent("PlaceholderView.qml") : Qt.createComponent("ScreenView.qml")
     delegate: mainDelegate
@@ -66,10 +76,33 @@ KWinComponents.SceneEffect {
         }
     }
 
+    // Empty means "unknown": the delegate then draws on every screen instead of
+    // on none. String(undefined) would be the literal "undefined", which matches
+    // no screen, so only a real non-empty string name is accepted.
+    function screenName(screen) {
+        if (screen === null || screen === undefined) {
+            return "";
+        }
+        const name = screen.name;
+        return typeof name === "string" && name.length > 0 ? name : "";
+    }
+
+    // Name of the output under the pointer (or of the active window's output
+    // when Workspace.screenAt is unavailable).
+    function screenUnderCursorName() {
+        try {
+            return screenName(KWinComponents.Workspace.screenAt(KWinComponents.Workspace.cursorPos));
+        } catch (error) {
+            // Older KWin: no screenAt(). Fall through to activeScreen.
+        }
+        return screenName(KWinComponents.Workspace.activeScreen);
+    }
+
     function activate() {
         if (activated || deactivateTimer.running) {
             return;
         }
+        cursorScreenName = screenUnderCursorName();
         visible = true;
         activated = true;
     }

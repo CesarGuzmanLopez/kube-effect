@@ -18,6 +18,17 @@ Item {
             ok = false;
     }
 
+    // Projected spans are trigonometric, so 180/360 only match 0 within float
+    // noise (sin(pi) is not exactly 0); the identity checks stay exact.
+    function checkClose(name, actual, expected, epsilon) {
+        const tolerance = epsilon === undefined ? 1e-9 : epsilon;
+        const passed = Math.abs(actual - expected) <= tolerance;
+        const line = (passed ? "PASS " : "FAIL ") + name + " = " + actual + (passed ? "" : " (expected ~" + expected + ")");
+        log = log.length > 0 ? log + "\n" + line : line;
+        if (!passed)
+            ok = false;
+    }
+
     Component.onCompleted: {
         // Background mode: an unknown value (hand-edited kwinrc) must still
         // paint a hull instead of leaving the scene transparent.
@@ -30,16 +41,115 @@ Item {
         check("mode(null)", Constants.backgroundMode(null), Constants.Background.Color);
         check("mode(string)", Constants.backgroundMode("2"), Constants.Background.Color);
 
-        // Image mapping: only an explicit Equirect wins without an image, and
-        // Flat always wins over Auto.
-        check("equirect(Equirect, no image)", Constants.usesEquirectMapping(Constants.BackgroundImageMapping.Equirect, false), true);
-        check("equirect(Equirect, image)", Constants.usesEquirectMapping(Constants.BackgroundImageMapping.Equirect, true), true);
-        check("equirect(Flat, image)", Constants.usesEquirectMapping(Constants.BackgroundImageMapping.Flat, true), false);
-        check("equirect(Flat, no image)", Constants.usesEquirectMapping(Constants.BackgroundImageMapping.Flat, false), false);
-        check("equirect(Auto, image)", Constants.usesEquirectMapping(Constants.BackgroundImageMapping.Auto, true), true);
-        check("equirect(Auto, no image)", Constants.usesEquirectMapping(Constants.BackgroundImageMapping.Auto, false), false);
+        // Image layout: Equirect is the default, only an explicit Flat turns it
+        // off. Unknown values (hand-edited BackgroundImageLayout) must resolve
+        // to equirect instead of silently flattening a panorama; values under
+        // the old BackgroundImageMapping key never arrive (orphaned in kwinrc).
+        check("equirect(Equirect, no image)", Constants.usesEquirectMapping(Constants.BackgroundImageLayout.Equirect, false), true);
+        check("equirect(Equirect, image)", Constants.usesEquirectMapping(Constants.BackgroundImageLayout.Equirect, true), true);
+        check("equirect(Flat, image)", Constants.usesEquirectMapping(Constants.BackgroundImageLayout.Flat, true), false);
+        check("equirect(Flat, no image)", Constants.usesEquirectMapping(Constants.BackgroundImageLayout.Flat, false), false);
+        check("equirect(unknown 2, image)", Constants.usesEquirectMapping(2, true), true);
+        check("equirect(unknown 2, no image)", Constants.usesEquirectMapping(2, false), true);
+        check("equirect(unknown 7, image)", Constants.usesEquirectMapping(7, true), true);
         check("equirect(undefined, image)", Constants.usesEquirectMapping(undefined, true), true);
-        check("equirect(undefined, no image)", Constants.usesEquirectMapping(undefined, false), false);
+        check("equirect(undefined, no image)", Constants.usesEquirectMapping(undefined, false), true);
+        check("equirect(null, image)", Constants.usesEquirectMapping(null, true), true);
+        check("equirect(string, image)", Constants.usesEquirectMapping("1", true), true);
+
+        // Flat-image fit: only Contain/Stretch are accepted; anything else
+        // (legacy or hand-edited) is Cover, the schema default.
+        check("fit(Cover)", Constants.imageFit(Constants.BackgroundImageFit.Cover), Constants.BackgroundImageFit.Cover);
+        check("fit(Contain)", Constants.imageFit(Constants.BackgroundImageFit.Contain), Constants.BackgroundImageFit.Contain);
+        check("fit(Stretch)", Constants.imageFit(Constants.BackgroundImageFit.Stretch), Constants.BackgroundImageFit.Stretch);
+        check("fit(unknown 3)", Constants.imageFit(3), Constants.BackgroundImageFit.Cover);
+        check("fit(negative)", Constants.imageFit(-1), Constants.BackgroundImageFit.Cover);
+        check("fit(undefined)", Constants.imageFit(undefined), Constants.BackgroundImageFit.Cover);
+        check("fit(null)", Constants.imageFit(null), Constants.BackgroundImageFit.Cover);
+        check("fit(string)", Constants.imageFit("contain"), Constants.BackgroundImageFit.Cover);
+
+        // Rotating veil: off is always 0, amount is a percentage clamped to
+        // 0..1, and an unusable amount uses the schema default (40 %).
+        check("dim(off, 40)", Constants.dimOpacity(false, 40), 0);
+        check("dim(off, 100)", Constants.dimOpacity(false, 100), 0);
+        check("dim(on, 40)", Constants.dimOpacity(true, 40), 0.4);
+        check("dim(on, 0)", Constants.dimOpacity(true, 0), 0);
+        check("dim(on, 100)", Constants.dimOpacity(true, 100), 1);
+        check("dim(on, 150)", Constants.dimOpacity(true, 150), 1);
+        check("dim(on, -20)", Constants.dimOpacity(true, -20), 0);
+        check("dim(on, undefined)", Constants.dimOpacity(true, undefined), 0.4);
+        check("dim(undefined, 40)", Constants.dimOpacity(undefined, 40), 0);
+
+        // SkyBox exposure: 1.0 when not dimming or not rotating, otherwise the
+        // veil opacity is subtracted (same amount as the 2D hull), clamped at 0
+        // so a hand-edited amount above 100 cannot turn the value negative.
+        check("exposure(off, still)", Constants.skyBoxExposure(false, false, 40), 1);
+        check("exposure(off, rotating)", Constants.skyBoxExposure(false, true, 40), 1);
+        check("exposure(on, still)", Constants.skyBoxExposure(true, false, 40), 1);
+        check("exposure(on, rotating, 40)", Constants.skyBoxExposure(true, true, 40), 0.6);
+        check("exposure(on, rotating, 0)", Constants.skyBoxExposure(true, true, 0), 1);
+        check("exposure(on, rotating, 100)", Constants.skyBoxExposure(true, true, 100), 0);
+        check("exposure(on, rotating, 150)", Constants.skyBoxExposure(true, true, 150), 0);
+        check("exposure(on, rotating, -20)", Constants.skyBoxExposure(true, true, -20), 1);
+        check("exposure(on, rotating, undefined)", Constants.skyBoxExposure(true, true, undefined), 0.6);
+        check("exposure(undefined, rotating)", Constants.skyBoxExposure(undefined, true, 40), 1);
+        check("exposure(on, undefined)", Constants.skyBoxExposure(true, undefined, 40), 1);
+
+        // Gradient stop: percentage clamped to 0..1, non-finite -> schema
+        // default (50 %). KConfigXT hands a typed Int, so null only comes from
+        // a hand-edited value and is clamped like any other number (0).
+        check("stop(0)", Constants.gradientStopPosition(0), 0);
+        check("stop(50)", Constants.gradientStopPosition(50), 0.5);
+        check("stop(100)", Constants.gradientStopPosition(100), 1);
+        check("stop(150)", Constants.gradientStopPosition(150), 1);
+        check("stop(-20)", Constants.gradientStopPosition(-20), 0);
+        check("stop(string)", Constants.gradientStopPosition("abc"), 0.5);
+        check("stop(undefined)", Constants.gradientStopPosition(undefined), 0.5);
+        check("stop(null)", Constants.gradientStopPosition(null), 0);
+
+        // Gradient rotation: only the gradient hull (ADR-017). Fixed is always
+        // 0, FollowCube copies the yaw, FollowCubeInverse mirrors it, and an
+        // unknown mode (hand-edited kwinrc) leaves the layer still.
+        check("rotation(Fixed, 90)", Constants.gradientRotationAngle(Constants.BackgroundGradientRotation.Fixed, 90), 0);
+        check("rotation(Fixed, 0)", Constants.gradientRotationAngle(Constants.BackgroundGradientRotation.Fixed, 0), 0);
+        check("rotation(FollowCube, 90)", Constants.gradientRotationAngle(Constants.BackgroundGradientRotation.FollowCube, 90), 90);
+        check("rotation(FollowCube, -45)", Constants.gradientRotationAngle(Constants.BackgroundGradientRotation.FollowCube, -45), -45);
+        check("rotation(FollowCube, 0)", Constants.gradientRotationAngle(Constants.BackgroundGradientRotation.FollowCube, 0), 0);
+        check("rotation(Inverse, 90)", Constants.gradientRotationAngle(Constants.BackgroundGradientRotation.FollowCubeInverse, 90), -90);
+        check("rotation(Inverse, -45)", Constants.gradientRotationAngle(Constants.BackgroundGradientRotation.FollowCubeInverse, -45), 45);
+        check("rotation(Inverse, 0)", Constants.gradientRotationAngle(Constants.BackgroundGradientRotation.FollowCubeInverse, 0), 0);
+        check("rotation(unknown 9, 90)", Constants.gradientRotationAngle(9, 90), 0);
+        check("rotation(undefined, 90)", Constants.gradientRotationAngle(undefined, 90), 0);
+        check("rotation(FollowCube, undefined)", Constants.gradientRotationAngle(Constants.BackgroundGradientRotation.FollowCube, undefined), 0);
+
+        // Gradient geometry (ADR-017): the projection and the stop remap live
+        // in constants.js, so HullGradient.qml keeps no copy of them. 180/360
+        // equal 0 up to float noise; a zero width or height has no band.
+        check("span(v, 0)", Constants.gradientVisibleSpan(800, 600, 0, false), 600);
+        check("span(h, 0)", Constants.gradientVisibleSpan(800, 600, 0, true), 800);
+        checkClose("span(v, 90)", Constants.gradientVisibleSpan(800, 600, 90, false), 800);
+        checkClose("span(h, 90)", Constants.gradientVisibleSpan(800, 600, 90, true), 600);
+        checkClose("span(v, 45)", Constants.gradientVisibleSpan(800, 600, 45, false), 1400 * Math.SQRT1_2);
+        checkClose("span(v, 180) = 0deg", Constants.gradientVisibleSpan(800, 600, 180, false), 600);
+        checkClose("span(v, 360) = 0deg", Constants.gradientVisibleSpan(800, 600, 360, false), 600);
+
+        checkClose("margin(v, 0)", Constants.gradientStopMargin(800, 600, 0, false), 0.2);
+        check("margin(v, 0) identity", Constants.gradientStopMargin(800, 600, 0, false), 0.5 - 0.5 * 600 / Math.hypot(800, 600));
+        checkClose("margin(v, 90)", Constants.gradientStopMargin(800, 600, 90, false), 0.1);
+        checkClose("margin(v, 180) = 0deg", Constants.gradientStopMargin(800, 600, 180, false), 0.2);
+        checkClose("margin(v, 360) = 0deg", Constants.gradientStopMargin(800, 600, 360, false), 0.2);
+        checkClose("margin(w = h)", Constants.gradientStopMargin(800, 800, 0, false), 0.5 - 0.5 * Math.SQRT1_2);
+        check("margin(w = 0)", Constants.gradientStopMargin(0, 600, 45, false), 0);
+        check("margin(h = 0)", Constants.gradientStopMargin(800, 0, 45, false), 0);
+        check("margin(w = h = 0)", Constants.gradientStopMargin(0, 0, 45, true), 0);
+
+        // Only the two follow modes move the radial focal point; Fixed and an
+        // unknown kwinrc value keep it centred (no off-centre radial).
+        check("follows(Fixed)", Constants.gradientFollows(Constants.BackgroundGradientRotation.Fixed), false);
+        check("follows(FollowCube)", Constants.gradientFollows(Constants.BackgroundGradientRotation.FollowCube), true);
+        check("follows(Inverse)", Constants.gradientFollows(Constants.BackgroundGradientRotation.FollowCubeInverse), true);
+        check("follows(unknown 7)", Constants.gradientFollows(7), false);
+        check("follows(undefined)", Constants.gradientFollows(undefined), false);
 
         // Url entry: url value or string, empty/undefined/null -> no image,
         // remote schemes rejected (the compositor must not fetch the network).
