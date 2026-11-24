@@ -37,9 +37,9 @@ lint-ci: check
 # tabs/scroll/grupos) y combos/spinboxes/sliders coherentes.
 # check-ui.py construye el formulario con QUiLoader (lo que hace el KCM) para
 # comprobar que cada widget se crea de verdad y su propiedad USER lleva el tipo
-# del esquema. check-constants.py prueba constants.js bajo el motor QML (QColor
-# y url de verdad). Ambos se saltan (exit 0) si falta PySide6: CI no depende
-# de ellos.
+# del esquema. check-constants.py prueba los helpers de constants.js bajo el
+# motor QML (modo de fondo, mapeo de imagen y valor Url real). Ambos se saltan
+# (exit 0) si falta PySide6: CI no depende de ellos.
 check:
 	@files=$$(find $(QML_DIR) -name '*.qml'); \
 	if [ -n "$$files" ]; then \
@@ -51,7 +51,7 @@ check:
 	fi
 	@python3 scripts/check-schema.py
 	@if [ -f $(QML_DIR)/contents/ui/config.ui ]; then python3 scripts/check-ui.py; else echo "check-ui: skipped (no config.ui, generic KCM)"; fi
-	@if grep -q 'function color(' $(QML_DIR)/contents/ui/constants.js 2>/dev/null; then python3 scripts/check-constants.py; else echo "check-constants: skipped (virgin constants.js)"; fi
+	@if grep -q '^function ' $(QML_DIR)/contents/ui/constants.js 2>/dev/null; then python3 scripts/check-constants.py; else echo "check-constants: skipped (no helpers in constants.js)"; fi
 	python3 -c "import json;json.load(open('$(QML_DIR)/metadata.json'))"
 	python3 -c "import yaml;yaml.safe_load(open('.github/workflows/ci.yml'))"
 

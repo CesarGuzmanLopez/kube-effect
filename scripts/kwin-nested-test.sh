@@ -49,9 +49,25 @@ mkdir -p "$CFG"
 # 3 escritorios virtuales = 3 caras.
 kwriteconfig6 --file "$CFG/kwinrc" --group Desktops --key Number 3
 kwriteconfig6 --file "$CFG/kwinrc" --group Desktops --key Rows 1
-# Solo kube-effect activo en el anidado; el resto de efectos, apagados.
+# Solo kube-effect activo en el anidado: cualquier otro efecto del host se apaga
+# (menos efectos cargados = menos GPU/CPU y menos ruido en las pruebas).
+# KUBE_NESTED_KEEP_EFFECTS="blur,screenshot" conserva esos (p.ej. screenshot hace
+# falta para WindowThumbnail/wallpapers reales).
+KEEP_EFFECTS="${KUBE_NESTED_KEEP_EFFECTS:-}"
+awk -v keep="$KEEP_EFFECTS" '
+    /^\[/ { inGroup = ($0 == "[Plugins]") }
+    inGroup && /^[A-Za-z0-9_.-]+Enabled=/ {
+        split($0, kv, "=")
+        id = kv[1]; sub(/Enabled$/, "", id)
+        split(keep, keepList, ",")
+        wanted = 0
+        for (i in keepList) if (keepList[i] == id) wanted = 1
+        print id "Enabled=" (wanted ? "true" : "false")
+        next
+    }
+    { print }
+' "$CFG/kwinrc" >"$CFG/kwinrc.tmp" && mv "$CFG/kwinrc.tmp" "$CFG/kwinrc"
 kwriteconfig6 --file "$CFG/kwinrc" --group Plugins --key kube-effectEnabled true
-kwriteconfig6 --file "$CFG/kwinrc" --group Plugins --key kkubeEnabled false
 # Fondo del cubo por defecto del anidado: SkyBox (panorámica incluida).
 kwriteconfig6 --file "$CFG/kwinrc" --group Effect-kube-effect --key Background 1
 kwriteconfig6 --file "$CFG/kwinrc" --group Effect-kube-effect --key CubeFaceDisplacement 100

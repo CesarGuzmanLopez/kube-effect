@@ -14,7 +14,10 @@ carry the KConfigXT type. It verifies, against contents/config/main.xml:
     Double -> QDoubleSpinBox, Enum -> QComboBox, Bool -> QCheckBox,
     String -> QLineEdit;
   * range widgets carry the schema min/max;
-  * enum combos are not editable and list the choices in schema order.
+  * enum combos are not editable and list the choices in schema order;
+  * the background mode combo really switches its QStackedWidget, i.e. the
+    <connections> block survived QUiLoader (the generic KCM has no logic of its
+    own, so this connection is the whole dynamic behaviour).
 
 config.ui needs the KF6 designer plugins (kio6widgets, kwidgetsaddons6widgets)
 for the pickers, and PySide6 for this script. Without PySide6 the check is
@@ -28,7 +31,13 @@ try:
     from PySide6.QtCore import QFile
     from PySide6.QtGui import QColor
     from PySide6.QtUiTools import QUiLoader
-    from PySide6.QtWidgets import QApplication, QComboBox, QSlider, QWidget
+    from PySide6.QtWidgets import (
+        QApplication,
+        QComboBox,
+        QSlider,
+        QStackedWidget,
+        QWidget,
+    )
 except ImportError:  # pragma: no cover - optional dependency
     print("check-ui: skipped (PySide6 is not installed)")
     sys.exit(0)
@@ -182,6 +191,36 @@ def _check_combo(name, widget, info, problems):
                 )
 
 
+def _check_mode_stack(form, problems):
+    """The mode combo must switch the QStackedWidget through <connections>.
+
+    The generic KCM keeps no logic: it loads the form with QUiLoader and lets
+    KConfigDialogManager write the saved enum index into the combo. If the
+    <connection> is missing or malformed, the combo changes and the stack does
+    not, so this runtime check is the only guard on that behaviour.
+    """
+    combo = form.findChild(QComboBox, "kcfg_Background")
+    stack = form.findChild(QStackedWidget, "bgModeStack")
+    if combo is None or stack is None:
+        problems.append("config.ui: kcfg_Background and bgModeStack are required")
+        return
+    if combo.count() != stack.count():
+        problems.append(
+            f"bgModeStack: {stack.count()} pages for {combo.count()} background modes"
+        )
+        return
+    # Visit every mode, starting with one that differs from the initial page so
+    # the first step also proves the connection fires.
+    order = list(range(1, combo.count())) + [0]
+    for index in order:
+        combo.setCurrentIndex(index)
+        if stack.currentIndex() != index:
+            problems.append(
+                f"bgModeStack: combo index {index} leaves page {stack.currentIndex()} "
+                "(the <connection> is missing or does not match)"
+            )
+
+
 def _check_widget(name, widget, info, problems):
     meta = _check_widget_type(name, widget, info, problems)
     if meta is None:
@@ -210,13 +249,18 @@ def main():
             continue
         _check_widget(name, widget, info, problems)
 
+    _check_mode_stack(form, problems)
+
     print(f"check-ui: {len(entries)} entries, {len(widgets)} widgets created")
     if problems:
         print("check-ui: FAIL")
         for problem in problems:
             print(f" - {problem}")
         return 1
-    print("check-ui: OK (widgets, user property types, bounds, combo order)")
+    print(
+        "check-ui: OK (widgets, user property types, bounds, combo order, "
+        "mode combo -> stacked pages)"
+    )
     return 0
 
 

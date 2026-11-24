@@ -115,21 +115,26 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
 ## 4. Casco: espacio alrededor
 
 - Es el fondo de la escena (no la superficie del sólido). Modos:
-    - **Color**: `window.color` (plano, ver trucos) / `SceneEnvironment`.
-    - **Degradado** lineal/radial/circular: un `Rectangle` con `Gradient` (lineal) o
-      un gradiente generado (radial/circular) capturado a textura.
+    - **Color**: un `Rectangle` de color sólido DENTRO de la escena, detrás del
+      `View3D` (nunca `window.color`, que pinta la superficie de la ventana; ver
+      trucos).
+    - **Degradado** lineal (arriba→abajo u horizontal): un `Rectangle` con
+      `Gradient` DENTRO de la escena. `Radial` aún **cae a vertical** (QtQuick no
+      tiene radial primitivo sin shader; ver requerimientos §3).
     - **Imagen / SkyBox**: si la imagen es **360 equirectangular (2:1)** se usa
       `SceneEnvironment { backgroundMode: SkyBox; lightProbe: Texture { source } }`
       → **SkyBox**: entorno que envuelve la escena y gira con el centro. Si no es
-      2:1, se pinta como **quad plano** (fondo fijo). `CascoImageMapping`
+      2:1, se pinta como **quad plano** (fondo fijo). `BackgroundImageMapping`
       (Auto/Equirect/Flat) lo decide.
     - **Vídeo 360**: entorno envolvente con el clip (skydome animado), equivalente en
       movimiento al SkyBox. Requiere QtMultimedia.
 - **SkyBox no es un modo aparte**: es la variante 360 de "Imagen"
   (`SceneEnvironment.SkyBox`, no un quad). "Vídeo 360" es su versión animada.
-- `CascoImageRotate`: si la imagen plana gira con el centro o queda fija.
-- Por cómo se pinta el fondo en KWin (ver `doc/trucos-aprendidos.md`): el modo
-  plano (Color) se pinta con `window.color`; los texturizados, dentro de la escena.
+- `BackgroundImageRotate`: si la imagen plana gira con el centro o queda fija.
+- El fondo (color, degradado o imagen plana) se pinta con `Rectangle`/`Image`
+  DENTRO de la escena, detrás del `View3D`, y con `visible: effect.visible`.
+  `window.color` no se toca: pinta la superficie de la ventana y deja el fondo
+  pegado al desactivar (ver `doc/trucos-aprendidos.md`).
 
 ## 5. Interior: objetos decorativos
 
@@ -144,7 +149,34 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
 Las claves viven en `package/contents/config/main.xml` (KCM genérico). Enums se
 guardan como ENTERO en kwinrc. Grupo `[Effect-kube-effect]`.
 
-## 7. Verificación
+## 7. Distribución (QML puro, sin C++)
+
+- `kpackagetool6 --type KWin/Effect` solo instala efectos **scripted/QML**
+  (`~/.local/share/kwin/effects/<id>/contents/ui/main.qml`). Un `.so` dentro del
+  paquete **no se carga**: `PluginEffectLoader` busca plugins binarios en
+  `kwin/effects/plugins`, y los **KCM propios** en `kwin/effects/configs` (ambos
+  en `${KDE_INSTALL_PLUGINDIR}`, p. ej. `/usr/lib/qt6/plugins/...`), **fuera del
+  KPackage**.
+- **No hay ABI estable** entre versiones de Plasma: KWin compara el IID y descarta
+  los binarios de otra versión ("… was built for a different version of KWin and
+  needs to be rebuilt"). Casos reales: **Better Blur** (taj-ny) soporta una sola
+  versión de Plasma y avisa de recompilar tras actualizar KWin; **KDE Rounded
+  Corners** se rompe tras cada update de KWin. Ambos distribuyen AUR/COPR/PPA/Nix
+  con binarios por distro.
+- **Flatpak no sirve** (el efecto se carga dentro del `kwin_wayland` del host) y
+  **KDE Store solo entrega datos/QML**. Un efecto C++ "sin que el usuario
+  compile" = paquete por distro y por versión de KWin + CI.
+- Por eso este efecto es **QML puro** y se distribuye por KDE Store. Si alguna
+  feature exige C++, iría a un repo nativo aparte con paquetes por distro
+  (AUR `-bin`, COPR, PPA, OBS, Nix) y CI por versión de KWin; nunca un `.so`
+  genérico ni dentro del KPackage.
+- **Qué NO exige C++** (se queda en QML): degradado radial (`ShaderEffect`/GLSL),
+  skybox, vídeo 360 (`QtMultimedia`), cilindro (`ProceduralMesh`), capas
+  visuales. **C++ solo** para framebuffer real por escritorio, `EffectWindow`
+  avanzado o `QQuick3DGeometry` de alto rendimiento. Decisión: seguir en QML y
+  decidir C++ al llegar a la feature que lo exija.
+
+## 8. Verificación
 
 - `make lint` (estático).
 - KWin anidado (`scripts/kwin-nested-test.sh`): el usuario prueba a mano. KWin

@@ -13,7 +13,7 @@ import os
 import sys
 
 try:
-    from PySide6.QtCore import QObject, Property, QUrl, qInstallMessageHandler
+    from PySide6.QtCore import Property, QObject, QUrl, qInstallMessageHandler
     from PySide6.QtGui import QColor
     from PySide6.QtQml import QQmlComponent, QQmlEngine
     from PySide6.QtWidgets import QApplication
@@ -77,7 +77,7 @@ class Holder(QObject):
 def main():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     qInstallMessageHandler(forward_qml_warnings)
-    application = QApplication(sys.argv)  # noqa: F841 - required by the QML engine
+    application = QApplication(sys.argv)
 
     engine = QQmlEngine()
     holder = Holder()  # keep a reference: a temporary would be collected

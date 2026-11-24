@@ -38,7 +38,10 @@ desarrollo no se usa esto
 
 `./scripts/kwin-nested-test.sh` — KWin privado (bus propio,
 `XDG_CONFIG_HOME` aislado), nunca toca la sesión real. Configura el efecto en
-`[Effect-kube-effect]`, lo activa y captura. Para parar, `kill` del pid que imprime.
+`[Effect-kube-effect]`, lo activa y captura. Apaga TODOS los demás efectos del
+host en el anidado (menos carga); `KUBE_NESTED_KEEP_EFFECTS="blur,screenshot"`
+conserva los que indiques (`screenshot` hará falta para thumbnails/wallpapers
+reales). Para parar, `kill` del pid que imprime.
 
 ## Verificación
 

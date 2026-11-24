@@ -65,53 +65,194 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
                         </attribute>
                         <layout class="QVBoxLayout" name="tabBackgroundLayout">
                             <item>
-                                <widget class="QGroupBox" name="bgGroup">
-                                    <property name="title">
-                                        <string>Fondo</string>
+                                <layout class="QFormLayout" name="bgModeForm">
+                                    <item row="0" column="0">
+                                        <widget class="QLabel" name="bgModeLabel">
+                                            <property name="text">
+                                                <string>Modo de fondo:</string>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                    <item row="0" column="1">
+                                        <widget class="QComboBox" name="kcfg_Background">
+                                            <item>
+                                                <property name="text">
+                                                    <string>Color</string>
+                                                </property>
+                                            </item>
+                                            <item>
+                                                <property name="text">
+                                                    <string>Imagen (Image)</string>
+                                                </property>
+                                            </item>
+                                            <item>
+                                                <property name="text">
+                                                    <string>Degradado (Gradient)</string>
+                                                </property>
+                                            </item>
+                                        </widget>
+                                    </item>
+                                    <item row="1" column="0">
+                                        <widget class="QLabel" name="bgColorLabel">
+                                            <property name="text">
+                                                <string>Color de fondo:</string>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                    <item row="1" column="1">
+                                        <!-- One KConfigXT entry binds exactly one widget, so
+                                             the solid colour (also the first gradient stop and
+                                             the image fallback) lives outside the stack. -->
+                                        <widget class="KColorButton" name="kcfg_BackgroundColor" />
+                                    </item>
+                                </layout>
+                            </item>
+                            <item>
+                                <!-- One page per mode, in Background enum order. The designer
+                                     connection block at the end of this file switches pages; the
+                                     generic KCM only loads this .ui with QUiLoader, so there is
+                                     no config.qml logic to do it. -->
+                                <widget class="QStackedWidget" name="bgModeStack">
+                                    <property name="currentIndex">
+                                        <number>0</number>
                                     </property>
-                                    <layout class="QFormLayout" name="bgForm">
-                                        <item row="0" column="0">
-                                            <widget class="QLabel" name="bgModeLabel">
-                                                <property name="text">
-                                                    <string>Modo de fondo:</string>
-                                                </property>
-                                            </widget>
-                                        </item>
-                                        <item row="0" column="1">
-                                            <widget class="QComboBox" name="kcfg_Background">
-                                                <item>
+
+                                    <!-- 0: Color -->
+                                    <widget class="QWidget" name="bgColorPage">
+                                        <layout class="QFormLayout" name="bgColorForm">
+                                            <item row="0" column="0" colspan="2">
+                                                <widget class="QLabel" name="bgColorHint">
                                                     <property name="text">
-                                                        <string>Color</string>
+                                                        <string>Modo Color: se pinta el color de fondo de arriba.</string>
                                                     </property>
-                                                </item>
-                                                <item>
+                                                    <property name="wordWrap">
+                                                        <bool>true</bool>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                        </layout>
+                                    </widget>
+
+                                    <!-- 1: Image -->
+                                    <widget class="QWidget" name="bgImagePage">
+                                        <layout class="QFormLayout" name="bgImageForm">
+                                            <item row="0" column="0">
+                                                <widget class="QLabel" name="bgImageLabel">
                                                     <property name="text">
-                                                        <string>SkyBox</string>
+                                                        <string>Imagen de fondo (2:1 = 360; foto normal = Mapeo Plano):</string>
                                                     </property>
-                                                </item>
-                                            </widget>
-                                        </item>
-                                        <item row="1" column="0">
-                                            <widget class="QLabel" name="bgColorLabel">
-                                                <property name="text">
-                                                    <string>Color de fondo:</string>
-                                                </property>
-                                            </widget>
-                                        </item>
-                                        <item row="1" column="1">
-                                            <widget class="KColorButton" name="kcfg_BackgroundColor" />
-                                        </item>
-                                        <item row="2" column="0">
-                                            <widget class="QLabel" name="skyLabel">
-                                                <property name="text">
-                                                    <string>Imagen SkyBox (360, 2:1):</string>
-                                                </property>
-                                            </widget>
-                                        </item>
-                                        <item row="2" column="1">
-                                            <widget class="KUrlRequester" name="kcfg_SkyBox" />
-                                        </item>
-                                    </layout>
+                                                </widget>
+                                            </item>
+                                            <item row="0" column="1">
+                                                <widget class="KUrlRequester" name="kcfg_SkyBox" />
+                                            </item>
+                                            <item row="1" column="0">
+                                                <widget class="QLabel" name="bgImageMappingLabel">
+                                                    <property name="text">
+                                                        <string>Mapeo de la imagen:</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                            <item row="1" column="1">
+                                                <widget class="QComboBox" name="kcfg_BackgroundImageMapping">
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Auto</string>
+                                                        </property>
+                                                    </item>
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Equirect (360)</string>
+                                                        </property>
+                                                    </item>
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Plano (Flat)</string>
+                                                        </property>
+                                                    </item>
+                                                </widget>
+                                            </item>
+                                            <item row="2" column="0" colspan="2">
+                                                <widget class="QCheckBox" name="kcfg_BackgroundImageRotate">
+                                                    <property name="text">
+                                                        <string>Girar con el centro (solo 360)</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                        </layout>
+                                    </widget>
+
+                                    <!-- 2: Gradient -->
+                                    <widget class="QWidget" name="bgGradientPage">
+                                        <layout class="QFormLayout" name="bgGradientForm">
+                                            <item row="0" column="0">
+                                                <widget class="QLabel" name="bgGradientTypeLabel">
+                                                    <property name="text">
+                                                        <string>Tipo de degradado:</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                            <item row="0" column="1">
+                                                <widget class="QComboBox" name="kcfg_BackgroundGradientType">
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Vertical (LinearVertical)</string>
+                                                        </property>
+                                                    </item>
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Horizontal (LinearHorizontal)</string>
+                                                        </property>
+                                                    </item>
+                                                    <item>
+                                                        <property name="text">
+                                                            <string>Radial</string>
+                                                        </property>
+                                                    </item>
+                                                </widget>
+                                            </item>
+                                            <item row="1" column="0">
+                                                <widget class="QLabel" name="bgColor2Label">
+                                                    <property name="text">
+                                                        <string>Segundo color:</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                            <item row="1" column="1">
+                                                <widget class="KColorButton" name="kcfg_BackgroundColor2" />
+                                            </item>
+                                            <item row="2" column="0">
+                                                <widget class="QLabel" name="bgStopLabel">
+                                                    <property name="text">
+                                                        <string>Posición del degradado:</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                            <item row="2" column="1">
+                                                <widget class="QSpinBox" name="kcfg_BackgroundGradientStop">
+                                                    <property name="minimum">
+                                                        <number>0</number>
+                                                    </property>
+                                                    <property name="maximum">
+                                                        <number>100</number>
+                                                    </property>
+                                                    <property name="suffix">
+                                                        <string>%</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                            <item row="3" column="0" colspan="2">
+                                                <widget class="QLabel" name="bgGradientHint">
+                                                    <property name="text">
+                                                        <string>El primer color es el color de fondo de arriba. El tipo Radial aún se dibuja como vertical.</string>
+                                                    </property>
+                                                    <property name="wordWrap">
+                                                        <bool>true</bool>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                        </layout>
+                                    </widget>
                                 </widget>
                             </item>
                         </layout>
@@ -280,4 +421,15 @@ fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
             <header>kurlrequester.h</header>
         </customwidget>
     </customwidgets>
+    <connections>
+        <!-- The generic KCM loads this form with QUiLoader and has no logic of
+             its own; a designer connection is the only way to react to the mode
+             combo. QUiLoader recreates it, so no C++ or config.qml is needed. -->
+        <connection>
+            <sender>kcfg_Background</sender>
+            <signal>currentIndexChanged(int)</signal>
+            <receiver>bgModeStack</receiver>
+            <slot>setCurrentIndex(int)</slot>
+        </connection>
+    </connections>
 </ui>

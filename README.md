@@ -7,10 +7,11 @@ el **cubo virgen** de KDE (caras planas en polígono) y crece feature a feature.
 
 ## Qué es (estado actual)
 
-Cubo virgen de KDE sin modificaciones: N escritorios alrededor de un polígono,
-giro por ratón y teclado, 9 claves de configuración
-(`package/contents/config/main.xml`). Las features a implementar y sus
-configuraciones están especificadas en `doc/requerimientos.md`.
+N escritorios alrededor de un polígono (el cubo virgen de KDE), con giro por
+ratón y teclado. Sobre el virgen: **casco configurable** (Color / Imagen 360 o
+plana / Degradado, con sus claves en `package/contents/config/main.xml`) y un
+**KCM genérico con UI dinámica** (combo de modo + páginas apiladas vía
+`<connections>`, sin C++). El arnés de test anidado apaga el resto de efectos.
 
 ## Documentación
 
@@ -22,7 +23,8 @@ configuraciones están especificadas en `doc/requerimientos.md`.
 ## Instalar / probar
 
 ```bash
-make lint                 # qmllint + formato + esquema (sin Sonar si no está)
+make check                # qmllint + formato + esquema + UI + constants (sin Sonar)
+make lint                 # make check + SonarQube en localhost:9000
 make install              # kpackagetool6 --upgrade package/
 ```
 

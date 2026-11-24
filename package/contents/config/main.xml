@@ -29,12 +29,42 @@
         <entry name="Background" type="Enum">
             <default>Color</default>
             <choices>
+                <!-- Index 1 keeps its kwinrc value: it used to be named SkyBox. -->
                 <choice name="Color" />
-                <choice name="SkyBox" />
+                <choice name="Image" />
+                <choice name="Gradient" />
             </choices>
         </entry>
+        <entry name="BackgroundImageMapping" type="Enum">
+            <!-- Auto: any configured image is treated as a 2:1 panorama (QML cannot probe the ratio without decoding it). -->
+            <default>Auto</default>
+            <choices>
+                <choice name="Auto" />
+                <choice name="Equirect" />
+                <choice name="Flat" />
+            </choices>
+        </entry>
+        <entry name="BackgroundImageRotate" type="Bool">
+            <default>true</default>
+        </entry>
         <entry name="BackgroundColor" type="Color">
-            <default>#212427</default>
+            <default>#1b3fd8</default>
+        </entry>
+        <entry name="BackgroundColor2" type="Color">
+            <default>#ff8a00</default>
+        </entry>
+        <entry name="BackgroundGradientType" type="Enum">
+            <default>LinearVertical</default>
+            <choices>
+                <choice name="LinearVertical" />
+                <choice name="LinearHorizontal" />
+                <choice name="Radial" />
+            </choices>
+        </entry>
+        <entry name="BackgroundGradientStop" type="Int">
+            <default>50</default>
+            <min>0</min>
+            <max>100</max>
         </entry>
     </group>
 </kcfg>

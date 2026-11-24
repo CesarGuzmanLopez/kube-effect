@@ -21,7 +21,9 @@ mistakes the KCM cannot report:
     second one is dropped); the layout is walked recursively so widgets nested
     in tabs, scroll areas and group boxes are checked too;
   * Enum combos list the choices in schema order;
-  * range widgets (QSlider, spin boxes) use the schema min/max when declared.
+  * range widgets (QSlider, spin boxes) use the schema min/max when declared;
+  * <connections> sender/receiver name existing widgets (QUiLoader drops a
+    connection to a typo silently, and the generic KCM has no other logic).
 
 Run: python3 scripts/check-schema.py   (exit 1 with one line per problem)
 """
@@ -116,6 +118,18 @@ def _layout_cells(layout):
     return occupied
 
 
+def read_connections(root):
+    """(sender, signal, receiver, slot) for every designer <connection>."""
+    connections = []
+    for connection in root.iter("connection"):
+        fields = [
+            (connection.find(tag).text or "").strip()
+            for tag in ("sender", "signal", "receiver", "slot")
+        ]
+        connections.append(tuple(fields))
+    return connections
+
+
 def _read_form_cells(root):
     # Cells are only unique inside one layout: every tab/section has its own
     # QFormLayout, so a (row, column) pair repeats across them by design.
@@ -129,11 +143,13 @@ def _read_form_cells(root):
 
 
 def read_ui():
-    """(kcfg widgets by entry, duplicated names, form cells per layout)."""
+    """(kcfg widgets, duplicated names, form cells per layout, all names, connections)."""
     root = ET.parse(UI).getroot()
     widgets, duplicates = _read_widgets(root)
     cells_by_layout = _read_form_cells(root)
-    return widgets, duplicates, cells_by_layout
+    names = {widget.get("name") for widget in root.iter("widget") if widget.get("name")}
+    connections = read_connections(root)
+    return widgets, duplicates, cells_by_layout, names, connections
 
 
 def norm(value):
@@ -253,6 +269,18 @@ def check_bounds(name, widget, info, problems):
         problems.append(f"config.ui kcfg_{name}: maximum {maximum} != {info['max']}")
 
 
+def check_connections(names, connections, problems):
+    for sender, signal, receiver, slot in connections:
+        if sender not in names:
+            problems.append(f"config.ui connections: unknown sender {sender!r}")
+        if receiver not in names:
+            problems.append(f"config.ui connections: unknown receiver {receiver!r}")
+        if not signal or not slot:
+            problems.append(
+                f"config.ui connections: {sender} -> {receiver} without a signal/slot pair"
+            )
+
+
 def check_ui(entries, widgets, duplicates, cells_by_layout, problems):
     check_widget_sets(entries, widgets, problems)
     if duplicates:
@@ -293,9 +321,10 @@ def main():
         print("OK: enum defaults/order, constants.js (no config.ui)")
         return 0
 
-    widgets, duplicates, cells_by_layout = read_ui()
+    widgets, duplicates, cells_by_layout, names, connections = read_ui()
     cells = sum(len(occupied) for occupied in cells_by_layout)
     check_ui(entries, widgets, duplicates, cells_by_layout, problems)
+    check_connections(names, connections, problems)
 
     enums = sum(1 for info in entries.values() if info["type"] == "Enum")
     print(
@@ -307,7 +336,7 @@ def main():
         for problem in problems:
             print(f" - {problem}")
         return 1
-    print("OK: enum defaults/order, constants.js, widgets and form cells")
+    print("OK: enum defaults/order, constants.js, widgets, form cells and connections")
     return 0
 
 
