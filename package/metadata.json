@@ -1,0 +1,21 @@
+{
+    "KPackageStructure": "KWin/Effect",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Cesar Guzman"
+            }
+        ],
+        "Category": "Window Management",
+        "Description": "Arrange desktops in a virtual cube (KDE cube clone).",
+        "EnabledByDefault": false,
+        "Id": "kube-effect",
+        "License": "GPL-2.0-or-later",
+        "Name": "Kube Effect",
+        "Version": "0.0.0.1"
+    },
+    "X-KDE-Ordering": 60,
+    "X-KDE-ConfigModule": "kcm_kwin4_genericscripted",
+    "X-KWin-Border-Activate": true,
+    "X-Plasma-API": "declarativescript"
+}

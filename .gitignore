@@ -1,0 +1,30 @@
+# build/dev
+build/
+__pycache__/
+*.pyc
+
+# tools
+.ruff_cache/
+.scannerwork/
+.cache/
+
+# Qt/QML caches
+*.qmlc
+*.jsc
+
+# KDE test installs
+*.kwin-effect.tgz
+
+# local secrets — nada real aquí
+secrets/
+
+# editors
+*.swp
+.idea/
+.vscode/
+
+# local sonar token (never commit)
+.sonar-token
+
+# local sonar admin password (never commit)
+.sonar-admin-pass

@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Cesar Guzman
+SPDX-License-Identifier: GPL-2.0-or-later
+
+Formulario del KCM genérico (kcm_kwin4_genericscripted) para kube-effect.
+Pestañas fijas (Shape & center, Background, Windows 3D, Appearance, Input,
+Presets); las que aún no tienen claves quedan vacías con un aviso, hasta que la
+fase correspondiente del ROADMAP las rellene. Cada widget = kcfg_<Entry>.
+-->
+<ui version="4.0">
+    <class>KubeEffectConfigForm</class>
+    <widget class="QWidget" name="KubeEffectConfigForm">
+        <property name="geometry">
+            <rect>
+                <x>0</x>
+                <y>0</y>
+                <width>700</width>
+                <height>520</height>
+            </rect>
+        </property>
+        <layout class="QVBoxLayout" name="rootLayout">
+            <item>
+                <widget class="QLabel" name="versionLabel">
+                    <property name="text">
+                        <string>kube-effect 0.0.0.1</string>
+                    </property>
+                    <property name="alignment">
+                        <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                    </property>
+                    <property name="styleSheet">
+                        <string notr="true">color: #888888; font-weight: bold;</string>
+                    </property>
+                </widget>
+            </item>
+            <item>
+                <widget class="QTabWidget" name="tabs">
+                    <property name="currentIndex">
+                        <number>0</number>
+                    </property>
+
+                    <!-- 1. Shape & center -->
+                    <widget class="QWidget" name="tabShape">
+                        <attribute name="title">
+                            <string>Shape &amp; center</string>
+                        </attribute>
+                        <layout class="QVBoxLayout" name="tabShapeLayout">
+                            <item>
+                                <widget class="QLabel" name="tabShapePlaceholder">
+                                    <property name="text">
+                                        <string>Forma e interior se añaden en fases posteriores (ver doc/ROADMAP.md).</string>
+                                    </property>
+                                    <property name="wordWrap">
+                                        <bool>true</bool>
+                                    </property>
+                                </widget>
+                            </item>
+                        </layout>
+                    </widget>
+
+                    <!-- 2. Background -->
+                    <widget class="QWidget" name="tabBackground">
+                        <attribute name="title">
+                            <string>Background</string>
+                        </attribute>
+                        <layout class="QVBoxLayout" name="tabBackgroundLayout">
+                            <item>
+                                <widget class="QGroupBox" name="bgGroup">
+                                    <property name="title">
+                                        <string>Fondo</string>
+                                    </property>
+                                    <layout class="QFormLayout" name="bgForm">
+                                        <item row="0" column="0">
+                                            <widget class="QLabel" name="bgModeLabel">
+                                                <property name="text">
+                                                    <string>Modo de fondo:</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="0" column="1">
+                                            <widget class="QComboBox" name="kcfg_Background">
+                                                <item>
+                                                    <property name="text">
+                                                        <string>Color</string>
+                                                    </property>
+                                                </item>
+                                                <item>
+                                                    <property name="text">
+                                                        <string>SkyBox</string>
+                                                    </property>
+                                                </item>
+                                            </widget>
+                                        </item>
+                                        <item row="1" column="0">
+                                            <widget class="QLabel" name="bgColorLabel">
+                                                <property name="text">
+                                                    <string>Color de fondo:</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="1" column="1">
+                                            <widget class="KColorButton" name="kcfg_BackgroundColor" />
+                                        </item>
+                                        <item row="2" column="0">
+                                            <widget class="QLabel" name="skyLabel">
+                                                <property name="text">
+                                                    <string>Imagen SkyBox (360, 2:1):</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="2" column="1">
+                                            <widget class="KUrlRequester" name="kcfg_SkyBox" />
+                                        </item>
+                                    </layout>
+                                </widget>
+                            </item>
+                        </layout>
+                    </widget>
+
+                    <!-- 3. Windows 3D -->
+                    <widget class="QWidget" name="tabWindows">
+                        <attribute name="title">
+                            <string>Windows 3D</string>
+                        </attribute>
+                        <layout class="QVBoxLayout" name="tabWindowsLayout">
+                            <item>
+                                <widget class="QLabel" name="tabWindowsPlaceholder">
+                                    <property name="text">
+                                        <string>Capas de ventana (z-index) en una fase posterior (ver doc/ROADMAP.md).</string>
+                                    </property>
+                                    <property name="wordWrap">
+                                        <bool>true</bool>
+                                    </property>
+                                </widget>
+                            </item>
+                        </layout>
+                    </widget>
+
+                    <!-- 4. Appearance -->
+                    <widget class="QWidget" name="tabAppearance">
+                        <attribute name="title">
+                            <string>Appearance</string>
+                        </attribute>
+                        <layout class="QVBoxLayout" name="tabAppearanceLayout">
+                            <item>
+                                <widget class="QGroupBox" name="appGroup">
+                                    <property name="title">
+                                        <string>Geometría</string>
+                                    </property>
+                                    <layout class="QFormLayout" name="appForm">
+                                        <item row="0" column="0">
+                                            <widget class="QLabel" name="dispLabel">
+                                                <property name="text">
+                                                    <string>Separación entre caras (px):</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="0" column="1">
+                                            <widget class="QDoubleSpinBox" name="kcfg_CubeFaceDisplacement">
+                                                <property name="minimum">
+                                                    <double>-500.0</double>
+                                                </property>
+                                                <property name="maximum">
+                                                    <double>500.0</double>
+                                                </property>
+                                                <property name="singleStep">
+                                                    <double>10.0</double>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="1" column="0">
+                                            <widget class="QLabel" name="distLabel">
+                                                <property name="text">
+                                                    <string>Distancia de la cámara:</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="1" column="1">
+                                            <widget class="QDoubleSpinBox" name="kcfg_DistanceFactor">
+                                                <property name="minimum">
+                                                    <double>0.5</double>
+                                                </property>
+                                                <property name="maximum">
+                                                    <double>5.0</double>
+                                                </property>
+                                                <property name="singleStep">
+                                                    <double>0.1</double>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                    </layout>
+                                </widget>
+                            </item>
+                        </layout>
+                    </widget>
+
+                    <!-- 5. Input -->
+                    <widget class="QWidget" name="tabInput">
+                        <attribute name="title">
+                            <string>Input</string>
+                        </attribute>
+                        <layout class="QVBoxLayout" name="tabInputLayout">
+                            <item>
+                                <widget class="QGroupBox" name="inputGroup">
+                                    <property name="title">
+                                        <string>Activación</string>
+                                    </property>
+                                    <layout class="QFormLayout" name="inputForm">
+                                        <item row="0" column="0">
+                                            <widget class="QLabel" name="borderLabel">
+                                                <property name="text">
+                                                    <string>Bordes (puntero), p. ej. 1,7:</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="0" column="1">
+                                            <widget class="QLineEdit" name="kcfg_BorderActivate" />
+                                        </item>
+                                        <item row="1" column="0">
+                                            <widget class="QLabel" name="touchLabel">
+                                                <property name="text">
+                                                    <string>Bordes (toque), p. ej. 5:</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="1" column="1">
+                                            <widget class="QLineEdit" name="kcfg_TouchBorderActivate" />
+                                        </item>
+                                        <item row="2" column="0" colspan="2">
+                                            <widget class="QCheckBox" name="kcfg_MouseInvertedX">
+                                                <property name="text">
+                                                    <string>Invertir eje X del ratón</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="3" column="0" colspan="2">
+                                            <widget class="QCheckBox" name="kcfg_MouseInvertedY">
+                                                <property name="text">
+                                                    <string>Invertir eje Y del ratón</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                    </layout>
+                                </widget>
+                            </item>
+                        </layout>
+                    </widget>
+
+                    <!-- 6. Presets -->
+                    <widget class="QWidget" name="tabPresets">
+                        <attribute name="title">
+                            <string>Presets</string>
+                        </attribute>
+                        <layout class="QVBoxLayout" name="tabPresetsLayout">
+                            <item>
+                                <widget class="QLabel" name="tabPresetsPlaceholder">
+                                    <property name="text">
+                                        <string>Presets en una fase posterior (ver doc/ROADMAP.md).</string>
+                                    </property>
+                                    <property name="wordWrap">
+                                        <bool>true</bool>
+                                    </property>
+                                </widget>
+                            </item>
+                        </layout>
+                    </widget>
+                </widget>
+            </item>
+        </layout>
+    </widget>
+    <customwidgets>
+        <customwidget>
+            <class>KColorButton</class>
+            <extends>QPushButton</extends>
+            <header>kcolorbutton.h</header>
+        </customwidget>
+        <customwidget>
+            <class>KUrlRequester</class>
+            <extends>QWidget</extends>
+            <header>kurlrequester.h</header>
+        </customwidget>
+    </customwidgets>
+</ui>
