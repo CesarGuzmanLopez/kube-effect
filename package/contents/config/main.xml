@@ -26,13 +26,24 @@
             <default>false</default>
         </entry>
         <entry name="SkyBox" type="Url" />
+        <entry name="BackgroundVideo" type="Url">
+            <!-- Background == Video only: a local clip (file:). It is painted
+                 exactly like an image, so it reuses BackgroundImageLayout,
+                 BackgroundImageFit and BackgroundImageRotate below. Requires
+                 the optional QtMultimedia module (package qt6-multimedia);
+                 without it the colour fallback is painted instead. -->
+            <default></default>
+        </entry>
         <entry name="Background" type="Enum">
             <default>Color</default>
             <choices>
-                <!-- Index 1 keeps its kwinrc value: it used to be named SkyBox. -->
+                <!-- Index 1 keeps its kwinrc value: it used to be named SkyBox.
+                     Video is APPENDED as index 3 so the stored 0/1/2 keep
+                     meaning Color/Image/Gradient. -->
                 <choice name="Color" />
                 <choice name="Image" />
                 <choice name="Gradient" />
+                <choice name="Video" />
             </choices>
         </entry>
         <entry name="BackgroundImageLayout" type="Enum">
@@ -43,7 +54,8 @@
                  0=Auto, 1=Equirect, 2=Flat order) is orphaned and ignored
                  instead of being reinterpreted as Flat. Old values stay
                  untouched in kwinrc; constants.js treats any unknown value as
-                 Equirect. -->
+                 Equirect. Shared by the image and the video (Video wraps the
+                 scene the same way: 360 panorama or flat clip). -->
             <default>Equirect</default>
             <choices>
                 <choice name="Equirect" />
@@ -51,7 +63,8 @@
             </choices>
         </entry>
         <entry name="BackgroundImageFit" type="Enum">
-            <!-- Only used by the Flat mapping: how the picture fills the screen. -->
+            <!-- Only used by the Flat mapping: how the picture or clip fills the
+                 screen (the video uses it too). -->
             <default>Cover</default>
             <choices>
                 <choice name="Cover" />
@@ -60,6 +73,8 @@
             </choices>
         </entry>
         <entry name="BackgroundImageRotate" type="Bool">
+            <!-- Equirect only: true wraps the scene (SkyBox) and turns with the
+                 centre, false paints it flat. Shared by the image and the video. -->
             <default>true</default>
         </entry>
         <entry name="BackgroundColor" type="Color">

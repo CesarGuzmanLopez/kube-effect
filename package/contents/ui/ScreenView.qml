@@ -29,8 +29,11 @@ Item {
     // helpers live in constants.js so they can be unit-tested (scripts/check-constants)
     readonly property string backgroundImageSource: Constants.backgroundImageSource(effect.configuration.SkyBox)
     readonly property bool backgroundImageSet: root.backgroundImageSource.length > 0
+    readonly property string backgroundVideoSource: Constants.videoSource(effect.configuration.BackgroundVideo)
+    readonly property bool backgroundVideoSet: root.backgroundVideoSource.length > 0
     readonly property int backgroundMode: Constants.backgroundMode(effect.configuration.Background)
     readonly property bool equirectMapping: Constants.usesEquirectMapping(effect.configuration.BackgroundImageLayout, root.backgroundImageSet)
+    // Shared by the flat image and the flat video: one setting, one meaning.
     readonly property int flatImageFit: Constants.imageFit(effect.configuration.BackgroundImageFit)
 
     // Advanced: draw the cube only on the output the pointer was on when the
@@ -62,6 +65,42 @@ Item {
     // Flat hull layer: Image mode that does not wrap the scene. A skybox keeps
     // it off so the panorama is decoded once (by the 3D texture), not twice.
     readonly property bool showFlatImage: root.backgroundMode === Constants.Background.Image && !root.skyBoxBackground
+
+    // Video (Background == Video) is an image whose source is a clip, so it
+    // reuses the image mapping/fit/rotate keys and the same two render paths:
+    // equirect + rotate = 360 SkyBox (lightProbe), anything else = flat layer.
+    // The clip itself lives in HullVideo.qml behind a Loader: QtMultimedia is
+    // optional, and a missing module must only disable this item.
+    readonly property bool backgroundVideo: root.backgroundMode === Constants.Background.Video
+    readonly property bool videoWanted: root.backgroundVideo && root.backgroundVideoSet
+    readonly property bool videoSkyBox: root.videoWanted && root.equirectMapping && effect.configuration.BackgroundImageRotate !== false
+    // Decoding starts on the first activation and never in the background: the
+    // item stays loaded (paused) once shown, so re-activating resumes the clip
+    // instead of rebuilding it. Cleared only when the mode/source changes.
+    property bool videoEverShown: false
+    readonly property bool videoActive: root.videoWanted && root.videoEverShown
+    readonly property bool videoReady: videoLoader.status === Loader.Ready
+    readonly property bool videoPainted: root.videoReady && videoLoader.item.frameAvailable === true
+    readonly property bool videoSkyBoxPainted: root.videoSkyBox && root.videoPainted
+    readonly property bool showFlatVideo: root.videoActive && !root.videoSkyBox
+    // Texture.sourceItem takes a QQuickItem (verified in Qt 6.12 qmltypes) and
+    // VideoOutput is one, so the skybox samples the very same video output.
+    readonly property Item videoProbeItem: root.videoReady ? videoLoader.item.videoOutput : null
+    // The warning must not repeat every frame: Loader.Error sticks anyway, so
+    // one line tells the user qt6-multimedia is missing.
+    property bool videoWarningShown: false
+    onBackgroundsActiveChanged: {
+        if (root.backgroundsActive) {
+            root.videoEverShown = true;
+        }
+    }
+    Component.onCompleted: {
+        // A SceneView created while the effect is already visible (it is not,
+        // today) must not wait for a change that never comes.
+        if (root.backgroundsActive) {
+            root.videoEverShown = true;
+        }
+    }
     // QtQuick3D's Texture exposes no load status (checked in Qt 6.12), so a tiny
     // probe decodes the file first: until it is ready (or on a broken path) the
     // environment stays transparent (no empty black SkyBox), and the colour
@@ -71,12 +110,14 @@ Item {
     // See the veil below: the cube "moves" while dragging or while the camera
     // rotation animation runs.
     readonly property bool cubeMoving: cameraController.busy || rotationAnimation.running
-    // Dimming while rotating reaches all four backgrounds, but never through
-    // the same object:
-    //   Color / Gradient / flat image -> the 2D veil (hullDim) over the hull.
-    //   Image + Equirect (SkyBox 3D)  -> probeExposure of the environment: the
-    //     panorama is painted by the 3D scene, not by the 2D layer, so a black
-    //     Rectangle in front of the View3D would cover the faces as well.
+    // Dimming while rotating reaches every background, but never through the
+    // same object:
+    //   Color / Gradient / flat image / flat video -> the 2D veil (hullDim)
+    //     over the hull.
+    //   Image or video + Equirect (SkyBox 3D) -> probeExposure of the
+    //     environment: that background is painted by the 3D scene, not by the
+    //     2D layer, so a black Rectangle in front of the View3D would cover
+    //     the faces as well.
     // dimOpacity is shared so both modes darken by the same amount, and the
     // 120 ms Behavior mirrors the veil's so neither stutters on a paused drag.
     property real skyBoxExposure: Constants.skyBoxExposure(effect.configuration.DimWhileRotating === true, root.cubeMoving, effect.configuration.DimWhileRotatingAmount)
@@ -93,16 +134,26 @@ Item {
     // (still true during the closing animation, false once it ends).
     readonly property bool hullVisible: effect.visible
 
-    // Decoding is not free (a 360 panorama is several MB), so no Image and no
-    // skybox texture gets a source until the effect is first shown. visible
-    // flips to true in activate(), before the opening animation, and survives
-    // the closing one, so the switch happens off screen and cannot flicker.
+    // Decoding is not free (a 360 panorama or clip is several MB), so no
+    // Image, no skybox texture and no MediaPlayer gets a source until the
+    // effect is first shown. visible flips to true in activate(), before the
+    // opening animation, and survives the closing one, so the switch happens
+    // off screen and cannot flicker.
     readonly property bool backgroundsActive: effect.visible
     // Image + SkyBox paints nothing in 2D (the flat layer is off on purpose)
     // and the 3D environment is transparent until the probe is Ready, so the
     // solid colour has to hold the screen meanwhile; without it the hull would
     // be see-through (or black) on a slow/broken panorama.
     readonly property bool imageFallbackColor: root.backgroundMode === Constants.Background.Image && !root.skyBoxImageReady
+    // A SkyBox (image or video) is painted by the 3D environment, so the 2D
+    // veil must stay off once it is on screen (see skyBoxExposure below).
+    readonly property bool skyBoxPainted: root.skyBoxImageReady || root.videoSkyBoxPainted
+    // Solid colour layer: Color mode, the backdrop under a SkyBox that is not
+    // painted yet, and the backdrop of the video. The last one covers three
+    // cases with one rule: bars left by Contain/Stretch, the first frames
+    // before decoding, and the documented fallback when QtMultimedia is
+    // missing (then nothing else paints the hull).
+    readonly property bool colorHullVisible: root.backgroundMode === Constants.Background.Color || root.imageFallbackColor || root.backgroundVideo
 
     Image {
         id: skyBoxProbe
@@ -113,11 +164,12 @@ Item {
     }
 
     // Hull: solid colour (Background == Color), also the backup under Image +
-    // SkyBox while the panorama is not painted yet (see imageFallbackColor).
+    // SkyBox while the panorama is not painted yet (see imageFallbackColor) and
+    // the backdrop/fallback of the video (see colorHullVisible).
     Rectangle {
         id: colorBackground
         anchors.fill: parent
-        visible: root.hullVisible && (root.backgroundMode === Constants.Background.Color || root.imageFallbackColor)
+        visible: root.hullVisible && root.colorHullVisible
         color: effect.configuration.BackgroundColor
     }
 
@@ -168,6 +220,33 @@ Item {
         }
     }
 
+    // Hull: video (Background == Video). Its own file + Loader isolate the
+    // QtMultimedia import: if the module is missing the Loader ends in Error,
+    // qWarning fires once and the solid colour below keeps the hull painted.
+    // The Loader is a direct child (never inside a hidden container) because
+    // the same item doubles as Texture.sourceItem for the 360 SkyBox; the
+    // item stays alive once shown and pauses with effect.visible.
+    Loader {
+        id: videoLoader
+        anchors.fill: parent
+        active: root.videoActive
+        visible: root.hullVisible && root.showFlatVideo
+        source: "HullVideo.qml"
+        onStatusChanged: {
+            if (status === Loader.Error && !root.videoWarningShown) {
+                root.videoWarningShown = true;
+                console.warn("kube-effect: background video unavailable (is qt6-multimedia installed?); using the background colour");
+            }
+        }
+        onLoaded: {
+            // Bindings on the created item: the KCM can change the clip or the
+            // fit while the effect is loaded, and effect.visible must pause it.
+            item.source = Qt.binding(() => root.backgroundVideoSource);
+            item.fit = Qt.binding(() => root.flatImageFit);
+            item.playing = Qt.binding(() => effect.visible);
+        }
+    }
+
     // Advanced: black veil over the hull (not over the faces) while the cube
     // moves. "Moving" is cameraController.busy (pointer drag) or the rotation
     // Behavior's animation (arrow keys, activation and desktop switch); the
@@ -185,7 +264,7 @@ Item {
         anchors.fill: parent
         color: "black"
         visible: opacity > 0
-        opacity: root.cubeMoving && !root.skyBoxImageReady ? Constants.dimOpacity(effect.configuration.DimWhileRotating === true, effect.configuration.DimWhileRotatingAmount) : 0
+        opacity: root.cubeMoving && !root.skyBoxPainted ? Constants.dimOpacity(effect.configuration.DimWhileRotating === true, effect.configuration.DimWhileRotatingAmount) : 0
         Behavior on opacity {
             NumberAnimation {
                 duration: 120
@@ -205,7 +284,7 @@ Item {
         // the fallback while the panorama decodes or fails to load.
         Loader {
             id: transparentSceneEnvironment
-            active: !root.skyBoxImageReady
+            active: !root.skyBoxPainted
             sourceComponent: SceneEnvironment {
                 backgroundMode: SceneEnvironment.Transparent
             }
@@ -231,7 +310,26 @@ Item {
             }
         }
 
-        environment: root.skyBoxImageReady ? skyboxSceneEnvironment.item : transparentSceneEnvironment.item
+        // Video 360: the environment samples the VideoOutput of HullVideo.qml
+        // through Texture.sourceItem (a QQuickItem; VideoOutput is one).
+        // autoOrientation defaults to true, so the offscreen layer is flipped
+        // the same way the image probe is and no manual flip is needed.
+        Loader {
+            id: videoSkyboxEnvironment
+            active: root.videoSkyBoxPainted
+            sourceComponent: SceneEnvironment {
+                backgroundMode: SceneEnvironment.SkyBox
+                // Same dimming as the image SkyBox: the panorama belongs to
+                // the 3D environment, so probeExposure is the only veil that
+                // reaches it without covering the faces.
+                probeExposure: root.skyBoxExposure
+                lightProbe: Texture {
+                    sourceItem: root.videoProbeItem
+                }
+            }
+        }
+
+        environment: root.skyBoxImageReady ? skyboxSceneEnvironment.item : root.videoSkyBoxPainted ? videoSkyboxEnvironment.item : transparentSceneEnvironment.item
 
         PerspectiveCamera {
             id: camera

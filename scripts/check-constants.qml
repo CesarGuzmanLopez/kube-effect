@@ -35,7 +35,8 @@ Item {
         check("mode(Color)", Constants.backgroundMode(Constants.Background.Color), Constants.Background.Color);
         check("mode(Image)", Constants.backgroundMode(Constants.Background.Image), Constants.Background.Image);
         check("mode(Gradient)", Constants.backgroundMode(Constants.Background.Gradient), Constants.Background.Gradient);
-        check("mode(unknown int)", Constants.backgroundMode(3), Constants.Background.Color);
+        check("mode(Video)", Constants.backgroundMode(Constants.Background.Video), Constants.Background.Video);
+        check("mode(unknown int)", Constants.backgroundMode(4), Constants.Background.Color);
         check("mode(-1)", Constants.backgroundMode(-1), Constants.Background.Color);
         check("mode(undefined)", Constants.backgroundMode(undefined), Constants.Background.Color);
         check("mode(null)", Constants.backgroundMode(null), Constants.Background.Color);
@@ -164,5 +165,20 @@ Item {
         check("source(null)", Constants.backgroundImageSource(null), "");
         check("source(http)", Constants.backgroundImageSource("http://example.com/sky.jpg"), "");
         check("source(smb)", Constants.backgroundImageSource("smb://host/sky.jpg"), "");
+
+        // Video source: same local-only rule as the image, but a clip must be a
+        // real file. image: is rejected (there is no video provider behind it)
+        // and so is every remote scheme.
+        check("video(file url)", Constants.videoSource(h.fileUrl), "file:///home/user/My Wall.jpg");
+        check("video(bare url value)", Constants.videoSource(h.bareUrl), "/home/user/wall.jpg");
+        check("video(file url string)", Constants.videoSource("file:///home/user/clip.mp4"), "file:///home/user/clip.mp4");
+        check("video(absolute path)", Constants.videoSource("/home/user/clip.mp4"), "/home/user/clip.mp4");
+        check("video(empty url)", Constants.videoSource(h.emptyUrl), "");
+        check("video(empty string)", Constants.videoSource(""), "");
+        check("video(undefined)", Constants.videoSource(undefined), "");
+        check("video(null)", Constants.videoSource(null), "");
+        check("video(image provider)", Constants.videoSource("image://wallpaper/0"), "");
+        check("video(http)", Constants.videoSource("http://example.com/clip.mp4"), "");
+        check("video(smb)", Constants.videoSource("smb://host/clip.mp4"), "");
     }
 }

@@ -53,6 +53,11 @@ lint-ci: check
 # del SkyBox con probeExposure (1.0 quieto, 0.4 girando con atenuación del 40 %)
 # y falla si la propiedad no existe o el binding muere al animarla; su --selftest
 # comprueba que una propiedad inexistente sí falla.
+# check-video.py instancia HullVideo.qml (el único fichero que importa
+# QtMultimedia) con un motor QML real y comprueba los dos caminos del Loader de
+# ScreenView: módulo presente -> item y VideoOutput creados; módulo ausente y
+# fuente rota -> Loader.Error sin llevarse la escena. También se salta (exit 0)
+# si falta PySide6.
 # check-features.py valida el catálogo features.json (campos obligatorios,
 # status válido, ids únicos y dependencias conocidas); un JSON inválido rompe
 # el gate. Su --selftest comprueba el propio validador (JSON inválido, id
@@ -80,6 +85,7 @@ check:
 	@if grep -q '^function ' $(QML_DIR)/contents/ui/constants.js 2>/dev/null; then python3 scripts/check-constants.py; else echo "check-constants: skipped (no helpers in constants.js)"; fi
 	@python3 scripts/check-scene-environment.py
 	@python3 scripts/check-scene-environment.py --selftest
+	@python3 scripts/check-video.py
 	@python3 scripts/check-features.py
 	@python3 scripts/check-features.py --selftest
 	@if [ ! -d $(NATIVE_PACKAGE_DIR) ]; then \

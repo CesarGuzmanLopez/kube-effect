@@ -9,7 +9,10 @@ const Background = {
     Color: 0,
     // Index 1 used to be named SkyBox; kwinrc stores the index, not the name.
     Image: 1,
-    Gradient: 2
+    Gradient: 2,
+    // Appended as index 3 so the stored 0/1/2 keep their meaning. Video is an
+    // image whose source is a clip: same layout/fit/rotate keys.
+    Video: 3
 };
 // Matches the BackgroundImageLayout enum in config/main.xml. Auto was
 // removed (ADR-013): the user states whether the picture is a panorama. The
@@ -50,7 +53,7 @@ const BackgroundGradientRotation = {
 // An unknown value (kwinrc edited by hand) falls back to a solid colour
 // instead of leaving the hull unpainted.
 function backgroundMode(value) {
-    if (value === Background.Image || value === Background.Gradient) {
+    if (value === Background.Image || value === Background.Gradient || value === Background.Video) {
         return value;
     }
     return Background.Color;
@@ -90,10 +93,11 @@ function dimOpacity(enabled, amount) {
 }
 
 // Exposure of the SkyBox light probe while the cube rotates. 1.0 leaves the
-// panorama untouched (DimWhileRotating off, or the cube still), otherwise the
-// veil opacity is subtracted so a 360 background darkens as much as the 2D
-// hull does. A SkyBox is painted by the 3D environment, so the black Rectangle
-// that dims color/gradient/flat image cannot reach it; probeExposure (the
+// panorama (or the video clip, which uses the same environment) untouched
+// (DimWhileRotating off, or the cube still), otherwise the veil opacity is
+// subtracted so a 360 background darkens as much as the 2D hull does. A SkyBox
+// is painted by the 3D environment, so the black Rectangle that dims
+// color/gradient/flat image or flat video cannot reach it; probeExposure (the
 // brightness of the environment) can. The result stays in 0..1.
 function skyBoxExposure(enabled, rotating, amount) {
     if (enabled !== true || rotating !== true) {
@@ -174,6 +178,20 @@ function gradientFollows(mode) {
 // accepted: the compositor must not fetch remote content when the effect
 // activates, and QtQuick3D could not use a remote texture anyway.
 function backgroundImageSource(value) {
+    return localSource(value, ["file", "image"]);
+}
+
+// Same rules for the video (Background == Video), but narrower: a clip must be
+// a local file. "image:" is rejected (no video provider behind it) and any
+// remote scheme too, for the same reason as the image.
+function videoSource(value) {
+    return localSource(value, ["file"]);
+}
+
+// Shared scheme filter of backgroundImageSource/videoSource. A bare path (no
+// scheme) is kept: Qt resolves it as a local file, and the KUrlRequester
+// writes file: URLs anyway.
+function localSource(value, schemes) {
     if (value === undefined || value === null) {
         return "";
     }
@@ -182,7 +200,7 @@ function backgroundImageSource(value) {
         return "";
     }
     const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(source);
-    if (scheme !== null && scheme[1] !== "file" && scheme[1] !== "image") {
+    if (scheme !== null && schemes.indexOf(scheme[1]) === -1) {
         return "";
     }
     return source;

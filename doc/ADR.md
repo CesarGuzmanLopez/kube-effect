@@ -218,3 +218,39 @@ cada opción sin exponer la API interna de KWin.
 **Verificación**: `scripts/check-ui.py` carga el `.ui` con QUiLoader y
 comprueba que la intensidad empieza deshabilitada, que sigue a su casilla, que
 `plusSection` empieza oculto y que sus dos separadores son `QFrame::HLine`.
+
+## ADR-019 — El vídeo es una imagen con otra fuente; dependencia opcional declarada.
+
+**Decisión**:
+1. `Background` gana `Video` como **cuarto** valor (índice 3, al final): los
+   valores guardados 0/1/2 siguen significando Color/Image/Gradient. La clave nueva
+   `BackgroundVideo` (Url) guarda el clip; se aceptan solo ficheros locales
+   (`file:`), nunca red.
+2. El vídeo **reutiliza** `BackgroundImageLayout`, `BackgroundImageFit` y
+   `BackgroundImageRotate`: es una imagen con otra fuente, así que equirect +
+   girar = entorno 360 (`SceneEnvironment.SkyBox` con `Texture.sourceItem` del
+   `VideoOutput`) y Flat o sin girar = capa plana con el ajuste. No hay claves
+   nuevas para «cómo se muestra».
+3. `QtMultimedia` es una **dependencia opcional** declarada en `features.json`
+   (`requires: ["QtMultimedia"]`, `status: stable`, `since: 0.0.0.3`). Su import
+   está aislado en `package/contents/ui/HullVideo.qml`, cargado con un `Loader`
+   desde `ScreenView.qml`: si falta el módulo, solo ese item queda en
+   `Loader.Error`, se avisa una vez y se pinta `BackgroundColor`. Un import
+   directo en `ScreenView.qml` habría roto todo el efecto.
+4. El vídeo solo reproduce con `effect.visible` (pausa al ocultar, reanuda al
+   mostrar; el item no se crea hasta la primera activación), en bucle y sin sonido
+   (`AudioOutput { muted: true }`, porque `MediaPlayer` no tiene `muted` en Qt
+   6.12). La atenuación al girar reutiliza el velo 2D o `probeExposure` según el
+   camino, sin lógica nueva.
+5. La pestaña **Advanced** explica la dependencia en lenguaje llano, sin comandos
+   más allá del nombre del paquete (`qt6-multimedia`), y el KCM agrupa las tres
+   claves compartidas fuera del stack («Imagen o vídeo: cómo se muestra») porque un
+   `kcfg_` = un widget.
+**Porqué**: el usuario quiere el vídeo con la misma libertad que la imagen (360 o
+fijo, girable o no) sin duplicar opciones ni convertir una dependencia opcional en
+obligatoria. Declararla en el catálogo deja que `make deps` y el KCM de Plus
+digan si falta, y el fallback a color mantiene el cubo usable en cualquier sistema.
+**Verificación**: `scripts/check-video.py` instancia `HullVideo.qml` en un motor
+QML real (item y `VideoOutput` creados; módulo ausente y fuente rota → `Loader.Error`
+sin llevarse la escena).
+

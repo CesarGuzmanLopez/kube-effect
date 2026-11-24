@@ -91,6 +91,34 @@ el objeto por frame. **No** se aplican los dos a la vez: con SkyBox listo el vel
 2D queda apagado (`hullDim` solo cubre el respaldo de color mientras la
 sonda carga), así que no hay doble atenuado.
 
+### ✅ VERDADERO: aislar un import opcional en su propio fichero + `Loader`
+
+Un `import` que falla en el fichero raíz se lleva **todo** el efecto: `ScreenView.qml`
+no cargaría y no habría ni cubo ni fallback. QtMultimedia es opcional (paquete
+`qt6-multimedia`), así que su import vive SOLO en `package/contents/ui/HullVideo.qml`
+y `ScreenView.qml` lo carga con `Loader { source: "HullVideo.qml" }`. Si el módulo
+no está, el `Loader` queda en `Error` (`status === Loader.Error`), no crea item, se
+avisa con `console.warn` **una vez** (no por frame) y el `Rectangle` de
+`BackgroundColor` sigue pintando el casco. Mismo patrón para cualquier dependencia
+QML opcional futura.
+
+### ✅ VERDADERO: `Texture.sourceItem` acepta el `VideoOutput` (Qt 6.12)
+
+Verificado en `Quick3D.qmltypes` de Qt 6.12: `Texture.sourceItem` es un
+`QQuickItem` y `VideoOutput` lo es, así que el SkyBox 360 puede muestrear el vídeo
+con `lightProbe: Texture { sourceItem: videoOutput }`. El `VideoOutput` va oculto
+(`visible: false`): `QQuick3DTexture::setSourceItem` registra el item como
+	extit{effect item} (`refFromEffectItem`) y lo renderiza a una capa offscreen, así
+que no necesita estar visible. Alternativa si una versión futura de Qt dejara de
+renderizar sourceItems ocultos: degradar el vídeo a **capa plana** (ya soportada) en
+vez de dejar un SkyBox negro.
+
+### ⚠️ `MediaPlayer` no tiene `muted` en Qt 6.12
+
+`muted` es una propiedad de `AudioOutput`, no del reproductor. El vídeo de fondo
+se silencia con `audioOutput: AudioOutput { muted: true }`; sin ese objeto, Qt
+muestra el clip con su audio.
+
 ## C. Animaciones de `vector3d` (el flood de NaN)
 
 ### ❌ FALSO: `NumberAnimation on scale` / `on position` / `on eulerRotation`

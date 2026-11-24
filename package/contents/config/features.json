@@ -43,14 +43,14 @@
     },
     {
         "id": "background-video",
-        "label": "Fondo: vídeo 360",
+        "label": "Fondo: vídeo",
         "requires": [
             "QtMultimedia"
         ],
         "native": false,
-        "notes": "Vídeo 360 equirectangular como skydome animado. Sin QtMultimedia degrada a color con aviso.",
-        "status": "planned",
-        "since": "0.0.0.1"
+        "notes": "Vídeo de fondo (Background=Video), igual que una imagen con otra fuente. Claves: BackgroundVideo más las compartidas BackgroundImageLayout, BackgroundImageFit y BackgroundImageRotate. Equirect + girar con el centro = entorno 360 (SkyBox con Texture.sourceItem del VideoOutput); Flat o sin giro = capa plana con el ajuste. Solo reproduce con el efecto visible. Sin QtMultimedia (qt6-multimedia) cae al color de respaldo y avisa una vez.",
+        "status": "stable",
+        "since": "0.0.0.3"
     },
     {
         "id": "advanced-dim",

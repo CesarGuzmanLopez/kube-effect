@@ -129,8 +129,25 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
       (`Cover`/`Contain`/`Stretch`, default `Cover`) para decidir cómo encaja
       la imagen plana. Ya no hay `Auto`: el usuario elige explícitamente
       (`BackgroundImageLayout`: `Equirect`/`Flat`).
-    - **Vídeo 360**: entorno envolvente con el clip (skydome animado), equivalente en
-      movimiento al SkyBox. Requiere QtMultimedia.
+    - **Vídeo** (`Background=Video`): el clip se pinta **igual que una imagen**,
+      con dos caminos. `Equirect` + `BackgroundImageRotate` = 360: el
+      `SceneEnvironment.SkyBox` usa `lightProbe: Texture { sourceItem }` sobre el
+      `VideoOutput` (verificado en Qt 6.12: `Texture.sourceItem` es un
+      `QQuickItem` y `VideoOutput` lo es; el `VideoOutput` vive oculto y
+      QtQuick3D lo renderiza a una capa offscreen). Si no, capa plana
+      fullscreen detrás del `View3D` con `BackgroundImageFit` en el
+      `VideoOutput.fillMode` (`Cover`/`Contain`/`Stretch`).
+      **El import de QtMultimedia está aislado** en `package/contents/ui/HullVideo.qml`,
+      que `ScreenView.qml` carga con un `Loader`: si el módulo opcional no está,
+      solo ese item queda en `Loader.Error` (aviso `qWarning` una vez) y el
+      color de respaldo sigue pintando el casco. Un import de QtMultimedia en
+      `ScreenView.qml` habría roto **todo** el efecto.
+      El `MediaPlayer` (bucle infinito, `AudioOutput { muted: true }` —en Qt 6.12
+      `MediaPlayer` no tiene `muted`) solo reproduce con `effect.visible`:
+      `playing` está ligado a esa propiedad, y el item no se crea hasta la
+      primera activación, así que no consume CPU en segundo plano.
+      Atenuación al girar: capa plana → velo 2D `hullDim`; 360 →
+      `probeExposure`, exactamente igual que la imagen (no hay lógica duplicada).
 - **Orientación del degradado** (`BackgroundGradientRotation`, ADR-017; solo el
   casco degradado). `ScreenView.qml` pasa el yaw de la cámara
   (`cameraController.rotation.toEulerAngles().y`) como propiedad `yaw` a
@@ -155,8 +172,9 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
   queda apagado (solo cubre el color de respaldo mientras la sonda decodifica),
   así que nunca se atenúa dos veces el mismo fondo; ambos usan la misma señal de
   giro y un `Behavior` de 120 ms.
-- **SkyBox no es un modo aparte**: es la variante 360 de "Imagen"
-  (`SceneEnvironment.SkyBox`, no un quad). "Vídeo 360" es su versión animada.
+- **SkyBox no es un modo aparte**: es la variante 360 de "Imagen" y de "Video"
+  (`SceneEnvironment.SkyBox`, no un quad). "Vídeo 360" es la misma variante con un
+  clip como `lightProbe`.
 - `BackgroundImageRotate`: solo aplica al mapeo equirect — gira con el centro
   (SkyBox) o queda fija como imagen plana. El mapeo `Flat` nunca gira.
 - El fondo (color, degradado o imagen plana) se pinta con `Rectangle`/`Image`
@@ -199,8 +217,8 @@ guardan como ENTERO en kwinrc. Grupo `[Effect-kube-effect]`.
   (AUR `-bin`, COPR, PPA, OBS, Nix) y CI por versión de KWin; nunca un `.so`
   genérico ni dentro del KPackage.
 - **Qué NO exige C++** (se queda en QML): degradado radial (`QtQuick.Shapes`),
-  skybox, vídeo 360 (`QtMultimedia`), cilindro (`ProceduralMesh`), capas
-  visuales. **C++ solo** para framebuffer real por escritorio, `EffectWindow`
+  skybox, vídeo de fondo (`QtMultimedia`, módulo opcional aislado en
+  `HullVideo.qml`), cilindro (`ProceduralMesh`), capas visuales. **C++ solo** para framebuffer real por escritorio, `EffectWindow`
   avanzado o `QQuick3DGeometry` de alto rendimiento. Decisión: seguir en QML y
   decidir C++ al llegar a la feature que lo exija.
 

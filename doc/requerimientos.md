@@ -104,16 +104,17 @@ panorámica 360.
 | **Color** (0, default)         | Un color sólido                                                                                                               | `Background` Enum; `BackgroundColor` Color, default `#1b3fd8`                                                                     |
 | **Image** (1)                  | Imagen de fondo. Si el mapeo resuelve equirect **y** gira con el centro es **SkyBox** (entorno 360); si no, capa plana fullscreen estática | `SkyBox` Url (vacío = sin imagen); `BackgroundImageLayout` Enum (ver abajo); `BackgroundImageRotate` Bool default true; `BackgroundColor` actúa de color de respaldo |
 | **Gradient** (2)               | Degradado de dos colores sin shaders (Rectangle + Gradient QML). Tipos: vertical (arriba→abajo), horizontal, radial (real, con Shapes) | `Background` Enum; `BackgroundGradientType` Enum (ver abajo); `BackgroundColor` Color `#1b3fd8`; `BackgroundColor2` Color `#ff8a00`; `BackgroundGradientStop` Int 0–100, default 50 (posición del corte: 0 = todo color2 salvo borde, 100 = transición hasta el final) |
-| **Vídeo** (futuro)             | Vídeo 360 equirectangular envolvente (skydome animado). Requiere QtMultimedia; sin él degrada a color + aviso                 | (sin clave aún) `CascoVideo` reservado                                                                                            |
+| **Video** (3)                  | **Vídeo** de fondo, igual que una imagen con otra fuente: equirect **y** girando = entorno 360 (skydome animado); Flat **o** sin girar = capa plana fullscreen con el ajuste. Requiere el módulo opcional QtMultimedia; sin él se pinta `BackgroundColor` y se avisa una vez | `BackgroundVideo` Url (vacío = sin vídeo; solo `file:`); `BackgroundImageLayout` / `BackgroundImageFit` / `BackgroundImageRotate` (compartidas con la imagen); `BackgroundColor` de respaldo |
 | (arena, futuro)                | Atenuación global del casco (0 = sin atenuar, 1 = negro)                                                                      | (sin clave aún) `CascoDim` reservado                                                                                              |
 
 - `BackgroundColor` (#1b3fd8 azul) y `BackgroundColor2` (#ff8a00 naranja) son los
   defaults **nuevos** de `main.xml`, elegidos para que el degradado se note de un
   vistazo.
 - Enum `BackgroundImageLayout`: `Equirect` (forzar 360) / `Flat` (forzar plano). Ya no existe `Auto`: el usuario elige explícitamente si la imagen es panorámica o plana. La **clave** se renombró a propósito (antes `BackgroundImageMapping`): kwinrc guarda el índice, así que un valor viejo queda huérfano y se ignora en vez de reinterpretarse como `Flat`.
-- `BackgroundImageFit` (Enum, default `Cover`): `Cover` / `Contain` / `Stretch`. Solo aplica a la imagen plana (incluye equirect sin rotación); decide cómo encaja en pantalla.
-- `BackgroundImageRotate` (Bool, default `true`): solo aplica al mapeo equirect. `true` = entorno 360 que gira con el centro (SkyBox); `false` = imagen plana estática fullscreen que no rota al mover la cámara.
-- Solo se aceptan recursos **locales** (`file:` o `image:`); una URL de red se ignora (el compositor no descarga contenido al activar el efecto).
+- `BackgroundImageFit` (Enum, default `Cover`): `Cover` / `Contain` / `Stretch`. Solo aplica a lo que va plano (imagen plana, equirect sin rotación, y el vídeo plano); decide cómo encaja en pantalla.
+- `BackgroundImageRotate` (Bool, default `true`): solo aplica al mapeo equirect. `true` = entorno 360 que gira con el centro (SkyBox); `false` = capa plana estática fullscreen que no rota al mover la cámara. Compartida por imagen y vídeo.
+- **Vídeo** (`Background=Video`, índice 3): el vídeo se trata **exactamente como una imagen** con otra fuente. `BackgroundVideo` es un Url local (`file:`; una URL de red se ignora) y el mapeo/ajuste/giro son las mismas tres claves de la imagen, en un grupo compartido del KCM («Imagen o vídeo: cómo se muestra»). Reproduce en bucle, sin sonido y **solo con el efecto visible** (pausa al desactivar, reanuda al activar). Atenuación al girar: velo 2D si va plano, `probeExposure` si va como 360. **Dependencia opcional** `QtMultimedia`: si el módulo no está instalado, el vídeo se sustituye por `BackgroundColor` y el efecto sigue funcionando (ver §5.1).
+- Solo se aceptan recursos **locales**: la imagen admite `file:` o `image:`, el vídeo (`BackgroundVideo`) solo `file:`; una URL de red se ignora en ambos casos (el compositor no descarga contenido al activar el efecto).
 - **KCM genérico con UI dinámica, sin C++**: `kcm_kwin4_genericscripted` solo carga
   `config/main.xml` y `config.ui` con QUiLoader; no hay `config.qml` ni lógica propia y
   `KConfigDialogManager` no admite dependencias entre entries. La pestaña Background usa un combo
@@ -133,7 +134,7 @@ panorámica 360.
   frame). En `Radial` no se gira (un radial centrado es simétrico): se desplaza el
   **punto focal** sobre un círculo de radio `0.25 · max(w, h)`; con `Fixed` el foco
   queda en el centro.
-- **SkyBox** = casco con imagen 360 equirectangular (entorno que envuelve la escena y gira con el centro). **Vídeo 360** = su versión animada (futura).
+- **SkyBox** = casco con imagen 360 equirectangular (entorno que envuelve la escena y gira con el centro). **Vídeo 360** = su versión animada: mismo `SceneEnvironment.SkyBox`, con el `VideoOutput` como `Texture.sourceItem`.
 - Nombres antiguos del spec (`CascoColor`, `CascoColor2`, `CascoGradientType`, `CascoMode`): equivalen a `BackgroundColor`, `BackgroundColor2`, `BackgroundGradientType`, `Background`. Se documentan con las claves reales para no romper compatibilidad con kwinrc existente (`Background=0/1/2` conserva su significado; el índice 1
   pasó a llamarse `Image`).
 - El casco se ve alrededor del sólido y por los huecos entre caras.
@@ -201,6 +202,11 @@ Implementación (QML puro, sin C++):
   2D. Nunca se aplican los dos a la vez sobre lo mismo: con el SkyBox ya pintado
   el velo 2D queda apagado (solo cubre el color de respaldo mientras la sonda
   decodifica).
+- **Vídeo de fondo (dependencia opcional)**: `Background=Video` necesita el
+  módulo `QtMultimedia` (paquete `qt6-multimedia` en Arch). Sin él, el
+  `HullVideo.qml` cargado por `Loader` queda en `Error`, se avisa **una vez** y el
+  casco se pinta con `BackgroundColor`; el resto del efecto no se toca. Advanced
+  lo explica en lenguaje llano («Vídeo de fondo (opcional)»).
 - **Dónde está Kube Effect Plus**: el diagnóstico, las dependencias y la versión
   compilada viven en **Preferencias del sistema → Gestión de ventanas → «Kube Effect
   Plus»** (`kcm_kube_effect_plus`), que solo aparece si se compiló `native/`. El
@@ -223,7 +229,8 @@ Implementación (QML puro, sin C++):
 Enum `Shape`: `Polygon` (default) / `Cylinder`. El número de escritorios manda:
 1 → placeholder; 2 → hoja 2D; 3+ → forma elegida.
 
-Enum `Background`: `Color` (0, default) / `Image` (1) / `Gradient` (2). El índice 1 se
+Enum `Background`: `Color` (0, default) / `Image` (1) / `Gradient` (2) / `Video` (3,
+añadido al final para no reinterpretar los valores guardados). El índice 1 se
 llamaba `SkyBox`; kwinrc guarda el entero, así que el valor no cambia.
 Enum `BackgroundImageLayout`: `Equirect` / `Flat` (sin `Auto`: el usuario elige explícitamente). `BackgroundImageFit`: `Cover` (default) / `Contain` / `Stretch` (imagen plana, incluido equirect sin rotación).
 `BackgroundImageRotate`: Bool, default `true` (solo aplica a equirect).

@@ -3,15 +3,21 @@
 Clon del cubo de escritorios de KDE (efecto KWin en **QML puro**). Arranca como
 el **cubo virgen** de KDE (caras planas en polígono) y crece feature a feature.
 
-- Id: `kube-effect`. Atajo: `Meta+K`. Licencia: GPL-2.0-or-later. Versión: 0.0.0.2.
+- Id: `kube-effect`. Atajo: `Meta+K`. Licencia: GPL-2.0-or-later. Versión: 0.0.0.3.
 
 ## Qué es (estado actual)
 
 N escritorios alrededor de un polígono (el cubo virgen de KDE), con giro por
-ratón y teclado. Sobre el virgen: **casco configurable** (Color / Imagen 360 o
-plana / Degradado, con sus claves en `package/contents/config/main.xml`) y un
+ratón y teclado. Sobre el virgen: **casco configurable** (Color / Imagen / Degradado
+/ **Vídeo**, con sus claves en `package/contents/config/main.xml`) y un
 **KCM genérico con UI dinámica** (combo de modo + páginas apiladas vía
 `<connections>`, sin C++). El arnés de test anidado apaga el resto de efectos.
+
+La imagen y el **vídeo** comparten mapeo (equirect 360 o plano), ajuste y giro: el
+vídeo puede envolver la escena como skydome animado o quedarse fijo como una foto.
+El vídeo usa `QtMultimedia`, una **dependencia opcional** (`qt6-multimedia` en Arch,
+pestaña Advanced → «Vídeo de fondo (opcional)»): si no está instalada, el fondo de
+vídeo se sustituye por el color de respaldo y el resto del efecto sigue igual.
 
 ## Documentación
 
@@ -23,7 +29,7 @@ plana / Degradado, con sus claves en `package/contents/config/main.xml`) y un
 ## Instalar / probar
 
 ```bash
-make check                # qmllint + formato + esquema + UI + constants (sin Sonar)
+make check                # qmllint + formato + esquema + UI + constants + vídeo (sin Sonar)
 make lint                 # make check + SonarQube en localhost:9000
 make install              # kpackagetool6 --upgrade package/
 ```

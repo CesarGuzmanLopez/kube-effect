@@ -25,7 +25,7 @@ una sección plegable de Kube Effect Plus (ADR-018). Cada widget = kcfg_<Entry>.
             <item>
                 <widget class="QLabel" name="versionLabel">
                     <property name="text">
-                        <string>kube-effect 0.0.0.2</string>
+                        <string>kube-effect 0.0.0.3</string>
                     </property>
                     <property name="alignment">
                         <set>Qt::AlignRight|Qt::AlignVCenter</set>
@@ -92,6 +92,11 @@ una sección plegable de Kube Effect Plus (ADR-018). Cada widget = kcfg_<Entry>.
                                                     <string>Degradado (Gradient)</string>
                                                 </property>
                                             </item>
+                                            <item>
+                                                <property name="text">
+                                                    <string>Vídeo (Video)</string>
+                                                </property>
+                                            </item>
                                         </widget>
                                     </item>
                                     <item row="1" column="0">
@@ -148,61 +153,7 @@ una sección plegable de Kube Effect Plus (ADR-018). Cada widget = kcfg_<Entry>.
                                             <item row="0" column="1">
                                                 <widget class="KUrlRequester" name="kcfg_SkyBox" />
                                             </item>
-                                            <item row="1" column="0">
-                                                <widget class="QLabel" name="bgImageMappingLabel">
-                                                    <property name="text">
-                                                        <string>Mapeo de la imagen:</string>
-                                                    </property>
-                                                </widget>
-                                            </item>
-                                            <item row="1" column="1">
-                                                <widget class="QComboBox" name="kcfg_BackgroundImageLayout">
-                                                    <item>
-                                                        <property name="text">
-                                                            <string>Equirect (360)</string>
-                                                        </property>
-                                                    </item>
-                                                    <item>
-                                                        <property name="text">
-                                                            <string>Plano (Flat)</string>
-                                                        </property>
-                                                    </item>
-                                                </widget>
-                                            </item>
-                                            <item row="2" column="0">
-                                                <widget class="QLabel" name="bgImageFitLabel">
-                                                    <property name="text">
-                                                        <string>Ajuste de la imagen plana:</string>
-                                                    </property>
-                                                </widget>
-                                            </item>
-                                            <item row="2" column="1">
-                                                <widget class="QComboBox" name="kcfg_BackgroundImageFit">
-                                                    <item>
-                                                        <property name="text">
-                                                            <string>Cubrir (Cover)</string>
-                                                        </property>
-                                                    </item>
-                                                    <item>
-                                                        <property name="text">
-                                                            <string>Contener (Contain)</string>
-                                                        </property>
-                                                    </item>
-                                                    <item>
-                                                        <property name="text">
-                                                            <string>Estirar (Stretch)</string>
-                                                        </property>
-                                                    </item>
-                                                </widget>
-                                            </item>
-                                            <item row="3" column="0" colspan="2">
-                                                <widget class="QCheckBox" name="kcfg_BackgroundImageRotate">
-                                                    <property name="text">
-                                                        <string>Girar con el centro (solo 360)</string>
-                                                    </property>
-                                                </widget>
-                                            </item>
-                                            <item row="4" column="0" colspan="2">
+                                            <item row="1" column="0" colspan="2">
                                                 <widget class="QLabel" name="bgImageHint">
                                                     <property name="text">
                                                         <string>Equirect envuelve la escena como SkyBox (con «Girar con el centro») o la pinta plana si se desactiva. El ajuste se aplica a la imagen plana (incluye el equirect sin girar).</string>
@@ -312,6 +263,109 @@ una sección plegable de Kube Effect Plus (ADR-018). Cada widget = kcfg_<Entry>.
                                             </item>
                                         </layout>
                                     </widget>
+
+                                    <!-- 3: Video -->
+                                    <widget class="QWidget" name="bgVideoPage">
+                                        <layout class="QFormLayout" name="bgVideoForm">
+                                            <item row="0" column="0">
+                                                <widget class="QLabel" name="bgVideoLabel">
+                                                    <property name="text">
+                                                        <string>Vídeo de fondo:</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                            <item row="0" column="1">
+                                                <widget class="KUrlRequester" name="kcfg_BackgroundVideo" />
+                                            </item>
+                                            <item row="1" column="0" colspan="2">
+                                                <widget class="QLabel" name="bgVideoHint">
+                                                    <property name="text">
+                                                        <string>MP4/WebM; 2:1 = panorámica 360. Usa el mapeo, el ajuste y el giro de la sección «Imagen o vídeo» de abajo. Necesita el módulo QtMultimedia; si no está instalado, se pinta el color de fondo.</string>
+                                                    </property>
+                                                    <property name="wordWrap">
+                                                        <bool>true</bool>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                        </layout>
+                                    </widget>
+                                </widget>
+                            </item>
+                            <item>
+                                <!-- One KConfigXT entry = one widget, and the image and
+                                     the video share these three keys, so they live
+                                     outside the stack instead of being duplicated
+                                     inside both pages. -->
+                                <widget class="QGroupBox" name="bgPictureGroup">
+                                    <property name="title">
+                                        <string>Imagen o vídeo: cómo se muestra</string>
+                                    </property>
+                                    <layout class="QFormLayout" name="bgPictureForm">
+                                        <item row="0" column="0">
+                                            <widget class="QLabel" name="bgImageMappingLabel">
+                                                <property name="text">
+                                                    <string>Mapeo (imagen o vídeo):</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="0" column="1">
+                                            <widget class="QComboBox" name="kcfg_BackgroundImageLayout">
+                                                <item>
+                                                    <property name="text">
+                                                        <string>Equirect (360)</string>
+                                                    </property>
+                                                </item>
+                                                <item>
+                                                    <property name="text">
+                                                        <string>Plano (Flat)</string>
+                                                    </property>
+                                                </item>
+                                            </widget>
+                                        </item>
+                                        <item row="1" column="0">
+                                            <widget class="QLabel" name="bgImageFitLabel">
+                                                <property name="text">
+                                                    <string>Ajuste de lo que va plano:</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="1" column="1">
+                                            <widget class="QComboBox" name="kcfg_BackgroundImageFit">
+                                                <item>
+                                                    <property name="text">
+                                                        <string>Cubrir (Cover)</string>
+                                                    </property>
+                                                </item>
+                                                <item>
+                                                    <property name="text">
+                                                        <string>Contener (Contain)</string>
+                                                    </property>
+                                                </item>
+                                                <item>
+                                                    <property name="text">
+                                                        <string>Estirar (Stretch)</string>
+                                                    </property>
+                                                </item>
+                                            </widget>
+                                        </item>
+                                        <item row="2" column="0" colspan="2">
+                                            <widget class="QCheckBox" name="kcfg_BackgroundImageRotate">
+                                                <property name="text">
+                                                    <string>Girar con el centro (solo 360)</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item row="3" column="0" colspan="2">
+                                            <widget class="QLabel" name="bgPictureHint">
+                                                <property name="text">
+                                                    <string>Con Equirect y «Girar con el centro» la imagen o el vídeo envuelven la escena (360) y giran con el cubo; si se desactiva el giro, o el mapeo es Plano, se pintan como capa plana con el ajuste de arriba.</string>
+                                                </property>
+                                                <property name="wordWrap">
+                                                    <bool>true</bool>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                    </layout>
                                 </widget>
                             </item>
                         </layout>
@@ -581,6 +635,35 @@ una sección plegable de Kube Effect Plus (ADR-018). Cada widget = kcfg_<Entry>.
                             </item>
                             <item>
                                 <widget class="QFrame" name="advancedSeparator2">
+                                    <property name="frameShape">
+                                        <enum>QFrame::HLine</enum>
+                                    </property>
+                                    <property name="frameShadow">
+                                        <enum>QFrame::Sunken</enum>
+                                    </property>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QGroupBox" name="advancedVideoGroup">
+                                    <property name="title">
+                                        <string>Vídeo de fondo (opcional)</string>
+                                    </property>
+                                    <layout class="QVBoxLayout" name="advancedVideoLayout">
+                                        <item>
+                                            <widget class="QLabel" name="advancedVideoHint">
+                                                <property name="text">
+                                                    <string>El vídeo necesita el módulo QtMultimedia (paquete qt6-multimedia en Arch). Si no está instalado, el vídeo se sustituye por el color de respaldo.</string>
+                                                </property>
+                                                <property name="wordWrap">
+                                                    <bool>true</bool>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                    </layout>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QFrame" name="advancedSeparator3">
                                     <property name="frameShape">
                                         <enum>QFrame::HLine</enum>
                                     </property>
