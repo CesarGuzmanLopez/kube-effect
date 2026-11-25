@@ -173,6 +173,36 @@ function gradientFollows(mode) {
     return mode === BackgroundGradientRotation.FollowCube || mode === BackgroundGradientRotation.FollowCubeInverse;
 }
 
+// Face opacity defaults from config/main.xml (ADR-021). The floor is 0.1,
+// not 0: a fully invisible face cannot be picked or clicked, and the cube
+// would become a ghost.
+const DEFAULT_FACE_OPACITY = 1;
+const DEFAULT_FACE_ROTATION_OPACITY = 0.7;
+const MIN_FACE_OPACITY = 0.1;
+
+// Opacity of every cube face (ADR-021). At rest FaceOpacity, while rotating
+// FaceRotationOpacity (the same "moving" signal as the hull dim: drag or the
+// rotation animation, never the wheel zoom). Applied to the face material,
+// not the geometry, so the future cylinder mesh inherits it unchanged. A
+// non-finite value uses the schema default; the result stays in [0.1, 1].
+function faceOpacity(restOpacity, rotationOpacity, rotating) {
+    var value = Number(rotating === true ? rotationOpacity : restOpacity);
+    if (!isFinite(value)) {
+        value = rotating === true ? DEFAULT_FACE_ROTATION_OPACITY : DEFAULT_FACE_OPACITY;
+    }
+    return Math.min(1, Math.max(MIN_FACE_OPACITY, value));
+}
+
+// Duration of the rest<->rotation opacity fade (FaceFadeMs, 0..1000 ms).
+// 0 is a hard cut; a non-finite value uses the schema default (120 ms).
+function faceFadeDuration(value) {
+    var ms = Number(value);
+    if (!isFinite(ms)) {
+        ms = 120;
+    }
+    return Math.min(1000, Math.max(0, ms));
+}
+
 // KConfig hands a Url entry as a url value (not a string), and the entry can
 // be undefined/null before the KCM saves anything. Only local resources are
 // accepted: the compositor must not fetch remote content when the effect

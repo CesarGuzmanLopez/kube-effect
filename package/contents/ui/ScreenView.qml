@@ -118,6 +118,17 @@ Item {
     // See the veil below: the cube "moves" while dragging or while the camera
     // rotation animation runs.
     readonly property bool cubeMoving: cameraController.busy || rotationAnimation.running
+    // Face transparency (ADR-021): rest opacity, or the rotation opacity while
+    // the cube moves (same signal as the hull dim; wheel zoom is not a turn).
+    // The Behavior fades between both so a paused drag does not strobe. This
+    // is independent of DimWhileRotating: that darkens the hull, this the faces.
+    property real faceOpacity: Constants.faceOpacity(effect.configuration.FaceOpacity, effect.configuration.FaceRotationOpacity, root.cubeMoving)
+    Behavior on faceOpacity {
+        NumberAnimation {
+            duration: Constants.faceFadeDuration(effect.configuration.FaceFadeMs)
+            easing.type: Easing.OutQuad
+        }
+    }
     // Dimming while rotating reaches every background, but never through the
     // same object:
     //   Color / Gradient / flat image / flat video -> the 2D veil (hullDim)
@@ -405,6 +416,7 @@ Item {
         Cube {
             id: cube
             faceDisplacement: effect.configuration.CubeFaceDisplacement
+            faceOpacity: root.faceOpacity
             faceSize: Qt.size(root.width, root.height)
         }
 

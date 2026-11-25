@@ -12,6 +12,8 @@ Node {
     id: cube
 
     property real faceDisplacement: 100
+    // Face material opacity (ADR-021); ScreenView animates it with the turn.
+    property real faceOpacity: 1
     required property size faceSize
     readonly property real faceDistance: 0.5 * faceSize.width / Math.tan(angleTick * Math.PI / 360) + faceDisplacement
     readonly property real angleTick: 360 / faceRepeater.count
@@ -36,6 +38,7 @@ Node {
         model: KWinComponents.VirtualDesktopModel {}
         delegate: CubeFace {
             faceSize: cube.faceSize
+            faceOpacity: cube.faceOpacity
             scale: Qt.vector3d(faceSize.width / 100, faceSize.height / 100, 1)
             eulerRotation.y: cube.angleTick * index
             position: {

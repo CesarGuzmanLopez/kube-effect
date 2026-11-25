@@ -13,6 +13,11 @@ Model {
     required property QtObject desktop
     required property int index
     required property size faceSize
+    // Material opacity (ADR-021), animated by ScreenView between the rest and
+    // rotation values. Below 1 the material joins QtQuick3D's transparent
+    // pass, which sorts blended faces back-to-front (Wayfire's two-pass
+    // equivalent); the future cylinder mesh inherits this without changes.
+    property real faceOpacity: 1
 
     pickable: true
     source: "#Rectangle"
@@ -20,6 +25,7 @@ Model {
         DefaultMaterial {
             cullMode: Material.NoCulling
             lighting: DefaultMaterial.NoLighting
+            opacity: face.faceOpacity
             diffuseMap: Texture {
                 sourceItem: DesktopView {
                     desktop: face.desktop

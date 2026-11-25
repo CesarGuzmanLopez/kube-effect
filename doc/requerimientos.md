@@ -70,6 +70,34 @@ por fases, pero el spec es entero).
 - Sin piel/superficie entre caras.
 - Sin espejo ni reflexión de contenido (exigirían shader; fuera).
 
+## 2.0 Transparencia de caras (opacidad al girar)
+
+Las caras pueden ser semitransparentes mientras el cubo gira, para ver el casco
+y las caras de detrás a través del sólido (como la transparencia de Compiz). En
+reposo vuelven a ser opacas por defecto. Es modificable y queda **preparada para
+el cilindro**: la opacidad se aplica al material de cada cara, no a su geometría,
+así que la futura malla curva (ADR-002) la hereda sin cambios.
+
+| Clave             | Tipo   | Rango | Default | Requerimiento                                                       |
+| ----------------- | ------ | ----- | ------- | ------------------------------------------------------------------- |
+| `FaceOpacity`     | Double | 0.1–1 | 1       | Opacidad de las caras en reposo (1 = opacas, como el cubo virgen)    |
+| `FaceRotationOpacity` | Double | 0.1–1 | 0.7 | Opacidad de las caras SOLO mientras gira (semitransparente)      |
+| `FaceFadeMs`      | Int    | 0–1000 | 120    | Fundido entre opacidad de reposo y de giro (0 = corte seco)          |
+
+Reglas:
+
+- «Gira» es la misma señal que la atenuación del casco: arrastre con el puntero
+  (`CubeCameraController.busy`) **o** la animación de rotación (flechas,
+  activación, cambio de escritorio). El zoom con rueda NO cuenta.
+- Mínimo 0.1 (no 0): una cara invisible no se puede elegir ni clicar; el rango
+  evita el sólido fantasma.
+- La opacidad multiplica el alfa del material de la cara (`DefaultMaterial.opacity`);
+  el casco NO se atenúa por esto (eso es `DimWhileRotating`, §5.1, y sigue siendo
+  independiente).
+- Orden de pintado: con alfa < 1 el material entra en el pase transparente de
+  QtQuick3D, que ordena las caras de atrás hacia delante (equivalente a las dos
+  pasadas de Wayfire); no se reordena el modelo a mano.
+
 ## 2.1 Capas de ventana (z-index / separación de ventanas)
 
 Cada ventana de una cara puede ser su propio quad 3D, empujado hacia DENTRO del

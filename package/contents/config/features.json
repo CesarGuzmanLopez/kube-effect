@@ -71,6 +71,15 @@
         "since": "0.0.0.1"
     },
     {
+        "id": "face-opacity",
+        "label": "Caras: transparencia al girar",
+        "requires": [],
+        "native": false,
+        "notes": "Opacidad del material de las caras (ADR-021): FaceOpacity en reposo (default 1) y FaceRotationOpacity mientras gira (default 0.7), fundido FaceFadeMs (0-1000, default 120). Mínimo 0.1 para que la cara siga siendo clicable. Prerrequisito del cilindro: se aplica al material, la malla curva lo hereda. Independiente de DimWhileRotating (eso oscurece el casco).",
+        "status": "stable",
+        "since": "0.0.0.3"
+    },
+    {
         "id": "shape-cylinder",
         "label": "Forma: cilindro",
         "requires": [

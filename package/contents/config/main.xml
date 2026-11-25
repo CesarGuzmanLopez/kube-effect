@@ -108,6 +108,24 @@
                 <choice name="FollowCubeInverse" />
             </choices>
         </entry>
+        <!-- Face transparency (ADR-021): material opacity of every face, so
+             the future cylinder mesh inherits it unchanged. 0.1 floor: an
+             invisible face cannot be picked or clicked. -->
+        <entry name="FaceOpacity" type="Double">
+            <default>1</default>
+            <min>0.1</min>
+            <max>1</max>
+        </entry>
+        <entry name="FaceRotationOpacity" type="Double">
+            <default>0.7</default>
+            <min>0.1</min>
+            <max>1</max>
+        </entry>
+        <entry name="FaceFadeMs" type="Int">
+            <default>120</default>
+            <min>0</min>
+            <max>1000</max>
+        </entry>
         <!-- Advanced tab only (ADR-014): these keys do not appear anywhere else. -->
         <entry name="DimWhileRotating" type="Bool">
             <default>false</default>

@@ -296,3 +296,30 @@ Equirect, girar) y exige un frame con muchos colores distintos; cargar sin error
 no basta, porque el fallo anterior cargaba bien y pintaba negro. Necesita
 pantalla real, así que en CI se salta.
 
+
+
+## ADR-021 — Transparencia de caras antes del cilindro.
+
+**Decisión**: nuevas claves `FaceOpacity` (Double 0.1–1, default 1, reposo),
+`FaceRotationOpacity` (Double 0.1–1, default 0.7, solo al girar) y `FaceFadeMs`
+(Int 0–1000, default 120). La opacidad se aplica al `DefaultMaterial.opacity` de
+`CubeFace.qml`, con la misma señal de giro que la atenuación del casco
+(`cameraController.busy || rotationAnimation.running`); un `Behavior` de
+`FaceFadeMs` funde ambos valores. Con `opacity < 1` el material pasa al pase
+transparente de QtQuick3D, que ya ordena los objetos mezclados de atrás hacia
+delante por distancia (el equivalente del render en dos pasadas de Wayfire);
+no hace falta ordenar el `Repeater3D` a mano. Mínimo 0.1: una cara invisible
+no se puede clicar ni elegir.
+
+**Porqué**: el cilindro (ADR-002) y el interior necesitan que se vea a través
+del sólido; la transparencia es prerrequisito de la forma, no un adorno. Se
+implementa sobre el material, no sobre la geometría, así que la malla curva del
+cilindro la hereda sin tocar esta lógica. Es el rasgo «cube transparency» de
+Compiz, adaptado a QML puro (sin shader): `DefaultMaterial.opacity` + orden
+explícito bastan. Independiente de `DimWhileRotating`: eso oscurece el casco,
+esto las caras; pueden combinarse.
+
+**Verificación**: `scripts/check-constants.py` prueba `faceOpacity(...)`
+(reposo/giro/clamp/NaN) y `make check` valida el esquema (widget
+QDoubleSpinBox por clave). Prueba visual solo en el anidado
+(`scripts/kwin-nested-test.sh`), nunca en el host.

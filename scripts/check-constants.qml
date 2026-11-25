@@ -152,6 +152,35 @@ Item {
         check("follows(unknown 7)", Constants.gradientFollows(7), false);
         check("follows(undefined)", Constants.gradientFollows(undefined), false);
 
+        // Face opacity (ADR-021): rest vs rotation value, clamped to
+        // [0.1, 1] (a fully invisible face cannot be picked), non-finite
+        // falls back to the schema default of the active branch.
+        check("face(rest 1, still)", Constants.faceOpacity(1, 0.7, false), 1);
+        check("face(rot 0.7, rotating)", Constants.faceOpacity(1, 0.7, true), 0.7);
+        check("face(rest 0.5, still)", Constants.faceOpacity(0.5, 0.7, false), 0.5);
+        check("face(rot 1, rotating)", Constants.faceOpacity(0.5, 1, true), 1);
+        check("face(rest 0, clamp)", Constants.faceOpacity(0, 0.7, false), 0.1);
+        check("face(rot -1, clamp)", Constants.faceOpacity(1, -1, true), 0.1);
+        check("face(rest 2, clamp)", Constants.faceOpacity(2, 0.7, false), 1);
+        check("face(rest NaN -> 1)", Constants.faceOpacity(undefined, 0.7, false), 1);
+        check("face(rot NaN -> 0.7)", Constants.faceOpacity(1, undefined, true), 0.7);
+        // Number(null) is 0, not NaN: null clamps to the floor like 0 does.
+        check("face(rest null -> floor)", Constants.faceOpacity(null, 0.7, false), 0.1);
+        check("face(rot null -> floor)", Constants.faceOpacity(1, null, true), 0.1);
+        check("face(rest numeric string)", Constants.faceOpacity("0.5", 0.7, false), 0.5);
+        check("face(rest bad string -> 1)", Constants.faceOpacity("abc", 0.7, false), 1);
+        check("face(rot undefined rotating)", Constants.faceOpacity(1, 0.7, undefined), 1);
+
+        // Face fade duration: 0..1000 ms, 0 is a hard cut, non-finite -> 120.
+        check("fade(120)", Constants.faceFadeDuration(120), 120);
+        check("fade(0)", Constants.faceFadeDuration(0), 0);
+        check("fade(1000)", Constants.faceFadeDuration(1000), 1000);
+        check("fade(-5)", Constants.faceFadeDuration(-5), 0);
+        check("fade(5000)", Constants.faceFadeDuration(5000), 1000);
+        check("fade(undefined)", Constants.faceFadeDuration(undefined), 120);
+        check("fade(null)", Constants.faceFadeDuration(null), 0);
+        check("fade(string)", Constants.faceFadeDuration("abc"), 120);
+
         // Url entry: url value or string, empty/undefined/null -> no image,
         // remote schemes rejected (the compositor must not fetch the network).
         check("source(file url)", Constants.backgroundImageSource(h.fileUrl), "file:///home/user/My Wall.jpg");
