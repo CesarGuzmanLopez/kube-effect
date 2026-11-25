@@ -357,7 +357,17 @@ SAY "nested pid=$NESTED_PID bus=$NBA socket=$SOCK"
 #    quitarlo: --no-plasma.
 if [ "$PLASMA" -eq 1 ]; then
     SAY "lanzado plasmashell en el anidado (solo plasmoids de sistema)"
+    # Ruido ajeno al cubo, silenciado SOLO en el shell del anidado: Qt 6.12 avisa
+    # "Final member StackingOrder is overridden in class QQmlDMAbstractItemModelData"
+    # cada vez que un applet de Plasma monta un delegate sobre el WindowModel de
+    # KWin (el rol viene marcado final en C++). Medido 2026-11-25: 20 avisos, todos
+    # de plasmashell y 0 de kwin_wayland, o sea ni del efecto ni de KWin. No se
+    # puede arreglar desde aquí (es de plasma-workspace/Qt); taparlo en el log del
+    # anidado deja legible lo que sí importa (las líneas kube-effect:).
+    # Si el usuario trae sus propias QT_LOGGING_RULES se conservan detrás.
+    PLASMA_LOG_RULES="qt.qml.propertyCache.append=false${QT_LOGGING_RULES:+;$QT_LOGGING_RULES}"
     DBUS_SESSION_BUS_ADDRESS="$NBA" XDG_DATA_HOME="$DATA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="$SOCK" \
+        QT_LOGGING_RULES="$PLASMA_LOG_RULES" \
         plasmashell >"$PLASMA_LOG" 2>&1 </dev/null &
     CHILD_PIDS+=("$!")
     sleep 6
