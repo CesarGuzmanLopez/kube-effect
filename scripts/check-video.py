@@ -77,6 +77,14 @@ def main():
         print("check-video: FAIL could not create the QML harness")
         return 1
 
+    # The Python message handler must be gone before any MediaPlayer exists.
+    # Creating one spawns QtMultimedia's PipeWire thread; when that thread emits
+    # a warning it needs the GIL, which the thread blocked inside
+    # setProperty() still holds, and the process deadlocks (reproduced
+    # 2026-11-25: `make check` hung here until the 50 s timeout). The harness
+    # asserts on Loader.status and item existence, so it needs no console text.
+    qInstallMessageHandler(None)
+
     harness.setProperty("videoUrl", QUrl.fromLocalFile(str(UI_DIR / "HullVideo.qml")))
     harness.setProperty(
         "brokenUrl", QUrl.fromLocalFile(str(UI_DIR / "MissingHullVideo.qml"))

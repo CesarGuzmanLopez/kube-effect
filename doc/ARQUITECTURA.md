@@ -172,9 +172,15 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
   queda apagado (solo cubre el color de respaldo mientras la sonda decodifica),
   así que nunca se atenúa dos veces el mismo fondo; ambos usan la misma señal de
   giro y un `Behavior` de 120 ms.
-- **SkyBox no es un modo aparte**: es la variante 360 de "Imagen" y de "Video"
-  (`SceneEnvironment.SkyBox`, no un quad). "Vídeo 360" es la misma variante con un
-  clip como `lightProbe`.
+- **SkyBox no es un modo aparte**: es la variante 360 de "Imagen"
+  (`SceneEnvironment.SkyBox`, no un quad).
+- **Vídeo 360 = cúpula, no SkyBox** (ADR-019): Qt Quick 3D rechaza un
+  `Texture.sourceItem` como `lightProbe` («Cannot use QSGTexture from
+  Texture.sourceItem as light probe.»), así que un clip no puede envolver la
+  escena con el entorno. Se pinta en una esfera vista desde dentro, hija de la
+  escena con `position: camera.position` (sin heredar su rotación): radio
+  50 × escala 100 = 5000, muy por dentro de `clipFar` y muy por fuera del cubo.
+  La atenuación va con una segunda esfera negra justo dentro (alpha = 1 − expos).
 - `BackgroundImageRotate`: solo aplica al mapeo equirect — gira con el centro
   (SkyBox) o queda fija como imagen plana. El mapeo `Flat` nunca gira.
 - El fondo (color, degradado o imagen plana) se pinta con `Rectangle`/`Image`
@@ -274,37 +280,32 @@ native/
      `QStandardPaths::locate(GenericDataLocation, …)` y pinta palomita/cruz por
      `requires` (mismos sondeos que `scripts/check-features.py`) + `notes` de las
      features que no cumplen.
-  d. Dos botones, con una línea que explica cuándo usar cada uno
+  d. Aviso en negrita si `Background` (modo) no concuerda con los medios de
+     kwinrc: modo Color con `SkyBox`/`BackgroundVideo` puesto (imagen que no se
+     pinta, típico de kwinrc previo al rename del enum) o modo Imagen/Vídeo sin
+     medio. Es el único diagnóstico que lee kwinrc directamente.
+  e. Dos botones, con una línea que explica cuándo usar cada uno
      («Reconfigurar efecto: cambios de ajustes. Recargar compositor: cambios de
      código (KWin guarda el QML en caché).»):
      - **«Reconfigurar efecto»** → D-Bus
        `org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect("kube-effect")`,
        con el fallo visible en una etiqueta. Solo re-lee la config: **no**
        recompila QML.
-     - **«Recargar compositor»** → `QProcess` con
-       `systemctl --user restart plasma-kwin_wayland.service` (unidad real de la
-       sesión; `Main PID: kwin_wayland_wr`). Es la única forma de descartar el
-       QML cacheado en memoria (bug KDE #514131); no se usa
-       `kwin_wayland --replace` porque pelea con systemd. Pide confirmación en
-       un `KMessageDialog` asíncrono (no bloquea el KCM) avisando de que las
-       ventanas se cierran y vuelven en ~10 s; deshabilita el botón y muestra una
-       barra indeterminada mientras corre; al terminar enseña `exitCode` y el
-       stderr recortado a 3 líneas. **Dos guardas** (la segunda solo puede
-       bloquear, nunca permitir):
-       1. Si `WAYLAND_DISPLAY` contiene `kube-effect-nested` o
-          `KUBE_NESTED=1` (el arnés exporta ese flag y usa ese socket; KCM
-          abierto dentro de `scripts/kwin-nested-test.sh`)
-          se niega y responde «No disponible en el compositor de pruebas:
-          reinícialo cerrando y volviendo a lanzar el script.».
-       2. PID de `org.kde.KWin` en el bus actual vs `MainPID` de la unidad
-          (`systemctl --user show`): en el anidado el bus lleva al KWin del
-          script mientras `systemctl --user` sigue hablando con el gestor del
-          host, así que un fallo de (1) lo caza (2). Se compara con
-          `isInProcessTree` porque en esta distro `MainPID` es el envoltorio
-          `kwin_wayland_wr` y el KWin bueno es su hijo.
-       Si no se puede confirmar (sin `/proc`, unidad caída) manda la guarda (1),
-       nunca se bloquea por duda.
-  e. El comando `bash native/build.sh` solo se muestra con
+     - **«Aplicar cambios de código»** → cierra la sesión, no reinicia KWin
+       (2026-11-25, medido: el restart mata la sesión Wayland y el escritorio
+       queda muerto). `KMessageDialog` de aviso con tres salidas: «Cerrar
+       sesión» → `org.kde.Shutdown /Shutdown org.kde.Shutdown.logout` (la misma
+       llamada del menú de Plasma: las apps reciben su cierre normal y SDDM
+       autologin devuelve la sesión); «Copiar comando» → deja `systemctl --user
+       restart plasma-kwin_wayland.service` en el portapapeles para un TTY;
+       Cancelar no hace nada. No se usa `reconfigureEffect` (solo re-lee la
+       config) ni `kwin_wayland --replace` (X11; en Wayland empeora). **Una
+       guarda**: si `WAYLAND_DISPLAY` contiene `kube-effect-nested` o
+       `KUBE_NESTED=1` (el arnés exporta ese flag y usa ese socket; KCM abierto
+       dentro de `scripts/kwin-nested-test.sh`) se niega y responde «No
+       disponible en el compositor de pruebas: reinícialo cerrando y volviendo
+       a lanzar el script.».
+  f. El comando `bash native/build.sh` solo se muestra con
      `-DKUBE_SHOW_BUILD_COMMAND=ON` (default OFF, ver ADR-015).
 - **Dos instalaciones del mismo KCM**, con comportamientos distintos:
   1. **De sistema** (`make native-install`, prefijo `/usr`): el `.so` queda

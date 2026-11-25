@@ -7,9 +7,11 @@ QMLLINT ?= $(QT6_BIN)/qmllint
 QMLFORMAT ?= $(QT6_BIN)/qmlformat
 QML_IMPORT ?= /usr/lib/qt6/qml
 # Rules expected to fire on any KWin effect: context properties (effect,
-# modelData, i18nd) and KWin types are not resolvable standalone, and Loader
-# patterns / upstream naming trip the type checks. Anything else fails the gate.
-QMLLINT_ALLOWED ?= unqualified missing-property import unused-imports incompatible-type id-shadows-member property-override
+# modelData, i18nd), KWin types that qmllint cannot resolve without KWin's own
+# qmltypes (org.kde.kwin: SceneView/Workspace/ScreenEdgeHandler ->
+# unresolved-type / missing-property), and Loader patterns / upstream naming
+# that trip the type checks. Anything else fails the gate.
+QMLLINT_ALLOWED ?= unqualified missing-property import unused-imports incompatible-type id-shadows-member property-override unresolved-type
 SONAR_URL := http://localhost:9000
 SONAR_CONTAINER := kkube-sonar
 SONAR_COMPOSE := docker-compose.sonar.yml
@@ -58,6 +60,12 @@ lint-ci: check
 # ScreenView: módulo presente -> item y VideoOutput creados; módulo ausente y
 # fuente rota -> Loader.Error sin llevarse la escena. También se salta (exit 0)
 # si falta PySide6.
+# check-video-dome.py RENDERIZA el ScreenView.qml real (módulo org.kde.kwin
+# simulado + effect falso, Background=Video equirect + girar) y exige un frame
+# con muchos colores: el 360 de vídeo no se puede validar con lint, porque el
+# fallo clásico (SkyBox + Texture.sourceItem) cargaba sin error y pintaba negro.
+# Necesita pantalla real: QtQuick3D no renderiza en offscreen, así que en CI se
+# salta (exit 0).
 # check-features.py valida el catálogo features.json (campos obligatorios,
 # status válido, ids únicos y dependencias conocidas); un JSON inválido rompe
 # el gate. Su --selftest comprueba el propio validador (JSON inválido, id
@@ -73,9 +81,9 @@ check:
 		if [ -n "$$bad" ]; then echo "qmllint: reglas nuevas sin revisar: $$bad"; cat /tmp/kube-effect-qmllint.log; exit 1; fi; \
 		$(QMLFORMAT) -i $$files; \
 		untracked=$$(git ls-files --others --exclude-standard -- $(QML_DIR) | grep -E '\.qml$$' || true); \
-		if ! git diff --exit-code -- $(QML_DIR) || [ -n "$$untracked" ]; then \
+		if ! git diff --exit-code -- $$files || [ -n "$$untracked" ]; then \
 			echo "qmlformat: el árbol no está formateado o hay QML nuevos sin trackear (git add):"; \
-			git diff --stat -- $(QML_DIR); \
+			git diff --stat -- $$files; \
 			if [ -n "$$untracked" ]; then echo "$$untracked"; fi; \
 			exit 1; \
 		fi; \
@@ -86,6 +94,7 @@ check:
 	@python3 scripts/check-scene-environment.py
 	@python3 scripts/check-scene-environment.py --selftest
 	@python3 scripts/check-video.py
+	@python3 scripts/check-video-dome.py
 	@python3 scripts/check-features.py
 	@python3 scripts/check-features.py --selftest
 	@if [ ! -d $(NATIVE_PACKAGE_DIR) ]; then \

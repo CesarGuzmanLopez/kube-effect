@@ -23,20 +23,56 @@ No sirve. El caché que manda es el **en memoria** del `QQmlEngine`, no el disco
 
 ### ✅ VERDADERO: reiniciar KWin, o usar un KWin anidado
 
-- Recarga real: `systemctl --user restart plasma-kwin_wayland.service` (cierra y
-  reabre ventanas, ~10 s; no cierra sesión). O cerrar/iniciar sesión.
+- Recarga real: cerrar sesión y volver a entrar. `systemctl --user restart
+  plasma-kwin_wayland.service` NO vale en Wayland (2026-11-25, medido): mata
+  todos los clientes (plasmashell, kded, apps), el compositor nuevo sale en un
+  socket nuevo sin registrar `org.kde.KWin` y nada reconecta; el escritorio
+  queda muerto.
 - **Mejor para desarrollar**: KWin anidado (`scripts/kwin-nested-test.sh`), que es
   un proceso NUEVO → compila desde disco. Aislado (bus privado, `XDG_CONFIG_HOME`
   propio).
-- **Desde el KCM nativo**: botón «Recargar compositor» → lanza
-  `systemctl --user restart plasma-kwin_wayland.service` (unidad real, `Main PID:
-  kwin_wayland_wr`) tras confirmar. No usa `reconfigureEffect` porque ese solo
-  re-lee la config; tampoco `kwin_wayland --replace` (pelea con systemd). Se
+- **Desde el KCM nativo**: botón «Aplicar cambios de código» → no reinicia KWin
+  en caliente (2026-11-25, medido: restart mata la sesión Wayland y el
+  escritorio queda muerto). Pide confirmación y hace un **logout limpio**
+  (`org.kde.Shutdown /Shutdown org.kde.Shutdown.logout`); SDDM autologin
+  devuelve la sesión y el `kwin_wayland` nuevo compila el QML desde disco. Botón
+  secundario «Copiar comando» deja `systemctl --user restart
+  plasma-kwin_wayland.service` para un TTY. No usa `reconfigureEffect` (solo
+  re-lee la config) ni `kwin_wayland --replace` (X11; en Wayland peor). Se
   niega si `WAYLAND_DISPLAY` contiene `kube-effect-nested` o `KUBE_NESTED=1`
   (el arnés exporta el flag): dentro del anidado el compositor es del script, no
   se reinicia desde ahí. Además compara el PID de `org.kde.KWin` del bus con el
   `MainPID` de la unidad (`kwin_wayland_wr` es el envoltorio y `kwin_wayland` su
   hijo, por eso compara el árbol de procesos).
+
+### ❌ TRAMPA: imagen configurada con «Modo de fondo» en Color no se pinta
+
+`SkyBox` (la URL) solo se usa cuando `Background` (el enum) vale Image, y
+`BackgroundVideo` solo con Video. kwinrc puede llevar una imagen de cuando el
+enum se llamaba `SkyBox` y la clave de URL heredó el nombre viejo: el modo se
+queda en su default Color y la imagen desaparece sin avisar. El KCM Plus lee
+kwinrc y lo dice en negrita en la caja «Efecto» (también el caso inverso: modo
+Imagen/Vídeo sin medio elegido). Si lo ves, elige el modo a mano.
+
+### ❌ FALSO: un `VideoOutput` como `lightProbe` del SkyBox
+
+No se pinta nada. Qt Quick 3D lo rechaza con «Cannot use QSGTexture from
+Texture.sourceItem as light probe.» (medido 2026-11-25; además repetía el aviso
+cada frame). `Texture.sourceItem` sí vale en el `baseColorMap` de un material.
+Vídeo 360 = esfera vista desde dentro (ADR-020), no entorno.
+
+Verificación automática: `scripts/check-video-dome.py` (en `make check`) carga el
+`ScreenView.qml` real con un `org.kde.kwin` simulado y exige que el frame tenga
+muchos colores; necesita pantalla real y en CI se salta.
+
+Un paquete instalado **viejo** se ve igual que un bug: antes de probar, `make
+install` (kpackagetool6) y relogin, porque KWin cachea el QML en memoria.
+
+### ✅ VERDADERO: `Texture.sourceItem` solo existe si el item se renderiza
+
+Un `VideoOutput` oculto (`visible: false`) no produce textura: la cúpula/skybox
+sale en blanco. Hay que dejar la capa 2D del vídeo visible detrás del `View3D`
+(la cúpula opaca la tapa) para que su textura exista.
 
 ## B. Fondo y casco
 

@@ -81,8 +81,16 @@ Item {
     readonly property bool videoActive: root.videoWanted && root.videoEverShown
     readonly property bool videoReady: videoLoader.status === Loader.Ready
     readonly property bool videoPainted: root.videoReady && videoLoader.item.frameAvailable === true
-    readonly property bool videoSkyBoxPainted: root.videoSkyBox && root.videoPainted
-    readonly property bool showFlatVideo: root.videoActive && !root.videoSkyBox
+    // Qt Quick 3D refuses a Texture.sourceItem as a light probe ("Cannot use
+    // QSGTexture from Texture.sourceItem as light probe."), so a video can NOT
+    // be wrapped by SceneEnvironment.SkyBox. The 360 clip is painted on a
+    // sphere around the viewer instead (see videoDome below): same result, and
+    // a Texture.sourceItem does work on a material's baseColorMap.
+    readonly property bool videoDomePainted: root.videoSkyBox && root.videoPainted
+    // The VideoOutput must be rendered for its texture provider to exist, so the
+    // flat layer stays visible even in the 360 case; the dome, being opaque and
+    // painted inside the View3D, covers it.
+    readonly property bool showFlatVideo: root.videoActive
     // Texture.sourceItem takes a QQuickItem (verified in Qt 6.12 qmltypes) and
     // VideoOutput is one, so the skybox samples the very same video output.
     readonly property Item videoProbeItem: root.videoReady ? videoLoader.item.videoOutput : null
@@ -127,6 +135,11 @@ Item {
             easing.type: Easing.OutQuad
         }
     }
+    // Alpha of the black sphere that dims the 360 *video* dome. The image
+    // panorama dims with probeExposure, and a model has no exposure, so the
+    // same amount is applied as a veil; 1 - exposure means both paths darken by
+    // exactly dimOpacity(...) and the Behavior above animates both.
+    readonly property real videoDomeVeil: 1 - root.skyBoxExposure
 
     // The hull (background behind the 3D view) must disappear together with
     // the effect. Binding Window.color kept the window surface painted after
@@ -147,7 +160,7 @@ Item {
     readonly property bool imageFallbackColor: root.backgroundMode === Constants.Background.Image && !root.skyBoxImageReady
     // A SkyBox (image or video) is painted by the 3D environment, so the 2D
     // veil must stay off once it is on screen (see skyBoxExposure below).
-    readonly property bool skyBoxPainted: root.skyBoxImageReady || root.videoSkyBoxPainted
+    readonly property bool skyBoxPainted: root.skyBoxImageReady || root.videoDomePainted
     // Solid colour layer: Color mode, the backdrop under a SkyBox that is not
     // painted yet, and the backdrop of the video. The last one covers three
     // cases with one rule: bars left by Contain/Stretch, the first frames
@@ -280,11 +293,13 @@ Item {
         renderMode: View3D.Offscreen
 
         // Transparent clear: the hull rectangles above paint the background.
-        // Never bind the window colour here; it outlives the effect. It is also
-        // the fallback while the panorama decodes or fails to load.
+        // Never bind the window colour here; it outlives the effect. It stays on
+        // whenever the image SkyBox is not painting, which also covers the 360
+        // video case: that panorama is a sphere *inside* the scene (videoDome),
+        // so a transparent environment is exactly what it needs behind it.
         Loader {
             id: transparentSceneEnvironment
-            active: !root.skyBoxPainted
+            active: !root.skyBoxImageReady
             sourceComponent: SceneEnvironment {
                 backgroundMode: SceneEnvironment.Transparent
             }
@@ -310,31 +325,51 @@ Item {
             }
         }
 
-        // Video 360: the environment samples the VideoOutput of HullVideo.qml
-        // through Texture.sourceItem (a QQuickItem; VideoOutput is one).
-        // autoOrientation defaults to true, so the offscreen layer is flipped
-        // the same way the image probe is and no manual flip is needed.
-        Loader {
-            id: videoSkyboxEnvironment
-            active: root.videoSkyBoxPainted
-            sourceComponent: SceneEnvironment {
-                backgroundMode: SceneEnvironment.SkyBox
-                // Same dimming as the image SkyBox: the panorama belongs to
-                // the 3D environment, so probeExposure is the only veil that
-                // reaches it without covering the faces.
-                probeExposure: root.skyBoxExposure
-                lightProbe: Texture {
-                    sourceItem: root.videoProbeItem
-                }
-            }
-        }
-
-        environment: root.skyBoxImageReady ? skyboxSceneEnvironment.item : root.videoSkyBoxPainted ? videoSkyboxEnvironment.item : transparentSceneEnvironment.item
+        environment: root.skyBoxImageReady ? skyboxSceneEnvironment.item : transparentSceneEnvironment.item
 
         PerspectiveCamera {
             id: camera
             clipNear: 10.0
             clipFar: 100000.0
+        }
+
+        // Video 360 (Background == Video, Equirect + rotate): a sphere seen from
+        // the inside, sitting on the camera position but NOT on its rotation, so
+        // the clamp turns with the view like a real skybox. The panorama is fed
+        // by Texture.sourceItem of the HullVideo VideoOutput, which Qt Quick 3D
+        // accepts on a material (it rejects it as a light probe). Radius = mesh
+        // 50 * scale 100 = 5000, far inside clipFar and far outside the cube.
+        Model {
+            id: videoDome
+            visible: root.videoDomePainted
+            source: "#Sphere"
+            position: camera.position
+            scale: Qt.vector3d(100, 100, 100)
+            materials: PrincipledMaterial {
+                lighting: PrincipledMaterial.NoLighting
+                cullMode: Material.FrontFaceCulling
+                baseColorMap: Texture {
+                    sourceItem: root.videoProbeItem
+                }
+            }
+        }
+
+        // Dimming for the video dome: a black sphere just inside it, with the
+        // same 120 ms ramp as the 2D veil (skyBoxExposure is 1 - dimOpacity, so
+        // 1 - exposure is the veil alpha when the cube turns). Depth testing
+        // keeps it off the cube faces, which sit much closer.
+        Model {
+            id: videoDomeDim
+            visible: root.videoDomePainted && root.videoDomeVeil > 0.001
+            source: "#Sphere"
+            position: camera.position
+            scale: Qt.vector3d(99, 99, 99)
+            materials: PrincipledMaterial {
+                lighting: PrincipledMaterial.NoLighting
+                cullMode: Material.FrontFaceCulling
+                baseColor: "black"
+                opacity: root.videoDomeVeil
+            }
         }
 
         Cube {

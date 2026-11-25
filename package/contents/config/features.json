@@ -48,7 +48,7 @@
             "QtMultimedia"
         ],
         "native": false,
-        "notes": "Vídeo de fondo (Background=Video), igual que una imagen con otra fuente. Claves: BackgroundVideo más las compartidas BackgroundImageLayout, BackgroundImageFit y BackgroundImageRotate. Equirect + girar con el centro = entorno 360 (SkyBox con Texture.sourceItem del VideoOutput); Flat o sin giro = capa plana con el ajuste. Solo reproduce con el efecto visible. Sin QtMultimedia (qt6-multimedia) cae al color de respaldo y avisa una vez.",
+        "notes": "Vídeo de fondo (Background=Video), igual que una imagen con otra fuente. Claves: BackgroundVideo más las compartidas BackgroundImageLayout, BackgroundImageFit y BackgroundImageRotate. Equirect + girar con el centro = panorama 360 animado (esfera vista desde dentro con el VideoOutput como baseColorMap; Qt rechaza un Texture.sourceItem como lightProbe, ADR-020). Flat o sin giro = capa plana con el ajuste. Solo reproduce con el efecto visible. Sin QtMultimedia (qt6-multimedia) cae al color de respaldo y avisa una vez.",
         "status": "stable",
         "since": "0.0.0.3"
     },

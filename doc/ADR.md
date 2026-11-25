@@ -228,9 +228,10 @@ comprueba que la intensidad empieza deshabilitada, que sigue a su casilla, que
    (`file:`), nunca red.
 2. El vídeo **reutiliza** `BackgroundImageLayout`, `BackgroundImageFit` y
    `BackgroundImageRotate`: es una imagen con otra fuente, así que equirect +
-   girar = entorno 360 (`SceneEnvironment.SkyBox` con `Texture.sourceItem` del
-   `VideoOutput`) y Flat o sin girar = capa plana con el ajuste. No hay claves
-   nuevas para «cómo se muestra».
+   girar = panorama 360 y Flat o sin girar = capa plana con el ajuste. No hay
+   claves nuevas para «cómo se muestra». **Corregido (ADR-020)**: el 360 de vídeo
+   no usa `SceneEnvironment.SkyBox` (Qt rechaza ahí un `Texture.sourceItem`),
+   sino una esfera vista desde dentro.
 3. `QtMultimedia` es una **dependencia opcional** declarada en `features.json`
    (`requires: ["QtMultimedia"]`, `status: stable`, `since: 0.0.0.3`). Su import
    está aislado en `package/contents/ui/HullVideo.qml`, cargado con un `Loader`
@@ -253,4 +254,31 @@ digan si falta, y el fallback a color mantiene el cubo usable en cualquier siste
 **Verificación**: `scripts/check-video.py` instancia `HullVideo.qml` en un motor
 QML real (item y `VideoOutput` creados; módulo ausente y fuente rota → `Loader.Error`
 sin llevarse la escena).
+
+## ADR-020 — El vídeo 360 se pinta en una cúpula, no en el SkyBox.
+
+**Decisión**: cuando `BackgroundVideo` es equirect y «girar con el centro» está
+activo, el clip se pinta en un `Model { source: "#Sphere" }` visto desde dentro,
+con `position: camera.position` (sin heredar su rotación), radio 50 × escala 100 =
+5000, `cullMode: FrontFaceCulling` y `PrincipledMaterial { lighting: NoLighting;
+baseColorMap: Texture { sourceItem: videoOutput } }`. La atenuación al girar usa
+una segunda esfera negra justo dentro (radio 5000 × 0.99) con
+alpha = 1 − `skyBoxExposure`, así las dos rutas (imagen con `probeExposure`, vídeo
+con velo) oscurecen exactamente `dimOpacity(...)` y comparten el `Behavior` de
+120 ms. El `VideoOutput` de `HullVideo.qml` debe seguir **renderizándose** (capa
+2D visible detrás del `View3D`): su textura no existe si el item no entra en la
+escena; la cúpula, opaca, tapa esa capa y no se ve duplicada.
+**Porqué**: Qt Quick 3D imprime «Cannot use QSGTexture from Texture.sourceItem as
+light probe.» y no dibuja nada; medido 2026-11-25 con `Background=Video`, el fondo
+quedaba vacío (y el aviso se repetía cada frame, llenando el journal). El mismo
+`sourceItem` sí funciona en el `baseColorMap` de un material (rectángulo/esfera
+con vídeo verificado: cientos de colores distintos y velo al 40 % exacto), y el
+resultado visual es el mismo panorama envolvente.
+**Nota**: el escenario previo (SkyBox + `sourceItem`) se elimina, con su `Loader`
+y su ruta de `probeExposure`, en vez de dejarlo como código muerto.
+**Verificación**: `scripts/check-video-dome.py` renderiza el `ScreenView.qml` real
+(con un módulo `org.kde.kwin` simulado y un `effect` falso: `Background=Video`,
+Equirect, girar) y exige un frame con muchos colores distintos; cargar sin error
+no basta, porque el fallo anterior cargaba bien y pintaba negro. Necesita
+pantalla real, así que en CI se salta.
 

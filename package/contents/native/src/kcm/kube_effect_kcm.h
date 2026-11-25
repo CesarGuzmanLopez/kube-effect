@@ -10,8 +10,6 @@
 #include <QString>
 
 class QLabel;
-class QProcess;
-class QProgressBar;
 class QPushButton;
 
 /**
@@ -19,12 +17,13 @@ class QPushButton;
  *
  * It never duplicates the effect settings: those live in the QML generic KCM
  * (config.ui). This module only adds what QML cannot do: the compiled versions,
- * the native stamp check, the feature dependency list, reconfigureEffect() and
- * a real compositor restart (the only thing that drops KWin's in-memory QML
- * cache, bug #514131).
- * Every piece degrades to an informational label when its data is missing. The
- * restart is the single exception to "no dialogs": it closes every window, so
- * it asks first, and it refuses to run inside the nested test compositor.
+ * the native stamp check, the feature dependency list and reconfigureEffect().
+ * Every piece degrades to an informational label when its data is missing.
+ * The "reload compositor" button NEVER restarts KWin itself: on Wayland that
+ * restart kills every client and leaves the desktop dead (2026-11-25), so it
+ * asks first and then performs a clean logout (org.kde.Shutdown.logout), which
+ * is the only safe way to make KWin recompile the QML. It also offers the
+ * manual command and refuses to run inside the nested test compositor.
  */
 class KubeEffectKcm : public KCModule
 {
@@ -42,13 +41,10 @@ private:
 
     void reconfigureEffect();
     void reloadCompositor();
-    void startReload(const QString &program);
-    void finishReload(bool succeeded, int exitCode, const QString &program, const QString &errorText);
+    void requestLogout();
 
     QLabel *m_stampLabel = nullptr;
     QLabel *m_actionStatusLabel = nullptr;
     QLabel *m_reloadStatusLabel = nullptr;
     QPushButton *m_reloadButton = nullptr;
-    QProgressBar *m_reloadSpinner = nullptr;
-    QProcess *m_reloadProcess = nullptr;
 };

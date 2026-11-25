@@ -9,17 +9,18 @@
 #include "kube_effect_reload.h"
 
 #include <KAboutData>
+#include <KConfigGroup>
 #include <KLocalizedString>
 #include <KGuiItem>
 #include <KMessageDialog>
 #include <KPluginFactory>
+#include <KSharedConfig>
 #include <KStandardGuiItem>
 
 #include <QApplication>
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDBusConnection>
-#include <QDBusConnectionInterface>
 #include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDialog>
@@ -41,9 +42,8 @@
 #include <QLibraryInfo>
 #include <QPalette>
 #include <QPlainTextEdit>
-#include <QProcess>
+#include <QGuiApplication>
 #include <QProcessEnvironment>
-#include <QProgressBar>
 #include <QPushButton>
 #include <QStandardPaths>
 #include <QStringList>
@@ -167,28 +167,6 @@ QString checkMark(bool available)
     return available ? QStringLiteral("\u2713") : QStringLiteral("\u2717");
 }
 
-// MainPID systemd has for the session compositor, 0 when it cannot be read.
-// Used only to *confirm* the D-Bus KWin is that process: an unknown value never
-// blocks the restart (the Wayland-socket guard is the primary one).
-uint sessionCompositorPid(const QString &systemctl)
-{
-    QProcess query;
-    query.start(systemctl,
-                {QStringLiteral("--user"),
-                 QStringLiteral("show"),
-                 KubeReload::serviceUnit(),
-                 QStringLiteral("-p"),
-                 QStringLiteral("MainPID"),
-                 QStringLiteral("--value")});
-    if (!query.waitForFinished(2000)) {
-        query.kill();
-        return 0;
-    }
-    bool ok = false;
-    const uint pid = query.readAllStandardOutput().trimmed().toUInt(&ok);
-    return ok ? pid : 0;
-}
-
 // Command block for the "Comandos" box: copy/paste ready, real project path when
 // the stamp carries "source" (written by native/build.sh). An old stamp without
 // the field just gets the placeholder plus a note, never an empty cd.
@@ -261,6 +239,34 @@ KubeEffectKcm::KubeEffectKcm(QObject *parent, const KPluginMetaData &data)
     layout->addWidget(buildFeatureBox());
     layout->addWidget(buildActionBox());
     layout->addStretch();
+}
+
+// The effect only paints a picture or a clip when "Modo de fondo" says so.
+// kwinrc can hold a SkyBox image from before the mode enum was renamed
+// (SkyBox -> Background, and the URL key took the old name back), leaving the
+// mode at its Color default: the picture is then silently ignored. Same for a
+// mode that points at media that is no longer set. Returns user-facing hints,
+// empty when the combination is coherent.
+QString backgroundHint()
+{
+    KConfigGroup group(KSharedConfig::openConfig(QStringLiteral("kwinrc")),
+                       QStringLiteral("Effect-kube-effect"));
+    // Same indices as the Background enum of contents/config/main.xml.
+    const int mode = group.readEntry(QStringLiteral("Background"), 0);
+    const QString image = group.readEntry(QStringLiteral("SkyBox"), QString());
+    const QString video = group.readEntry(QStringLiteral("BackgroundVideo"), QString());
+
+    if (mode == 0 && (!image.isEmpty() || !video.isEmpty())) {
+        return i18n("Hay una imagen o un vídeo de fondo configurado, pero «Modo de fondo» está en Color: "
+                    "no se pinta nada. Elige Imagen o Vídeo en el menú del efecto.");
+    }
+    if (mode == 1 && image.isEmpty()) {
+        return i18n("«Modo de fondo» es Imagen y no hay ninguna imagen elegida: solo se ve el color de fondo.");
+    }
+    if (mode == 3 && video.isEmpty()) {
+        return i18n("«Modo de fondo» es Vídeo y no hay ningún vídeo elegido: solo se ve el color de fondo.");
+    }
+    return {};
 }
 
 QWidget *KubeEffectKcm::buildVersionLabel()
@@ -492,19 +498,30 @@ QWidget *KubeEffectKcm::buildActionBox()
     auto *box = new QGroupBox(i18n("Efecto"), widget());
     auto *layout = new QVBoxLayout(box);
 
+    // A silent mismatch between the background mode and the configured media
+    // looks like "the background never works", so it is said here, in the one
+    // place that reads the real kwinrc.
+    const QString backgroundWarning = backgroundHint();
+    if (!backgroundWarning.isEmpty()) {
+        auto *warning = makeLabel(box);
+        warning->setText(backgroundWarning);
+        markAsWarning(warning);
+        layout->addWidget(warning);
+    }
+
     // One line, two verbs, because "reconfigure" and "reload" sound alike but do
     // very different things: settings only vs. a new compositor process.
     auto *legend = makeLabel(box);
     legend->setText(i18n("Reconfigurar efecto: cambios de ajustes. "
-                         "Recargar compositor: cambios de código (KWin guarda el QML en caché)."));
+                         "Aplicar cambios de código: cierra la sesión y vuelve a entrar (KWin guarda el QML en caché)."));
     layout->addWidget(legend);
 
     auto *reconfigureButton = new QPushButton(i18n("Reconfigurar efecto"), box);
     reconfigureButton->setIcon(QIcon::fromTheme(QStringLiteral("view-refresh")));
     connect(reconfigureButton, &QPushButton::clicked, this, &KubeEffectKcm::reconfigureEffect);
 
-    m_reloadButton = new QPushButton(i18n("Recargar compositor"), box);
-    m_reloadButton->setIcon(QIcon::fromTheme(QStringLiteral("system-reboot")));
+    m_reloadButton = new QPushButton(i18n("Aplicar cambios de código"), box);
+    m_reloadButton->setIcon(QIcon::fromTheme(QStringLiteral("system-log-out")));
     if (KubeReload::isNestedSession(QProcessEnvironment::systemEnvironment())) {
         m_reloadButton->setToolTip(
             i18n("No disponible en el compositor de pruebas: relanza el script para recargar el código."));
@@ -519,15 +536,6 @@ QWidget *KubeEffectKcm::buildActionBox()
 
     m_actionStatusLabel = makeLabel(box);
     layout->addWidget(m_actionStatusLabel);
-
-    // Indeterminate bar: the restart takes seconds and the button is disabled
-    // meanwhile, so the user needs to see that something is running.
-    m_reloadSpinner = new QProgressBar(box);
-    m_reloadSpinner->setRange(0, 0);
-    m_reloadSpinner->setTextVisible(false);
-    m_reloadSpinner->setMaximumHeight(10);
-    m_reloadSpinner->setVisible(false);
-    layout->addWidget(m_reloadSpinner);
 
     m_reloadStatusLabel = makeLabel(box);
     layout->addWidget(m_reloadStatusLabel);
@@ -562,134 +570,94 @@ void KubeEffectKcm::reconfigureEffect()
         return;
     }
     m_actionStatusLabel->setText(
-        i18n("Ajustes reconfigurados. Si has cambiado código QML, usa «Recargar compositor»."));
+        i18n("Ajustes reconfigurados. Si has cambiado código QML, usa «Aplicar cambios de código»."));
 }
 
 void KubeEffectKcm::reloadCompositor()
 {
-    if (m_reloadProcess) {
-        return; // one restart at a time
-    }
-
     // Never from the nested harness. There the compositor is a throwaway
-    // process the script owns; restarting it from inside would leave the test
-    // session without a compositor, and a detection bug must never reach the
-    // real session.
+    // process the script owns; relaunch the script to reload the code.
     if (KubeReload::isNestedSession(QProcessEnvironment::systemEnvironment())) {
         m_reloadStatusLabel->setText(i18n("No disponible en el compositor de pruebas: reinícialo "
                                           "cerrando y volviendo a lanzar el script."));
         return;
     }
 
-    const QString program = QStandardPaths::findExecutable(QStringLiteral("systemctl"));
-    if (program.isEmpty()) {
-        m_reloadStatusLabel->setText(KubeReload::failureHint(QString(), 0, QString()));
-        return;
-    }
-
-    // Second, independent guard. Inside the nested session the D-Bus KWin is the
-    // script's process, while "systemctl --user" still talks to the HOST user
-    // manager: if the socket check ever regressed, this comparison would still
-    // catch it. Only a positive mismatch refuses, so a missing /proc or a dead
-    // unit keeps today's behaviour instead of breaking the button.
-    const uint kwinPid = QDBusConnection::sessionBus().interface()->servicePid(QStringLiteral("org.kde.KWin"));
-    const uint sessionPid = sessionCompositorPid(program);
-    if (kwinPid != 0 && sessionPid != 0 && !KubeReload::isInProcessTree(kwinPid, sessionPid)
-        && !KubeReload::isInProcessTree(sessionPid, kwinPid)) {
-        m_reloadStatusLabel->setText(i18n("No puedo confirmar que este compositor sea el de tu sesión: "
-                                          "reinicia la sesión a mano para aplicar los cambios."));
-        return;
-    }
-
-    // Closing every window justifies a dialog (the only one in this KCM).
-    // KMessageDialog is asynchronous on purpose: no nested event loop inside a
-    // KCM page, and the restart keeps the module responsive.
+    // Wayland safety (2026-11-25, measured): restarting
+    // plasma-kwin_wayland.service from inside the session kills every Wayland
+    // client (plasmashell, kded, every app) and the new compositor comes up on
+    // a new socket without owning org.kde.KWin, so nothing reconnects: the
+    // desktop stays dead. There is no "restart only the compositor": on
+    // Wayland KWin *is* the display server, and neither reconfigure() nor
+    // loadEffect()/unloadEffect() recompiles the cached QML (bug #514131). The
+    // safe equivalent is a clean logout: SDDM brings the session back and the
+    // new kwin_wayland process compiles the QML from disk.
+    const QString command = KubeReload::restartCommand().join(QLatin1Char(' '));
     auto *dialog = new KMessageDialog(
         KMessageDialog::WarningContinueCancel,
-        i18n("Se reiniciará el compositor para aplicar los cambios de código. Las ventanas se cerrarán "
-             "y volverán a abrirse (unos 10 segundos). ¿Continuar?"),
+        i18n("Se cerrará la sesión para aplicar los cambios de código: se cierran todas las "
+             "aplicaciones abiertas y se vuelve a entrar sola (unos segundos).\n\n"
+             "No se reinicia KWin en caliente: en Wayland eso deja el escritorio muerto.\n\n"
+             "Para probar sin cerrar nada usa el KWin anidado (scripts/kwin-nested-test.sh).\n\n"
+             "Comando manual, solo desde TTY y bajo tu responsabilidad:\n%1",
+             command),
         widget());
-    dialog->setCaption(i18n("Recargar compositor"));
-    dialog->setButtons(KGuiItem(i18n("&Recargar"), QStringLiteral("system-reboot")),
-                       KGuiItem(),
+    dialog->setCaption(i18n("Aplicar cambios de código"));
+    dialog->setButtons(KGuiItem(i18n("&Cerrar sesión"), QStringLiteral("system-log-out")),
+                       KGuiItem(i18n("&Copiar comando"), QStringLiteral("edit-copy")),
                        KStandardGuiItem::cancel());
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setWindowModality(Qt::WindowModal);
 
-    // One dialog at a time: the button stays disabled until it is answered.
     m_reloadButton->setEnabled(false);
-    connect(dialog, &QDialog::finished, this, [this, program](int result) {
-        if (result != KMessageDialog::PrimaryAction) {
-            m_reloadButton->setEnabled(true);
+    connect(dialog, &QDialog::finished, this, [this, command](int result) {
+        if (result == KMessageDialog::PrimaryAction) {
+            requestLogout();
             return;
         }
-        startReload(program);
+        if (result == KMessageDialog::SecondaryAction) {
+            if (QClipboard *clipboard = QGuiApplication::clipboard()) {
+                clipboard->setText(command);
+            }
+            m_reloadStatusLabel->setText(i18n("Comando copiado al portapapeles. Úsalo solo desde TTY: "
+                                              "cierra sesión y vuelve a entrar para aplicar los cambios."));
+        } else {
+            m_reloadStatusLabel->setText(i18n("Sin cambios aplicados. Cierra sesión y vuelve a entrar "
+                                              "para activar el código nuevo, o usa el KWin anidado."));
+        }
+        m_reloadButton->setEnabled(true);
     });
     dialog->show();
 }
 
-void KubeEffectKcm::startReload(const QString &program)
+void KubeEffectKcm::requestLogout()
 {
-    m_reloadButton->setEnabled(false);
-    m_reloadSpinner->setVisible(true);
-    m_reloadStatusLabel->setText(i18n("Reiniciando… las ventanas se cerrarán y volverán a abrirse."));
+    // The supported route: Plasma's shutdown service, not a systemctl verb. It
+    // is the same call the desktop's own "Log Out" uses, so apps get their
+    // usual close notification instead of being killed with the compositor.
+    QDBusInterface interface(QStringLiteral("org.kde.Shutdown"),
+                             QStringLiteral("/Shutdown"),
+                             QStringLiteral("org.kde.Shutdown"),
+                             QDBusConnection::sessionBus());
+    if (!interface.isValid()) {
+        m_reloadStatusLabel->setText(i18n("org.kde.Shutdown no responde (%1). Cierra sesión a mano: "
+                                          "en Wayland es la única forma de recompilar el QML.",
+                                          interface.lastError().message()));
+        m_reloadButton->setEnabled(true);
+        return;
+    }
 
-    // Parented to the application, not to this page: closing the KCM while the
-    // restart runs must not destroy QProcess (its destructor would kill
-    // systemctl halfway through the restart).
-    auto *process = new QProcess(QCoreApplication::instance());
-    connect(process, &QProcess::finished, process, &QObject::deleteLater);
-    m_reloadProcess = process;
-    process->setProgram(program);
-    process->setArguments(KubeReload::restartCommand().mid(1));
-
-    // A successful restart takes this process down with the old compositor, so
-    // the branch that matters in practice is the failure one: that is when the
-    // user has to be told why nothing happened.
-    connect(process,
-            QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this,
-            [this, process, program](int exitCode, QProcess::ExitStatus status) {
-                finishReload(exitCode == 0 && status == QProcess::NormalExit,
-                             exitCode,
-                             program,
-                             QString::fromLocal8Bit(process->readAllStandardError()));
-            });
-    connect(process, &QProcess::errorOccurred, this, [this, process, program](QProcess::ProcessError error) {
-        // FailedToStart does not emit finished(), so it needs its own path.
-        if (error == QProcess::FailedToStart) {
-            finishReload(false, -1, program, process->errorString());
-        }
-    });
-
-    process->start();
+    const QDBusMessage reply = interface.call(QStringLiteral("logout"));
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        m_reloadStatusLabel->setText(i18n("No se pudo cerrar la sesión: %1. Ciérrala a mano.",
+                                          reply.errorMessage()));
+        m_reloadButton->setEnabled(true);
+        return;
+    }
+    // No need to re-enable: the session is going away.
+    m_reloadStatusLabel->setText(i18n("Cerrando sesión… al volver a entrar, KWin recompila el QML y "
+                                      "el código nuevo queda activo."));
 }
-
-void KubeEffectKcm::finishReload(bool succeeded, int exitCode, const QString &program, const QString &errorText)
-{
-    // finished() and errorOccurred() can both arrive; act once.
-    if (!m_reloadProcess) {
-        return;
-    }
-    m_reloadProcess->deleteLater();
-    m_reloadProcess = nullptr;
-
-    m_reloadSpinner->setVisible(false);
-    m_reloadButton->setEnabled(true);
-
-    if (!succeeded && exitCode < 0) {
-        // FailedToStart: there is no exit code to show, the reason is in the text.
-        m_reloadStatusLabel->setText(i18n("No pude lanzar systemctl:\n%1", errorText));
-        return;
-    }
-    if (succeeded) {
-        m_reloadStatusLabel->setText(
-            i18n("Compositor reiniciado (código 0). Las ventanas vuelven solas y el código nuevo ya está activo."));
-        return;
-    }
-    m_reloadStatusLabel->setText(KubeReload::failureHint(program, exitCode, errorText));
-}
-
 K_PLUGIN_CLASS_WITH_JSON(KubeEffectKcm, "kube_effect_kcm.json")
 
 #include "kube_effect_kcm.moc"
