@@ -15,6 +15,10 @@ pasar al siguiente.
   usuario compile el módulo extra desde la copia instalada. `native/` sigue
   siendo la fuente de verdad: `make sync-package-native` copia y `make check`
   falla si divergen.
+- **Solo Wayland.** Nada de X11/Xwayland ni de rutas de compatibilidad con X11:
+  el efecto es un `SceneEffect` de KWin Wayland y el arnés arranca el anidado
+  **sin** `--xwayland` (levantar Xwayland dentro del anidado empantanaba al
+  `MediaPlayer` de QtMultimedia: ver `doc/trucos-aprendidos.md`, sección A).
 - **Prueba solo en KWin anidado. Nunca en sesión del host** (`scripts/kwin-nested-test.sh`).
 - Código y comentarios en inglés. Docs en español.
 - Todo lo comprueba `make lint`. Limpio antes de commit.
@@ -52,11 +56,26 @@ desarrollo no se usa esto
 ## Arnés de test anidado
 
 `./scripts/kwin-nested-test.sh` — KWin privado (bus propio,
-`XDG_CONFIG_HOME` aislado), nunca toca la sesión real. Configura el efecto en
-`[Effect-kube-effect]`, lo activa y captura. Apaga TODOS los demás efectos del
-host en el anidado (menos carga); `KUBE_NESTED_KEEP_EFFECTS="blur,screenshot"`
-conserva los que indiques (`screenshot` hará falta para thumbnails/wallpapers
-reales). Para parar, `kill` del pid que imprime.
+`XDG_CONFIG_HOME` y **`XDG_DATA_HOME`** temporales), nunca toca la sesión real.
+**Arranca como una instalación limpia**: kwinrc de FÁBRICA (no se copia el del
+host; solo se hereda la sección `[Effect-kube-effect]`, que es lo que se prueba),
+3 escritorios virtuales, **una ventana por cara** (repartida por DBus
+`setCurrentDesktop`, lista en `KUBE_NESTED_APPS`) y **plasmashell con el panel y
+el wallpaper del sistema**. La data dir aislada hace que NO se cargue ningún
+plasmoid descargado (verificado: con `XDG_DATA_HOME` temporal,
+`Plasma.Flex.Hub`/`Plasma.Control.Hub` no aparecen; sin aislar sí) — verificado
+2026-11-25. `--no-plasma` deja el anidado sin panel ni wallpaper;
+`--no-apps` sin ventanas; `KUBE_NESTED_CONFIG=host` vuelve al comportamiento
+antiguo (kwinrc completo del host y demás efectos apagados con
+`KUBE_NESTED_KEEP_EFFECTS="blur,screenshot"`). No fuerza el modo de fondo.
+Al terminar se queda **siguiendo los logs**; `Ctrl+C` deja de seguir y **para el
+anidado** (`--no-follow` = imprimir el resumen y salir). **El atajo dentro del
+anidado es `Meta+Shift+K`** (`KUBE_NESTED_SHORTCUT`), no `Meta+K`: el KWin del
+host lo tiene registrado como atajo global (`[kwin] Kube Effect=Meta+K` en su
+kglobalshortcutsrc) y se lo queda antes de que la ventana anidada reciba la
+tecla, así que el efecto no se activa y no aparece nada en el log. Alternativa:
+el borde superior (`BorderActivate=1`) con el puntero capturado (Ctrl derecho
+captura/suelta).
 
 - El arnés compila `native/` antes de arrancar y **aborta** si falla (nunca se
   prueba con un binario viejo). `--no-native` salta todo el lado nativo (sin

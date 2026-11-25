@@ -193,5 +193,7 @@ native-clean:
 native-status:
 	@./scripts/native-status.sh
 
+# Arnés de prueba anidado: delega en el script (bus y config aislados, logs en
+# vivo, Ctrl+C para parar). Sin --xwayland: el proyecto es solo Wayland.
 nested:
-	kwin_wayland --xwayland :2 &
+	@./scripts/kwin-nested-test.sh --no-native

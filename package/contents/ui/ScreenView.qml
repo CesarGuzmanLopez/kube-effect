@@ -237,8 +237,13 @@ Item {
     // QtMultimedia import: if the module is missing the Loader ends in Error,
     // qWarning fires once and the solid colour below keeps the hull painted.
     // The Loader is a direct child (never inside a hidden container) because
-    // the same item doubles as Texture.sourceItem for the 360 SkyBox; the
-    // item stays alive once shown and pauses with effect.visible.
+    // the same item doubles as Texture.sourceItem of the 360 dome; the item
+    // stays alive once shown and pauses with effect.visible.
+    //
+    // "Nothing is painted" has several causes that look identical on screen
+    // (module missing, clip unreadable, decoder refusing inside KWin's process,
+    // a path the media backend cannot open), so the effect says in the log,
+    // once, which of them it is. Without this the only way to know is to guess.
     Loader {
         id: videoLoader
         anchors.fill: parent
@@ -257,6 +262,31 @@ Item {
             item.source = Qt.binding(() => root.backgroundVideoSource);
             item.fit = Qt.binding(() => root.flatImageFit);
             item.playing = Qt.binding(() => effect.visible);
+            videoDiagnosis.restart();
+        }
+    }
+
+    // Loader.Ready only proves the QML built: the clip may still fail to decode.
+    // 3 s after the item appears, if there is still no frame, report the media
+    // status and error text. mediaStatus values (QtMultimedia QMediaStatus):
+    // 0 NoMedia, 1 Loading, 2 Loaded, 3 Stalled, 4 Buffering, 5 Buffered,
+    // 6 EndOfMedia, 7 InvalidMedia.
+    Timer {
+        id: videoDiagnosis
+        interval: 3000
+        onTriggered: {
+            if (root.videoWarningShown || !root.videoActive) {
+                return;
+            }
+            const item = videoLoader.item;
+            if (item === null || item === undefined) {
+                return;
+            }
+            if (item.frameAvailable) {
+                return;
+            }
+            root.videoWarningShown = true;
+            console.warn("kube-effect: vídeo de fondo sin fotograma tras 3 s" + " (mediaStatus=" + item.mediaStatus + ", error=" + item.errorString + ")" + "; fuente=" + root.backgroundVideoSource + "; se pinta el color de respaldo");
         }
     }
 

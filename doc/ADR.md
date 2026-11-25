@@ -154,6 +154,20 @@ muestra el menú QML se **oculta en pruebas** (se compila a mano al lanzar el ar
 documentarlo como paso obligatorio cada vez que se cree un menú nuevo.
 **Porqué**: nunca se prueba contra un binario desactualizado; el arnés garantiza que lo
 que se ve es lo recién compilado.
+**Ampliación (2026-11-25)**: el arnés arranca como una **instalación limpia**:
+kwinrc de fábrica (`KUBE_NESTED_CONFIG=clean`, solo se hereda
+`[Effect-kube-effect]`), `XDG_DATA_HOME` temporal y plasmashell con el panel y
+el wallpaper **del sistema** — así no se carga ningún plasmoid descargado ni sus
+errores (verificado: con la data aislada `Plasma.Flex.Hub`/`Plasma.Control.Hub`
+no se enumeran; sin aislar sí). 3 escritorios y una ventana por cara repartida
+por DBus (`--no-plasma` quita el shell, `--no-apps` deja las caras vacías,
+`KUBE_NESTED_APPS` cambia la lista). No fuerza `Background` (usa la configuración
+del efecto; forzarlo a Image con un `.mp4` en `SkyBox` dejaba el casco vacío y
+parecía un bug del efecto), sigue los logs en vivo y `Ctrl+C` para el anidado
+entero. El `pidfile` guarda el pid de `kwin_wayland` (el de `dbus-run-session`
+deja el compositor huérfano al matarlo). Y ojo: `Meta+K` dentro del anidado se
+lo queda el KWin del host, así que la activación fiable es el borde superior
+(`BorderActivate=1`).
 
 ## ADR-016 — `features.json`: catálogo de features y dependencias.
 

@@ -3,17 +3,34 @@
 #
 #   ./scripts/kwin-nested-test.sh              # compila native/ y abre el KCM
 #   ./scripts/kwin-nested-test.sh --no-native  # experiencia SIN compilar
+#   ./scripts/kwin-nested-test.sh --with-plasma # + wallpaper real de Plasma
 #   ./scripts/kwin-nested-test.sh --help
 #
-# Abre un escritorio KWin VIRTUAL (ventana 1600x900 sobre tu sesión) con 3
-# escritorios virtuales (= 3 caras del cubo) y unos programas de ejemplo.
+# Abre un escritorio KWin VIRTUAL (ventana 1600x900 sobre tu sesión) como si
+# fuera una INSTALACIÓN LIMPIA: kwinrc de fábrica, 3 escritorios virtuales, una
+# ventana por cara y plasmashell con el panel y el wallpaper del sistema. Los
+# plasmoids descargados no se ven (XDG_DATA_HOME temporal), así que sus errores
+# no ensucian la prueba.
+#
+# Dato para la prueba: dentro del anidado Meta+K NO llega (el KWin del host se
+# lo queda como atajo global). El arnés registra un atajo propio, por defecto
+# Meta+Shift+K (KUBE_NESTED_SHORTCUT=... para cambiarlo). Alternativa: el borde
+# superior con el puntero capturado (Ctrl derecho captura/suelta).
+#
+# LOGS EN VIVO: al terminar de arrancar, el script se queda siguiendo lo que
+# escriben kwin_wayland y, si se pidieron, plasmashell y el KCM del anidado.
+# Ctrl+C para TODO: deja de seguir y para el anidado entero.
+# --no-follow vuelve al comportamiento viejo (imprime el resumen y sale).
 #
 # NO saca capturas de pantalla. El usuario hace las pruebas DIRECTAMENTE en esa
 # ventana anidada: le da foco y pulsa Meta+K para abrir/cerrar el cubo.
 #
 # Aislamiento (nunca toca tu sesión):
 #   * bus D-Bus propio (dbus-run-session)
-#   * XDG_CONFIG_HOME temporal (copia de tu kwinrc como base)
+#   * XDG_CONFIG_HOME temporal con kwinrc DE FÁBRICA (KUBE_NESTED_CONFIG=clean):
+#     como una instalación limpia de Plasma; solo se hereda [Effect-kube-effect]
+#   * XDG_DATA_HOME temporal: no se ven los plasmoids descargados del host y el
+#     paquete del efecto se instala ahí, no en ~/.local/share
 #   * socket Wayland propio (kube-effect-nested-0)
 # Para parar: kill del pid que se imprime al final.
 # se aconseja cerrar el anterior proceso para que no se consuma muchos recursos
@@ -30,26 +47,67 @@ cd "$(dirname "$0")/.." || exit 1
 
 usage() {
     cat <<'EOF'
-uso: scripts/kwin-nested-test.sh [--no-native] [--help]
+uso: scripts/kwin-nested-test.sh [--no-native] [--no-plasma] [--no-apps]
+                      [--no-follow] [--help]
 
-  (sin opciones)  compila native/ antes de arrancar (aborta si falla) y abre
-                  el KCM nativo dentro del anidado (ADR-015)
+  Por defecto: como una INSTALACIÓN LIMPIA de Plasma — kwinrc de fábrica, 3
+  escritorios virtuales, una ventana por cara y plasmashell con el panel y el
+  wallpaper de sistema. Los plasmoids DESCARGADOS no se cargan: el anidado usa
+  XDG_DATA_HOME temporal, así que ni ~/.local/share/plasma/plasmoids (ni sus
+  errores) aparece en la prueba; solo lo que trae el paquete del sistema.
+
   --no-native     modo SIN COMPILAR: no compila native/, no sourcea prefix.sh
                   ni lanza kcmshell6. El efecto QML sigue completo.
+  --no-plasma     no lanza plasmashell: sin panel ni wallpaper de escritorio
+                  (queda el casco del efecto y las ventanas; log más corto)
+  --with-plasma   explícito (ya es el defecto)
+  --no-apps       no lanza ventanas (las 3 caras salen vacías)
+  --all           plasmashell + ventanas (es el defecto desde 2026-11-25)
+  --no-follow     no sigue los logs: imprime el resumen y termina (el anidado
+                  sigue vivo; se para con el 'kill' que imprime)
   -h, --help      muestra esta ayuda
 
-Variable de entorno:
+Variables de entorno:
+  KUBE_NESTED_CONFIG=clean|host
+                  clean (defecto): config de FÁBRICA, como una instalación limpia
+                  de Plasma (solo se hereda [Effect-kube-effect] del host)
+                  host: copia el kwinrc completo del host y apaga los demás efectos
   KUBE_NESTED_KEEP_EFFECTS="blur,screenshot"
-                  conserva esos efectos del host en el anidado (por defecto se
-                  apagan todos menos kube-effect)
+                  solo en modo host: conserva esos efectos
+  KUBE_NESTED_SHORTCUT="Meta+Shift+K"
+                  atajo con el que se abre el cubo DENTRO del anidado. Meta+K
+                  no sirve: el KWin del host lo tiene como atajo global y se lo
+                  queda antes de que la ventana anidada reciba la tecla
+  KUBE_NESTED_APPS="konsole dolphin kate"
+                  lista de ventanas a repartir entre los escritorios
 EOF
 }
 
 NATIVE=1
+FOLLOW=1
+PLASMA=1
+APPS=1
+DESKTOPS=3
 for argument in "$@"; do
     case "$argument" in
     --no-native)
         NATIVE=0
+        ;;
+    --no-plasma)
+        PLASMA=0
+        ;;
+    --with-plasma)
+        PLASMA=1
+        ;;
+    --no-apps)
+        APPS=0
+        ;;
+    --all)
+        PLASMA=1
+        APPS=1
+        ;;
+    --no-follow)
+        FOLLOW=0
         ;;
     -h | --help)
         usage
@@ -69,20 +127,63 @@ SOCK="kube-effect-nested-0"
 # socket name already carries it, and this flag makes it explicit for any child
 # that only inspects the environment.
 export KUBE_NESTED=1
+# El backend ffmpeg de QtMultimedia sondea dispositivos de aceleración por HW al
+# construir el MediaPlayer, y uno de ellos (vaapi) abre el X11 display con
+# XOpenDisplay. Dentro del anidado eso es un bloqueo MUTUO: el hilo principal de
+# kwin_wayland se queda en xcb_connect_to_fd esperando a su propio Xwayland, y
+# ese Xwayland necesita el bucle de eventos de KWin para terminar de nacer. El
+# resultado es el "se traba, no lanza el efecto y no hay nada en el log" (pila
+# tomada con eu-stack el 2026-11-25: QuickSceneEffect::addScreen → QQuickMediaPlayer
+# → av_hwdevice_ctx_create → XOpenDisplay → __poll). Vaciar la lista deja el
+# sondeo HW apagado y el MediaPlayer se construye sin tocar X11.
+export QT_FFMPEG_DECODING_HW_DEVICE_TYPES="${QT_FFMPEG_DECODING_HW_DEVICE_TYPES-}"
 CFG="/tmp/kube-effect-test-config"
+# Data dir propia: una instalación limpia no tiene plasmoids descargados, así que
+# el anidado tampoco debe ver los del host (~/.local/share/plasma/plasmoids).
+# El paquete del efecto se instala aquí: kpackagetool6 respeta XDG_DATA_HOME, y
+# NO se exporta global para no mover el stamp de make native
+# (~/.local/share/kube-effect). Se pasa por línea de mando a cada proceso del
+# anidado.
+DATA="$CFG/data"
+mkdir -p "$CFG" "$DATA"
 ADDR="/tmp/kube-effect-nested.addr"
 PIDFILE="/tmp/kube-effect-nested.pid"
+KWIN_LOG="/tmp/kube-effect-nested.log"
+PLASMA_LOG="/tmp/kube-effect-nested-plasma.log"
+KCM_LOG="/tmp/kube-effect-nested-kcm.log"
+CHILD_PIDS=()
 RUN="$(id -u)"
 SAY() { echo "[$(date +%H:%M:%S)] $*"; }
 KUBE_DATA="${XDG_DATA_HOME:-$HOME/.local/share}/kube-effect"
 
 # A pid found in /tmp is only our nested KWin when it is numeric AND its comm is
 # kwin_wayland: a stale pidfile could otherwise name (and kill) any process.
+# The pidfile is written by the inner shell right before "exec kwin_wayland", so
+# it holds the compositor itself and not dbus-run-session (killing that one left
+# the old kwin_wayland orphaned).
 is_nested_pid() {
     case "$1" in
     '' | *[!0-9]*) return 1 ;;
     esac
     ps -o comm= -p "$1" 2>/dev/null | grep -q 'kwin_wayland'
+}
+
+# Stops everything this script started: sample apps, plasmashell, the KCM and
+# finally the compositor (TERM, then KILL after 4 s).
+stop_nested() {
+    local pid
+    for pid in ${CHILD_PIDS[@]+"${CHILD_PIDS[@]}"}; do
+        kill "$pid" 2>/dev/null || true
+    done
+    if is_nested_pid "$NESTED_PID"; then
+        kill "$NESTED_PID" 2>/dev/null || true
+        for _ in $(seq 1 20); do
+            is_nested_pid "$NESTED_PID" || break
+            sleep 0.2
+        done
+        is_nested_pid "$NESTED_PID" && kill -9 "$NESTED_PID" 2>/dev/null || true
+    fi
+    rm -f "$PIDFILE" "$ADDR" "/run/user/$RUN/$SOCK" "/run/user/$RUN/$SOCK.lock"
 }
 
 # Qt plugin dir of the private prefix (ECM writes it into prefix.sh). It is
@@ -130,54 +231,110 @@ else
     SAY "native/: sin fuentes; sigo solo con el efecto QML"
 fi
 
-# 2. Instalar el efecto (para que el anidado lo encuentre).
-if kpackagetool6 --type KWin/Effect --upgrade "$(pwd)/package/" >/dev/null 2>&1; then
-    SAY "efecto instalado/actualizado"
-elif kpackagetool6 --type KWin/Effect --install "$(pwd)/package/" >/dev/null 2>&1; then
-    SAY "efecto instalado"
+# 2. Instalar el efecto en la data aislada (para que el anidado lo encuentre,
+#    y solo él: el host no se entera de esta copia).
+if XDG_DATA_HOME="$DATA" kpackagetool6 --type KWin/Effect --upgrade "$(pwd)/package/" >/dev/null 2>&1; then
+    SAY "efecto instalado/actualizado en $DATA"
+elif XDG_DATA_HOME="$DATA" kpackagetool6 --type KWin/Effect --install "$(pwd)/package/" >/dev/null 2>&1; then
+    SAY "efecto instalado en $DATA"
 else
     SAY "aviso: no pude instalar el efecto; usa 'make install'"
 fi
 
-# 3. Config aislada: copia tu kwinrc y ajusta desktops + efecto.
-rm -rf "$CFG"
-mkdir -p "$CFG"
-[ -f "$HOME/.config/kwinrc" ] && cp "$HOME/.config/kwinrc" "$CFG/kwinrc"
+# 3. Config del anidado. KUBE_NESTED_CONFIG=clean (defecto) = FÁBRICA: no se
+#    copia tu kwinrc, así que el anidado se comporta como una instalación limpia
+#    de Plasma (sin tus efectos, atajos ni ajustes personales). Lo único que se
+#    hereda es la sección [Effect-kube-effect], que es lo que se prueba (modo de
+#    fondo, imagen, vídeo, bordes). KUBE_NESTED_CONFIG=host = comportamiento
+#    antiguo: kwinrc completo del host y todos los demás efectos apagados.
+rm -rf "$CFG/kwinrc" "$CFG/kwinrc.tmp"
+CONFIG_MODE="${KUBE_NESTED_CONFIG:-clean}"
+
+case "$CONFIG_MODE" in
+clean)
+    SAY "config de fábrica (KUBE_NESTED_CONFIG=clean)"
+    ;;
+host)
+    SAY "config heredada del host (KUBE_NESTED_CONFIG=host)"
+    [ -f "$HOME/.config/kwinrc" ] && cp "$HOME/.config/kwinrc" "$CFG/kwinrc"
+    ;;
+*)
+    echo "error: KUBE_NESTED_CONFIG vale '$CONFIG_MODE' (limpia|host)" >&2
+    exit 2
+    ;;
+esac
 
 # 3 escritorios virtuales = 3 caras.
-kwriteconfig6 --file "$CFG/kwinrc" --group Desktops --key Number 3
+kwriteconfig6 --file "$CFG/kwinrc" --group Desktops --key Number "$DESKTOPS"
 kwriteconfig6 --file "$CFG/kwinrc" --group Desktops --key Rows 1
-# Solo kube-effect activo en el anidado: cualquier otro efecto del host se apaga
-# (menos efectos cargados = menos GPU/CPU y menos ruido en las pruebas).
-# KUBE_NESTED_KEEP_EFFECTS="blur,screenshot" conserva esos (p.ej. screenshot hace
-# falta para WindowThumbnail/wallpapers reales).
-KEEP_EFFECTS="${KUBE_NESTED_KEEP_EFFECTS:-}"
-awk -v keep="$KEEP_EFFECTS" '
-    /^\[/ { inGroup = ($0 == "[Plugins]") }
-    inGroup && /^[A-Za-z0-9_.-]+Enabled=/ {
-        split($0, kv, "=")
-        id = kv[1]; sub(/Enabled$/, "", id)
-        split(keep, keepList, ",")
-        wanted = 0
-        for (i in keepList) if (keepList[i] == id) wanted = 1
-        print id "Enabled=" (wanted ? "true" : "false")
-        next
-    }
-    { print }
-' "$CFG/kwinrc" >"$CFG/kwinrc.tmp" && mv "$CFG/kwinrc.tmp" "$CFG/kwinrc"
-kwriteconfig6 --file "$CFG/kwinrc" --group Plugins --key kube-effectEnabled true
-# Fondo del cubo por defecto del anidado: SkyBox (panorámica incluida).
-kwriteconfig6 --file "$CFG/kwinrc" --group Effect-kube-effect --key Background 1
-kwriteconfig6 --file "$CFG/kwinrc" --group Effect-kube-effect --key CubeFaceDisplacement 100
 
-# 4. Arrancar el KWin anidado en una ventana 1600x900, bus privado.
-SAY "arrancando KWin anidado (ventana 1600x900)..."
-XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" setsid \
+# En limpio: solo la sección del efecto, copiada del host si existe.
+if [ "$CONFIG_MODE" = "clean" ] && [ -f "$HOME/.config/kwinrc" ]; then
+    awk '
+        /^\[/ { inGroup = ($0 == "[Effect-kube-effect]") }
+        inGroup { print }
+    ' "$HOME/.config/kwinrc" >"$CFG/kube-effect-section.tmp"
+    if [ -s "$CFG/kube-effect-section.tmp" ]; then
+        cat "$CFG/kube-effect-section.tmp" >>"$CFG/kwinrc"
+        SAY "ajustes de [Effect-kube-effect] heredados del host"
+    else
+        SAY "el host no tiene [Effect-kube-effect]: fondo por defecto (Color)"
+    fi
+    rm -f "$CFG/kube-effect-section.tmp"
+fi
+
+# En modo host se apagan los demás efectos (menos carga y menos ruido); en modo
+# limpio no hay efectos del host que apagar. KUBE_NESTED_KEEP_EFFECTS="blur,"
+# "screenshot" conserva los que indiques (screenshot hace falta para thumbnails
+# y wallpapers reales).
+if [ "$CONFIG_MODE" = "host" ]; then
+    KEEP_EFFECTS="${KUBE_NESTED_KEEP_EFFECTS:-}"
+    awk -v keep="$KEEP_EFFECTS" '
+        /^\[/ { inGroup = ($0 == "[Plugins]") }
+        inGroup && /^[A-Za-z0-9_.-]+Enabled=/ {
+            split($0, kv, "=")
+            id = kv[1]; sub(/Enabled$/, "", id)
+            split(keep, keepList, ",")
+            wanted = 0
+            for (i in keepList) if (keepList[i] == id) wanted = 1
+            print id "Enabled=" (wanted ? "true" : "false")
+            next
+        }
+        { print }
+    ' "$CFG/kwinrc" >"$CFG/kwinrc.tmp" && mv "$CFG/kwinrc.tmp" "$CFG/kwinrc"
+fi
+kwriteconfig6 --file "$CFG/kwinrc" --group Plugins --key kube-effectEnabled true
+# 3b. Atajo del anidado. Con o sin captura de puntero, el teclado pasa ANTES por
+#     el compositor del host: si el host tiene kube-effect activo, su KWin tiene
+#     "[kwin] Kube Effect=Meta+K" registrado y se come la tecla, así que dentro
+#     del anidado no pasa nada. Si el host NO lo tiene activo, Meta+K está libre
+#     y es lo más cómodo. KUBE_NESTED_SHORTCUT manda siempre.
+HOST_KUBE_ON=$(kreadconfig6 --file "$HOME/.config/kwinrc" --group Plugins \
+    --key kube-effectEnabled 2>/dev/null || true)
+if [ -n "${KUBE_NESTED_SHORTCUT:-}" ]; then
+    NESTED_SHORTCUT="$KUBE_NESTED_SHORTCUT"
+elif [ "$HOST_KUBE_ON" = "true" ]; then
+    NESTED_SHORTCUT="Meta+Shift+K"
+else
+    NESTED_SHORTCUT="Meta+K"
+fi
+SAY "atajo del cubo en el anidado: $NESTED_SHORTCUT (host kube-effect=$HOST_KUBE_ON)"
+kwriteconfig6 --file "$CFG/kglobalshortcutsrc" --group kwin --key "Kube Effect" \
+    "$NESTED_SHORTCUT,$NESTED_SHORTCUT,Toggle Kube Effect"
+# NO se fuerza el modo de fondo: el anidado prueba la configuración del efecto.
+# Forzar Background=1 (Image) sobre un kwinrc con Background=Video y SkyBox
+# apuntando a un .mp4 dejaba el casco sin pintar y parecía un fallo del efecto.
+
+# 4. Arrancar el KWin anidado en una ventana 1600x900, bus privado. SOLO
+#    Wayland: sin --xwayland. El proyecto no apunta a X11, y levantar un Xwayland
+#    dentro del anidado abre un bloqueo mutuo con el sondeo HW de ffmpeg (ver el
+#    export QT_FFMPEG_DECODING_HW_DEVICE_TYPES de arriba).
+SAY "arrancando KWin anidado (ventana 1600x900, solo Wayland)..."
+XDG_DATA_HOME="$DATA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" setsid \
     dbus-run-session -- \
-    sh -c 'echo $DBUS_SESSION_BUS_ADDRESS > '"$ADDR"'; exec kwin_wayland --socket '"$SOCK"' --xwayland :2 --no-lockscreen --width 1600 --height 900' \
-    >/tmp/kube-effect-nested.log 2>&1 </dev/null &
+    sh -c 'echo $$ > '"$PIDFILE"'; echo $DBUS_SESSION_BUS_ADDRESS > '"$ADDR"'; exec kwin_wayland --socket '"$SOCK"' --no-lockscreen --width 1600 --height 900' \
+    >"$KWIN_LOG" 2>&1 </dev/null &
 NESTED_PID=$!
-echo "$NESTED_PID" >"$PIDFILE"
 
 for _ in $(seq 1 30); do
     [ -s "$ADDR" ] && break
@@ -185,26 +342,56 @@ for _ in $(seq 1 30); do
 done
 NBA=$(cat "$ADDR" 2>/dev/null || true)
 if [ -z "$NBA" ]; then
-    SAY "error: el bus del anidado no arrancó; mira /tmp/kube-effect-nested.log"
+    SAY "error: el bus del anidado no arrancó; mira $KWIN_LOG"
     exit 1
 fi
+# The pidfile now carries the compositor pid (written by the inner sh before
+# exec): $! is only dbus-run-session, which is why killing it used to orphan
+# kwin_wayland.
+NESTED_PID=$(cat "$PIDFILE" 2>/dev/null || true)
 SAY "nested pid=$NESTED_PID bus=$NBA socket=$SOCK"
 
-# 5. plasmashell dentro del anidado (wallpaper real del escritorio).
-DBUS_SESSION_BUS_ADDRESS="$NBA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="$SOCK" \
-    plasmashell >/tmp/kube-effect-nested-plasma.log 2>&1 </dev/null &
-sleep 6
+# 5. plasmashell dentro del anidado: panel y wallpaper de ESCRITORIO como los
+#    trae el sistema. Con XDG_DATA_HOME temporal no se carga ningún plasmoid
+#    descargado (ni sus errores con Plasma 6.8): solo los de /usr/share. Para
+#    quitarlo: --no-plasma.
+if [ "$PLASMA" -eq 1 ]; then
+    SAY "lanzado plasmashell en el anidado (solo plasmoids de sistema)"
+    DBUS_SESSION_BUS_ADDRESS="$NBA" XDG_DATA_HOME="$DATA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="$SOCK" \
+        plasmashell >"$PLASMA_LOG" 2>&1 </dev/null &
+    CHILD_PIDS+=("$!")
+    sleep 6
+else
+    SAY "sin plasmashell en el anidado (--no-plasma): sin panel ni wallpaper de escritorio"
+fi
 
-# 6. Programas de ejemplo (en el escritorio actual). Reparte ventanas entre
-#    escritorios a tu gusto o cambia esta lista.
-for app in konsole dolphin kate; do
-    if command -v "$app" >/dev/null 2>&1; then
-        DBUS_SESSION_BUS_ADDRESS="$NBA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="$SOCK" \
+# 6. Ventanas: una por escritorio virtual, para que las 3 caras tengan contenido.
+#    Se cambia de escritorio por DBus (setCurrentDesktop) antes de lanzar cada
+#    app; así la prueba siempre empieza con las caras llenas. Lista editable con
+#    KUBE_NESTED_APPS="konsole dolphin kate".
+if [ "$APPS" -eq 1 ]; then
+    index=0
+    for app in ${KUBE_NESTED_APPS:-konsole dolphin kate}; do
+        if ! command -v "$app" >/dev/null 2>&1; then
+            SAY "aviso: no encuentro $app; sigo con la siguiente"
+            continue
+        fi
+        desktop=$(((index % DESKTOPS) + 1))
+        busctl --address="$NBA" call org.kde.KWin /KWin org.kde.KWin \
+            setCurrentDesktop i "$desktop" >/dev/null 2>&1 || true
+        DBUS_SESSION_BUS_ADDRESS="$NBA" XDG_DATA_HOME="$DATA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="$SOCK" \
             "$app" >/dev/null 2>&1 </dev/null &
-        SAY "lanzado $app"
+        CHILD_PIDS+=("$!")
+        SAY "lanzado $app en el escritorio $desktop"
         sleep 2
-    fi
-done
+        index=$((index + 1))
+    done
+    # De vuelta al primer escritorio: la prueba empieza siempre igual.
+    busctl --address="$NBA" call org.kde.KWin /KWin org.kde.KWin \
+        setCurrentDesktop i 1 >/dev/null 2>&1 || true
+else
+    SAY "sin ventanas en el anidado (--no-apps: las 3 caras salen vacías)"
+fi
 
 # 7. KCM nativo opcional DENTRO del anidado (ADR-015): mismo bus D-Bus y mismo
 #    XDG_CONFIG_HOME, así que escribe en el kwinrc del test, no en el del host.
@@ -223,7 +410,7 @@ else
         KCM_STATUS="compilado pero no instalado ($KCM_SO); el efecto QML sigue completo"
         SAY "aviso: falta $KCM_SO; no lanzo kcmshell6 (make native lo instala)"
     else
-        KCM_STATUS="abierto dentro del anidado (log: /tmp/kube-effect-nested-kcm.log)"
+        KCM_STATUS="abierto dentro del anidado (log: $KCM_LOG)"
         SAY "lanzando kcmshell6 kcm_kube_effect_plus dentro del anidado"
         (
             # ECM's prefix.sh expands variables unguarded; the harness runs with
@@ -232,8 +419,9 @@ else
             # shellcheck source=/dev/null
             . "$KUBE_DATA/prefix.sh"
             set -u
-            DBUS_SESSION_BUS_ADDRESS="$NBA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="$SOCK" \
-                kcmshell6 kcm_kube_effect_plus >/tmp/kube-effect-nested-kcm.log 2>&1 </dev/null &
+            DBUS_SESSION_BUS_ADDRESS="$NBA" XDG_DATA_HOME="$DATA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="$SOCK" \
+                kcmshell6 kcm_kube_effect_plus >"$KCM_LOG" 2>&1 </dev/null &
+            CHILD_PIDS+=("$!")
         )
         # System Settings only finds KCMs through the Qt plugin paths: a private
         # install shows up there only with prefix.sh in the environment (or a
@@ -264,8 +452,11 @@ cat <<EOF
  >>> LAS PRUEBAS LAS HACES TÚ, DIRECTAMENTE EN LA VENTANA ANIDADA. <<<
      (Este script NO toma capturas de pantalla.)
 
-   1. Haz clic en la ventana del anidado para darle foco.
-   2. Pulsa Meta+K para abrir / cerrar el cubo.
+   1. Dale foco a la ventana del anidado (clic dentro).
+   2. Pulsa $NESTED_SHORTCUT para abrir / cerrar el cubo. Meta+K NO vale:
+      el compositor del host se queda ese atajo global y dentro del anidado
+      nunca llega a KWin. Alternativa sin teclado: el borde superior
+      (BorderActivate=1) con el puntero capturado (Ctrl derecho captura/suelta).
    3. Configura el efecto DENTRO del anidado (System Settings), o edita
       $CFG/kwinrc  sección [Effect-kube-effect].
    4. Rota los escritorios/fondos y comprueba lo que quieras.
@@ -277,5 +468,36 @@ cat <<EOF
    Modo de este arnés: $NATIVE_LABEL
 
    Parar el anidado:   $STOP_HINT
+   Logs:               $KWIN_LOG
+                       $PLASMA_LOG
+                       $KCM_LOG
 ======================================================================
 EOF
+
+# 8. Seguir los logs en vivo. Ctrl+C para todo (deja de seguir y para el
+#    anidado); con --no-follow se sale dejándolo vivo, como antes.
+if [ "$FOLLOW" -eq 1 ] && is_nested_pid "$NESTED_PID"; then
+    trap 'echo; SAY "Ctrl+C: parando el anidado…"; stop_nested; SAY "anidado parado"; exit 0' INT TERM
+    LOGS=("$KWIN_LOG")
+    [ -f "$PLASMA_LOG" ] && LOGS+=("$PLASMA_LOG")
+    [ -f "$KCM_LOG" ] && LOGS+=("$KCM_LOG")
+    SAY "siguiendo logs en vivo (Ctrl+C para parar el anidado)"
+    # Un solo tail: sin tuberías que dejen procesos huérfanos y con una sola
+    # señal para cortarlo. Con varios ficheros imprime la cabecera '==> x <=='.
+    tail -n +1 -F "${LOGS[@]}" 2>/dev/null &
+    TAIL_PID=$!
+    while is_nested_pid "$NESTED_PID" && kill -0 "$TAIL_PID" 2>/dev/null; do
+        sleep 1
+    done
+    kill "$TAIL_PID" 2>/dev/null || true
+    wait "$TAIL_PID" 2>/dev/null || true
+    trap - INT TERM
+    if is_nested_pid "$NESTED_PID"; then
+        SAY "dejo de seguir los logs; el anidado sigue vivo (kill $NESTED_PID)"
+    else
+        SAY "el compositor anidado terminó; limpio lo que lanzó el arnés"
+        stop_nested
+    fi
+elif [ "$FOLLOW" -eq 0 ]; then
+    SAY "logs en $KWIN_LOG · $PLASMA_LOG · $KCM_LOG (--no-follow: no los sigo)"
+fi

@@ -7,6 +7,30 @@ medidos en ESTA máquina.
 
 ## A. Recarga de código (el que más tiempo costó)
 
+### ❌ TRAMPA: Xwayland dentro del anidado + MediaPlayer = bloqueo mutuo
+
+Síntoma: el anidado **no lanza el efecto, se traba y no deja interactuar; no hay
+nada en el log**. El hilo principal queda dormido (DBus no responde, `busctl call
+… currentDesktop` expira) y la pila lo explica:
+
+```
+KWin::QuickSceneEffect::addScreen → QQml… → QQuickMediaPlayer → QMediaPlayer::QMediaPlayer
+  → av_hwdevice_ctx_create → XOpenDisplay → xcb_connect_to_fd → __poll   (eterno)
+```
+
+El backend ffmpeg de QtMultimedia sondea dispositivos HW al construir el
+`MediaPlayer` y uno de ellos abre el X11 *display*. En el anidado ese display era
+su **propio** Xwayland (`--xwayland :2`), que aún no podía atender porque
+necesita el bucle de eventos de KWin, y KWin estaba esperando al Xwayland.
+
+Arreglo (y por qué el proyecto es **solo Wayland**):
+1. El arnés arranca `kwin_wayland` **sin** `--xwayland`: no hay X que esperar.
+2. Por seguridad, además `QT_FFMPEG_DECODING_HW_DEVICE_TYPES=""` en el entorno
+   del anidado (el sondeo HW por X11 no tiene nada que hacer aquí).
+
+Diagnóstico sin sudo gráfico: `eu-stack -p $(cat /tmp/kube-effect-nested.pid)`
+(37 pilas) y comprobar si el compositor responde por DBus.
+
 ### ❌ FALSO: `unloadEffect` + `loadEffect` recarga el QML
 
 No. KWin cachea el QML compilado **en memoria por URL** (bug KDE #514131,

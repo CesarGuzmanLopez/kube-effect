@@ -25,6 +25,9 @@ Node {
     }
 
     function desktopAzimuth(desktop) {
+        // x11DesktopNumber es el NOMBRE del rol que expone el modelo de
+        // escritorios virtuales de KWin (heredado de X11); en Wayland también es
+        // el número de escritorio, 1..N. No es una ruta de compatibilidad X11.
         return cube.angleTick * (desktop.x11DesktopNumber - 1);
     }
 
