@@ -77,6 +77,9 @@ def run_scenario(application, import_root, desktop_count):
     = the scenario passed), info describes the exercised Helpers path.
     """
     problems: list[str] = []
+    # The handler is module-level: drop the previous scenario's messages so an
+    # error found in the drum run is not re-reported under segment 2 and 1.
+    messages.clear()
     engine = QQmlEngine()
     engine.addImportPath(str(import_root))
     engine.rootContext().setContextProperty("stubDesktopCount", desktop_count)
@@ -104,15 +107,20 @@ def run_scenario(application, import_root, desktop_count):
     distance = float(harness.property("faceDistance"))
     cull_mode = int(harness.property("faceCullMode"))
     none_value = int(harness.property("noneCullValue"))
-    # backCullValue is still exported by the harness (the pinned property
-    # must not equal it anywhere); read it without binding a name.
-    back_value_unused = int(harness.property("backCullValue"))  # noqa: F841
+    # backCullValue is exported by the harness: the pinned property must not
+    # equal it anywhere — read and assert it (a regressed cull pin would
+    # otherwise pass the != none_value checks by coincidence of value).
+    back_value = int(harness.property("backCullValue"))
 
     # faceCullMode is pinned to Material.NoCulling in the runtime (ADR-025
     # point 12 reverted): check the initial value before the sweeps.
     if cull_mode != none_value:
         problems.append(
             "initial faceCullMode is not Material.NoCulling (cameraRadius 0)"
+        )
+    if cull_mode == back_value:
+        problems.append(
+            "initial faceCullMode is Material.BackFaceCulling (the culling revert regressed)"
         )
 
     if not is_cylinder:

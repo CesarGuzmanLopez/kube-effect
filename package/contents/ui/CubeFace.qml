@@ -28,12 +28,11 @@ Model {
     // flat built-in rectangle. Qt requires an empty source when a custom
     // geometry is used, hence the switch in both properties.
     property Geometry cylinderMesh: null
-    // Material culling (ADR-025 point 12): the cube passes Material enum
-    // values already — BackFaceCulling on cylinder faces while the camera
-    // stays outside R (the mirrored inner wall no longer covers the front
-    // faces), NoCulling everywhere else (polygon, sheet, the drum seen
-    // from within): the virgin look of ADR-023 needs no culling and this
-    // default keeps it byte-identical for those shapes.
+    // Material culling: ALWAYS Material.NoCulling (ADR-025 point 12 reverted
+    // the dynamic BackFaceCulling experiment: it also hid the inner wall that
+    // ADR-023 keeps on purpose, the polygon parity). Cube.faceCullMode is the
+    // single source; the TODO for the real overlap fix (paint order, not
+    // culling) and the cylinderCullMode seed live in Cube.qml.
     property int cullMode: Material.NoCulling
 
     pickable: true
