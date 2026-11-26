@@ -33,13 +33,17 @@ Item {
     property real minRadius: 100
     property real maxRadius: 20000
 
-    // Sheet azimuth cap (ADR-024): ScreenView links it to
-    // Constants.sheetAzimuthLimit(faceCount) — 80 with one desktop (the
-    // mirrored back of the single quad must never face the camera), 360 =
-    // no limit for the two-sided sheet and the polygon. The drag path below
-    // clamps directly (no wrap, no normalization); arrows and states clamp
-    // through Constants.clampSheetAzimuth where they build their target.
-    property real azimuthLimit: 360
+    // Turn range (ADR-024/ADR-025): ScreenView links these to the live
+    // shape and count — null/null (no limit) for the two-sided sheet, the
+    // drum and the polygon; [-80, 80] for the flat sheet with one desktop
+    // (the mirrored back of the single quad must never face the camera);
+    // the asymmetric [-60, 180] band for the curved segment with two.
+    // The drag path below clamps the raw sum directly between min and max
+    // (no wrap, no normalization — a pull that crossed the band would
+    // otherwise teleport the view); arrows and states clamp through
+    // Constants.clampAzimuthRange where they build their target.
+    property var azimuthMin: null
+    property var azimuthMax: null
 
     onRotationChanged: root.updateCamera()
     onRadiusChanged: root.updateCamera()
@@ -53,7 +57,7 @@ Item {
         }
 
         onActiveChanged: {
-            if (active) {
+            if (dragHandler.active) {
                 mousePressed(Qt.vector2d(centroid.position.x, centroid.position.y));
             } else {
                 mouseReleased(Qt.vector2d(centroid.position.x, centroid.position.y));
@@ -129,18 +133,19 @@ Item {
                     azimuthDelta = -azimuthDelta;
                 }
                 let azimuth;
-                if (root.azimuthLimit < 360) {
-                    // Limited sheet (ADR-024): the drag NEVER wraps, so clamp
-                    // the raw sum around the current angle instead of reducing
-                    // it modulo 360 first — a hard pull crossing +/-180 would
-                    // otherwise reappear on the other side and teleport the
-                    // view from +80 to -80. No normalizeSheetAzimuth here
-                    // either: only arrows and states go through that helper.
-                    const bound = Math.min(180, Math.max(0, Number(root.azimuthLimit)));
+                if (root.azimuthMin !== null && root.azimuthMax !== null) {
+                    // Limited shape (ADR-024/ADR-025): the drag NEVER wraps,
+                    // so clamp the raw sum between the bounds instead of
+                    // reducing it modulo 360 first — a hard pull crossing a
+                    // bound would otherwise reappear on the other side and
+                    // teleport the view. No clampAzimuthRange here either:
+                    // only arrows and states normalize through that helper
+                    // (and the range can be asymmetric: the segment band is
+                    // [-60, 180], so a symmetric +/-bound would be wrong).
                     const target = eulerRotation.y + azimuthDelta;
-                    azimuth = Math.min(bound, Math.max(-bound, target));
+                    azimuth = Math.min(Number(root.azimuthMax), Math.max(Number(root.azimuthMin), target));
                 } else {
-                    // Two-sided sheet and polygon: full turn, wrap kept.
+                    // Two-sided sheet, drum and polygon: full turn, wrap kept.
                     azimuth = (eulerRotation.y + azimuthDelta) % 360;
                 }
 
