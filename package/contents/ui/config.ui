@@ -26,7 +26,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
             <item>
                 <widget class="QLabel" name="versionLabel">
                     <property name="text">
-                        <string>kube-effect 0.0.0.3</string>
+                        <string>kube-effect 0.0.0.4</string>
                     </property>
                     <property name="alignment">
                         <set>Qt::AlignRight|Qt::AlignVCenter</set>
@@ -49,9 +49,40 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                         </attribute>
                         <layout class="QVBoxLayout" name="tabShapeLayout">
                             <item>
-                                <widget class="QLabel" name="tabShapePlaceholder">
+                                <!-- Shape (ADR-025): the items follow main.xml order
+                                     (Polygon=0, Cylinder=1): kwinrc stores the index and
+                                     the generic KCM binds this combo to it. -->
+                                <layout class="QFormLayout" name="shapeForm">
+                                    <item row="0" column="0">
+                                        <widget class="QLabel" name="shapeLabel">
+                                            <property name="text">
+                                                <string>Forma:</string>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                    <item row="0" column="1">
+                                        <widget class="QComboBox" name="kcfg_Shape">
+                                            <property name="toolTip">
+                                                <string>Polígono: N caras planas en un N-gono (el cubo virgen). Cilindro: las mismas caras curvadas sobre arcos isométricos — sin distorsión del contenido (ADR-002/ADR-025). Con 1-2 escritorios elige cómo se representa la hoja: plana con Polígono, segmento curvo de 120° con Cilindro (ADR-024/ADR-025).</string>
+                                            </property>
+                                            <item>
+                                                <property name="text">
+                                                    <string>Polígono (Polygon)</string>
+                                                </property>
+                                            </item>
+                                            <item>
+                                                <property name="text">
+                                                    <string>Cilindro (Cylinder)</string>
+                                                </property>
+                                            </item>
+                                        </widget>
+                                    </item>
+                                </layout>
+                            </item>
+                            <item>
+                                <widget class="QLabel" name="tabShapeHint">
                                     <property name="text">
-                                        <string>Con 1-2 escritorios la forma es HOJA automáticamente (ADR-024): doble cara con 2, simple con giro limitado a ±80° con 1. La elección de forma (polígono/cilindro) y el interior llegan con la fase Shape (ver doc/requerimientos.md).</string>
+                                        <string>Con 1-2 escritorios no hay tambor (no cierra con menos de 3 arcos): la forma es hoja — plana con Polígono (doble cara con 2, simple con giro limitado a ±80° con 1; ADR-024) o segmento curvo de 120° con Cilindro (giro limitado a la banda: [-60°, 60°] con 1 y [-60°, 180°] con 2; ADR-025). En el tambor (3+) la separación entre caras es el hueco ENTRE ARCOS, medido sobre la superficie: los valores negativos de «Separación entre caras» se tratan como 0; el segmento lo ignora (radio fijo). En el cilindro la pared interior de las caras traseras se ve por los huecos, como en el polígono (sin culling); el solapamiento sobre las frontales al girar se persigue aparte. El interior decorativo sigue pendiente (ver doc/requerimientos.md).</string>
                                     </property>
                                     <property name="wordWrap">
                                         <bool>true</bool>
@@ -413,7 +444,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                         <item row="0" column="1">
                                             <widget class="QDoubleSpinBox" name="kcfg_CubeFaceDisplacement">
                                                 <property name="toolTip">
-                                                    <string>Solo con 3+ escritorios: separa las caras del polígono. Con 1-2 la forma es hoja (ADR-024) y esta clave no aplica.</string>
+                                                    <string>Solo con 3+ escritorios: separa las caras del polígono (negativo = se solapan). En cilindro es el hueco entre arcos medido sobre la superficie, y los valores negativos se tratan como 0 (ADR-025). Con 1-2 la forma es hoja (ADR-024) y esta clave no aplica.</string>
                                                 </property>
                                                 <property name="minimum">
                                                     <double>-500.0</double>

@@ -533,3 +533,292 @@ stub ya no devuelve `currentDesktop` nulo — el camino poligonal la necesitaba
 visual en el anidado con 1 escritorio (no pasar de ±80° arrastrando ni con
 flechas; crear/eliminar el 2º escritorio con el cubo abierto y ver la
 re-sincronización) y con 2 (vuelta completa, cada cara con su escritorio).
+
+---
+
+## ADR-025 — Cilindro segmentado con hueco lineal.
+
+**Decisión**: la segunda forma del contrato (ADR-001) llega como **cilindro de
+N arcos**, con estas reglas:
+
+1. **Enum `Shape`** en `config/main.xml`: `Polygon` (0, default) / `Cylinder`
+   (1). Con **3+ escritorios** elige tambor (cilindro cerrado de N arcos) o
+   polígono. Con **1-2** el tambor no puede cerrarse (N≥3 es el mínimo de la
+   forma), así que `Shape` elige allí la REPRESENTACIÓN de la hoja (ADR-024):
+   plana con `Polygon` (comportamiento intacto) o **segmento curvo** con
+   `Cylinder` (punto 11). `constants.js` espeja la tabla y la resuelve con
+   `shape(value)` (desconocido → Polygon, el patrón de `backgroundMode`).
+2. **Radio por hueco LINEAL sobre la superficie**: `g = max(0,
+   CubeFaceDisplacement)` y
+
+   ```
+   R = N·(W + g) / (2π)          θ_arco = W / R          hueco angular = 2π/N − θ
+   ```
+
+   El desplazamiento entre caras consecutivas medida **sobre el cilindro** es
+   exactamente `g` (px), como en el polígono: los arcos miden W (isometría) y
+   cada hueco angular mide g/R radianes → g px. Con `g = 0` los arcos se tocan:
+   cilindro cerrado **sin piel** (ADR-003 intacto — entre arcos se ve el casco
+   SOLO si g > 0).
+3. **Negativo clampeado a 0**. En el polígono un displacement negativo encoje
+   el radio (caras solapadas); en el cilindro es geométricamente imposible: el
+   arco tiene que medir W o la textura se comprime (la isometría K=0 es el
+   contrato de ADR-002). `cylinderRadius()` clampa y el KCM lo dice en el
+   tooltip y en el hint de la pestaña Shape.
+4. **Malla**: `ProceduralMesh` (`import QtQuick3D.Helpers`) con **64 segmentos
+   fijos** (`CYLINDER_SEGMENTS`), generado por la función pura
+   `cylinderArcGeometry(faceWidth, faceHeight, radius, segments)` en
+   `constants.js` — posiciones `P(s,t) = (R·sin φ, t − H/2, R·cos φ)` con
+   `φ = (s − W/2)/R` (arco centrado en +Z), normales `x = sin φ, y = 0,
+   z = cos φ` (radiales salientes), UVs `u = s/W`, `v = t/H` con la misma
+   convención del `#Rectangle` nativo — medida sobre `Rectangle.mesh` de Qt
+   6.12: la fila inferior lleva `v = 0` y la superior `v = 1`, lo que hace
+   la dirección del eje Y — y triángulos con winding **CCW visto desde fuera**
+   (igual que los índices `0,1,2…` del rectángulo). Así `Texture` hace con
+   la malla curva exactamente lo que ya hace con el quad plano (la cara del
+   cubo se ve derecha arriba en el anidado): el compuesto sale derecho y sin
+   giro de 180°. La malla se reconstruye **solo cuando cambia (W, H, R)** —
+   bindings QML sobre la función pura, nunca por frame.
+5. **Colocación = la del polígono** (tambor): la malla se genera centrada en
+   +Z y cada cara se gira con `eulerRotation.y = angleTick · index` en
+   posición (0,0,0) — el radio vive en los vértices, no en la traslación. Así
+   `angleTick`, `desktopAt()` y `desktopAzimuth()` son idénticos en las dos
+   formas con 3+ y el hueco entre arcos queda exactamente en el bisector de
+   dos azimuts consecutivos. (El segmento de 1-2 usa los azimuts fijos del
+   punto 11; la malla sigue centrada en +Z.)
+6. **Una sola malla compartida**: las N caras son N `Model` que referencian el
+   MISMO `ProceduralMesh` (property `geometry` de Model; `source` queda vacío
+   en cilindro) — es lo que ya hacen los primitivos nativos (un `#Rectangle`
+   para todos los Models) y ahorra N-1 uploads de vértices. Cada Model aporta
+   su transformación y su material propios. (Si el anidado mostrara un problema
+   con la geometría compartida, el plan B es una instancia por cara: el cambio
+   es local a Cube/CubeFace y no toca la fórmula.)
+7. **Cámara**: con tambor `faceDistance = viewRadius = R`; los estados
+   close/distant, los límites de zoom y `safeViewRadius` usan la
+   infraestructura existente (ADR-022/024) sin fórmula nueva: R sustituye al
+   apotema del polígono. Con Shape=Cylinder y g=0 close llena la pantalla
+   igual que el polígono con el mismo W, H **en vertical** (la generatriz
+   del cilindro no se deforma: la altura llena siempre). En horizontal
+   ninguna cara curva llena como el quad plano: los bordes del arco se van
+   hacia dentro por curvatura — con el segmento de 120° la cuerda visible
+   mide 2·R·sin(60°) ≈ 0.826·W, así que close deja ~8-9 % de casco a cada
+   lado (no es bug: bordes curvos proyectados). El segmento mide sobre su
+   `R = 3W/2π` (`segmentRadius`), misma sustitución.
+8. **Contenido**: la cara cilíndrica recibe el compuesto completo
+   (`DesktopView` = wallpaper + ventanas) como `diffuseMap` sobre la malla
+   curva, con el mismo `DefaultMaterial` NoLighting + NoCulling +
+   opacity=`faceOpacity` (ADR-021 se hereda sin cambios). El texto NO se
+   deforma (isometría), solo se curva.
+9. **Módulo aislado en tiempo de ejecución**: el import de `QtQuick3D.Helpers`
+   vive SOLO en `CylinderArcMesh.qml`, y `Cube.qml` lo alcanza únicamente con
+   `isCylinder` y a través del `source` de un `Loader` (la URL se resuelve en
+   tiempo de ejecución; un delegate inline convertiría el import en
+   dependencia de compilación de todo el efecto). El `Loader` exige raíz
+   `Item`, así que el fichero es un holder `Item` de tamaño cero que expone el
+   `ProceduralMesh` en su propiedad `mesh`. Si el módulo faltara en un sistema,
+   solo falla ese `Loader`: `cylinderMesh` queda nulo, `cylinderActive` pasa a
+   false y el sólido **degrada al polígono** (o a la hoja plana con 1-2,
+   ADR-024; en ambos casos con las fórmulas planas que ya existían — nunca se
+   lee una clave que no pudo cumplirse) — el QML engine deja la línea del
+   import ausente en el log.
+   Con `Shape=Polygon` el `Loader` ni se crea: coste cero.
+10. **Hoja plana y polígono intactos**: ni la rama poligonal de `Cube`, ni
+   la hoja (ADR-024, que sigue siendo la representación con
+   `Shape = Polygon`), ni `CubeCameraController` cambian de comportamiento;
+   el cilindro es una rama nueva en la geometría de `Cube` y una geometría
+   opcional en `CubeFace`.
+11. **Segmento curvo con 1-2 escritorios** (amplía ADR-024; decisión del
+   usuario en el grill del cilindro, topes rectificados después por
+   geometría — ver abajo): 1 o 2 arcos no cierran un cilindro, así que en
+   vez de caer a la hoja plana la forma curva se representa con un
+   **segmento de cilindro de 120° por cara** — un tercio de círculo, la
+   mitad de la separación angular del tambor mínimo (N=3):
+
+   ```
+   θ_fija = 2π/3          R = W/θ = 3W/(2π)   (cylinderArcRadius: solo W)
+   1 escritorio: 1 arco centrado en 0°         → azimut limitado a [-60, 60]
+   2 escritorios: arcos centrados en 0° y 120° → azimut limitado a [-60, 180]
+   banda continua de 240°, hueco de 120° detrás (por él se ve el casco,
+   ADR-003) · tick de selección = 120° (la cara 1 vive en 120°, no en 180°)
+   ```
+
+   El hueco lineal `g` **no aplica** aquí: los arcos van adyacentes o en
+   posiciones fijas por construcción, y R depende solo de W (documentado
+   también en requerimientos §1.2/§1.3).
+
+   **Topes rectificados (medido por el usuario en el anidado con
+   DebugOverlay)**: la primera elección del usuario fue ±80 con un arco y
+   ±120 con dos; la geometría los corrigió. Con un arco de ±60°, ±80 dejaba
+   **20° de dorso** (pasado el borde del arco ya no hay superficie frontal:
+   solo el casco o, con NoCulling, la pared interior espejada). Con dos
+   arcos en [0°, 120°], el límite simétrico ±120 aparcaba la cámara en
+   **-120°, el centro exacto del hueco trasero** — vista vacía sin
+   escritorio posible. El tope correcto es la **banda de superficie**: el
+   borde de banda es el último grado con cara frontal. De ahí topes
+   **asimétricos** [-60, 60] con uno y [-60, 180] con dos (los arcos viven
+   en [-60, 180]): nunca dorso, nunca hueco — el tope es la
+   protección (el culling del punto 12 se retiró del runtime: la pared
+   interior se ve por paridad con el polígono, ADR-023).
+
+   Helpers puros en `constants.js`: `cylinderArcRadius(faceWidth)`,
+   `cylinderSegmentAzimuth(index, count)` (1→0; 2→120·index;
+   ≥3→360·index/count; basura→0), `cylinderAzimuthRange(count)` (1→[-60,60];
+   2→[-60,180]; ≥3/basura→[null,null]) y `cylinderSegmentDesktopAt(azimuth,
+   count)` — selección normalizada con espejo: |a| ≤ 60 → cara 0, más
+   abierto → cara 1 (también en negativo), −1 si no es segmento o el azimut
+   es basura. La **hoja plana conserva sus topes** (±80 con uno, sin límite
+   con dos) pero via el mismo mecanismo: `flatAzimuthRange(count)` los
+   expresa como rango simétrico y `clampAzimuthRange(azimuth, min, max)`
+   normaliza a (-180,180] y clampa (verbatim con min/max null — la paridad
+   literal pre-segmento se mantiene; el `clampSheetAzimuth` de ADR-024 y
+   el simétrico `cylinderAzimuthLimit` se retiran, su cobertura de tests
+   migra al nuevo helper). El **arrastre** no normaliza jamás (regla
+   ADR-024 intacta): clampa la suma cruda contra [min, max] — con dos
+   arcos, 190° crudos se quedan en 180° (borde de banda), no saltan a -60.
+   La malla es la MISMA generadora con θ = 2π/3 (R = 3W/2π hace θ = W/R =
+   120° por construcción); el DebugOverlay marca el caso con `shape=cyl
+   seg R=…` y `lim=-60..180`. Con `Shape = Polygon` 1-2 sigue siendo la
+   hoja plana exacta de ADR-024.
+12. **Culling dinámico RETIRADO del runtime (rectificación del usuario)**:
+   la primera lectura del problema medido en el anidado (caras traseras con
+   `f1:-0.99/f2:-0.99` cuya **pared interior espejada** aparecía por encima
+   y entre los arcos, tapando las frontales) llevó a `BackFaceCulling` con
+   cámara fuera de 1.05·R. El usuario aclaró el requisito real: **ver la
+   pared interior por los huecos y cantos es paridad con el polígono y se
+   conserva (ADR-023)**; lo que no debe pasar es que esa pared se **dibuje
+   encima** de las frontales (overlap), sobre todo al girar. Culling ≠ fix:
+   suprimía las dos cosas. El runtime vuelve a `Material.NoCulling`
+   siempre — tambor, segmento, polígono y hoja, idéntico entre sí (en
+   `Cube.faceCullMode` queda la property fija en NoCulling con un TODO que
+   apunta al fix real). `cylinderCullMode` (tokens 1/0, nunca ints del enum
+   — medido en Qt 6.12.1: Back=1, Front=2, None=3, un hardcode de 2 habría
+   dado FrontFaceCulling, el efecto opuesto) **NO se borra** de
+   `constants.js`: queda documentado como sin-uso en runtime y testeado,
+   como semilla del fix real. El fix real es de **orden de pintado**, no de
+   geometría: con `faceOpacity < 0.99` las caras entran en la pasada
+   transparente de QtQuick3D, que ordena por **centroide** del objeto — en
+   el tambor los centroides de los arcos se apilan distinto que en el
+   polígono (la malla curva separa el centro del quad del volumen que
+   ocupa), y ahí es donde una trasera puede pintarse encima de una frontal
+   viva. Con `op = 1.00` en cambio el overlap sería un bug de **profundidad**
+   (dos Models sobre la misma geometría compartida / winding), caso
+   distinto. Para separar los dos diagnósticos el overlay añade
+   `blend=0|1` (1 = las caras están en pasada transparente): la captura del
+   momento "encima" con `op` y `blend` juntos dice cual de los dos es. El
+   campo `cull=` desaparece (siempre sería none); `shape=cyl(fallback)` se
+   mantiene.
+13. **Flechas: siguiente cara real, no múltiplo crudo de tick** (rectificado
+   tras el re-review; traza medida en el segmento de 2 caras, banda
+   [-60, 180], tick 120: LEFT desde 0 → -120 → clamp -60 — el borde de
+   banda donde solo se ve casco; LEFT otra vez → delta 0, NO-op permanente:
+   el escritorio 2 (120°) era inalcanzable a la izquierda; RIGHT desde 120 →
+   240 → normalizado -120 → clamp -60 — un giro de -180° hacia atrás. Con
+   los topes simétricos viejos (±80/±120) el caso no aparecía porque los
+   múltiplos de tick caían dentro del rango por simetría; la banda
+   asimétrica separa "múltiplo de tick" de "cara existente").
+
+   Helper puro `arrowAzimuth(current, direction, tick, min, max,
+   faceAzimuths)` en `constants.js`:
+   - rango abierto → la cuenta actual idéntica (floor/ceil + umbral
+     0.05·tick + avanzar, verbatim: paridad polígono, tambor y hoja-2, con
+     359→450 y -1→-90 incluidos);
+   - rango con lista de caras → la SIGUIENTE CARA real en la dirección
+     pedida (azimut normalizado a (-180,180]; si el current pisa una cara
+     dentro del umbral se salta esa cara; sin cara en la dirección,
+     envolver dentro de la banda: la más alta para LEFT, la más baja para
+     RIGHT). Traza: RIGHT 0→120, LEFT 0→120 (envuelve), RIGHT 120→0 (sin
+     -180 hacia atrás), LEFT 120→0;
+   - una sola cara (hoja-1 [-80,80] y segmento-1 [-60,60]) → envolver
+     devuelve la misma cara → delta 0, sin salto: la hoja-1 queda quieta
+     en flechas (hoy el clamp ya normaliza ±360→0 y termina igual; paridad
+     exacta, fijada en el test);
+   - basura: current NaN → 0; tick inválido con rango abierto → current;
+     lista vacía/no-array → la cuenta abierta; lista vacía con rango real
+     → current (no-op seguro).
+
+   `Cube.faceAzimuth(index)` es la ÚNICA fuente de los azimuts de cara (el
+   propio delegate la usa para colocarse: segmento →
+   `cylinderSegmentAzimuth`, hoja plana → index·180, tambor/polígono →
+   tick·index), así una flecha jamás puede apuntar a un azimut sin cara.
+   `targetAzimuth()` (estados close/distant) consume `desktopAzimuth`
+   (cara real) + `clampAzimuthRange` — revisado, no tick crudo. El
+   arrastre no cambia: su clamp raw entre [min,max] define bordes de
+   banda, no caras, y sigue siendo correcto.
+
+**Porqué**: ADR-001/002/003 ya fijaron el contrato (dos formas, cilindro
+desarrollable sin shader, sin piel); esta ADR aterriza las decisiones que
+el spec abierto no cerraba: qué significa el desplazamiento en cilindro
+(hueco lineal g con negativo → 0, no encogimiento como en el polígono), dónde
+vive R respecto a los vértices (en la malla, con arco centrado en +Z para que
+el azimut sea una rotación idéntica al polígono), cuántas mallas (una
+compartida, no N) y qué pasa con 1-2 escritorios y Shape=Cylinder (un tambor
+no cierra con menos de 3 arcos: segmento curvo de 120° por cara, con los
+topes de banda [-60,60] / [-60,180] — rectificados por geometría sobre los
+±80/±120 simétricos que eligió el usuario: dejaban 20° de dorso con un arco
+y aparcaban en el centro del hueco con dos, pt.11 — y flechas que eligen la
+siguiente cara real, no múltiplos crudos clampeados, pt.13). El culling
+dinámico (pt.12) se probó para el overlap de la pared interior y se retiró
+del runtime: el requisito real es paridad de visión con el polígono
+(ADR-023) y el overlap es un problema de orden de pintado, no de
+culling — la semilla queda testeada para el fix.
+
+**Alternativas descartadas**:
+
+- `g` como hueco angular (θ_arco = tick − g): el hueco en px dependería de R
+  y rompería la paridad con el polígono (mismo valor, mismo aspecto).
+- Negativos con R encogido (como en polígono): exige arcos < W → comprime la
+  textura → viola ADR-002 (isometría).
+- `#Cylinder` nativo recortado o `CylinderGeometry`: UVs y arco propios que
+  no dan θ = W/R; ADR-002 ya los descartó.
+- Malla nueva por frame o por cara: la primera es innecesaria (solo cambian
+  W/H/R en resize), la segunda multiplica los uploads sin beneficio (misma
+  geometría para todas las caras).
+
+**Verificación**: `make check` (qmllint de `CylinderArcMesh.qml`;
+check-constants: `shape()`, `cylinderRadius()` con clamp y bordes NaN,
+`cylinderArcAngle()`, los helpers del segmento `cylinderArcRadius` /
+`cylinderSegmentAzimuth` / `cylinderAzimuthRange` /
+`cylinderSegmentDesktopAt` con sus bordes NaN/0/4, `flatAzimuthRange`,
+`clampAzimuthRange` (que hereda la cobertura de los retirados
+`clampSheetAzimuth` y `cylinderAzimuthLimit`: verbatim, normalización,
+límites simétricos, basura), `cylinderCullMode` (fuera→1, dentro→0,
+límite 1.05 exacto→0, NaN/radio≤0→0) y `arrowAzimuth` (la traza completa
+del re-review: RIGHT/LEFT desde 0 y desde 120 con la banda [-60,180],
+envolturas en los bordes, no-op con una sola cara —hoja-1 y segmento-1—,
+paridad verbatim current±tick con rango abierto incl. 359→450 y -1→-90,
+basura NaN), y `Cube.faceAzimuth` cubierta por la paridad de las listas de
+caras de `arrowAzimuth`; check-schema/check-ui: entry
+`Shape` ↔ combo `kcfg_Shape` en orden Polygon/Cylinder y clase QComboBox).
+Y los checks nuevos: `scripts/check-cylinder.py` instancia la malla REAL
+(`CylinderArcMesh.qml` con `ProceduralMesh`, motor QML offscreen sin
+pantalla) — tambor cerrado (g=0), tambor abierto (g=100), negativo clampeado
+y **segmento de 120° (R = 3W/2π, N=2)** — y exige vértices finitos sobre el
+radio (cilindricidad), UVs en [0,1] con u lineal en s (isometría) y v por
+fila según la convención medida, longitud de arco total = W (integral de
+θ·R, también en el segmento), normales radiales, índices en rango y winding
+CCW consistente; su `--selftest` comprueba que el validador rechaza **nueve
+rupturas** (winding invertido, vértice fuera del radio, u invertida,
+arco≠W con θ mal mantenida, v espejada, UV fuera, índice fuera, NaN y
+triángulo de menos). `scripts/check-cylinder-wiring.py` ejercita el
+**cableado real**: instancia `Cube.qml` completo contra el stub
+`org.kde.kwin` con `Shape=Cylinder` — 3 escritorios (tambor:
+`cylinderActive` true, `cylinderSegments` false, Loader→Ready con
+`cylinderMesh` Geometry no nulo o, sin `QtQuick3D.Helpers`, fallback
+`cylinderActive` false sin crash — imprime qué camino se ejercitó), 2
+escritorios (segmento: `cylinderSegments` true, `angleTick` 120) y 1
+escritorio (segmento de una cara: `cylinderSegments` true, `faceDistance`
+3W/2π) — con assert de que el holder recibió el radio correcto
+(`hypot(x, z)` de un vértice de la malla ≈ R esperada en tambor y
+segmento: cierra el cableado de bindings del Loader) — más la
+paridad de culling: con la cámara dentro, en el margen 1.05·R y fuera del
+tambor, `faceCullMode` sigue siendo `Material.NoCulling` (el assert
+documenta la retirada del punto 12: en runtime la pared interior se ve SIEMPRE,
+como en el polígono). Prueba visual en el anidado: Shape Polygon vs
+Cylinder con g=0 y g=100, zoom, la hoja con 1-2 sin cambios **con Polygon**
+y el segmento curvo con Cylinder (1 arco con [-60,60] y banda de dos arcos
+con [-60,180]; el DebugOverlay muestra `shape=cyl R=… g_eff=… blend=…` o
+`shape=cyl seg R=…`, y `shape=cyl(fallback)` sin Helpers), el overlap de
+pared interior sobre frontal capturado con `op` + `blend` (blend=0: bug de
+profundidad; blend=1: orden de la pasada transparente — ver punto 12), el hueco
+trasero dejando ver el casco y las flechas/estados sin saltos a través del
+hueco.

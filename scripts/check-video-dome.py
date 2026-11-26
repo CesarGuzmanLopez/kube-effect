@@ -270,6 +270,18 @@ def run_scenario(
     root = view.rootObject()
     root.setProperty("width", 640)
     root.setProperty("height", 360)
+    # Input OFF: this grab window really shows on the developer's desktop
+    # for the duration of the check, and a stray pointer click would run
+    # switchTo -> effect.deactivate(); the fake effect is a property map
+    # without methods, so that click produced a harness-only TypeError that
+    # failed the gate. This check validates pixels, not interaction. The
+    # return value: if the enabled property ever disappears (or root stops
+    # being an Item), setProperty silently returns False and the flaky-click
+    # failure would come back LOUDLY here instead of haunting the gate as a
+    # random TypeError. A plain assert would be stripped under python -O,
+    # so this raises explicitly.
+    if root.setProperty("enabled", False) is not True:
+        raise RuntimeError("enabled property vanished: input is NOT switched off")
 
     failures = []
 
@@ -387,7 +399,7 @@ def sheet_assertions():
         ("sheet=1", debug_contains("sheet=1")),
         ("tick=180.0", debug_contains("tick=180.0")),
         ("n=2/3", debug_contains("n=2/3")),
-        ("lim=360", debug_contains("lim=360")),
+        ("lim=none", debug_contains("lim=none")),
         ("v=320", debug_contains("v=320")),
         (
             "no sheet=0",

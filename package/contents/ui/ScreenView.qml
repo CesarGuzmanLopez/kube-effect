@@ -152,6 +152,13 @@ Item {
     // See the veil below: the cube "moves" while dragging or while the camera
     // rotation animation runs.
     readonly property bool cubeMoving: cameraController.busy || rotationAnimation.running
+    // Turn range for the camera (ADR-024/ADR-025): [min, max] degrees or
+    // [null, null] = free wrap. The flat sheet is symmetric (±80 with one
+    // desktop, none with two), the curved segment is the asymmetric band
+    // [-60, 60] / [-60, 180], the drum and the polygon are open. Computed
+    // here so the controller bindings, the states and the debug overlay all
+    // read the SAME live value (one Cube.faceCount/cylinderSegments re-eval).
+    readonly property var azimuthRange: cube.cylinderSegments ? Constants.cylinderAzimuthRange(cube.faceCount) : Constants.flatAzimuthRange(cube.faceCount)
     // DebugOverlay (ADR-023): live state painted on screen while the Advanced
     // key is on. console.log never reaches this KWin's journal and
     // org.kde.kwin.Effects.supportInformation returns an empty string for QML
@@ -181,7 +188,36 @@ Item {
         // sheet=1/0 and the azimuth limit (ADR-024): the sheet rules are live
         // state (isSheet flips mid-sync) and a stuck clamp is invisible
         // without them.
-        let line2 = "yaw=" + cube.cameraYaw.toFixed(1) + " pitch=" + root.debugEuler.x.toFixed(1) + " r=" + cameraController.radius.toFixed(0) + " op=" + root.faceOpacity.toFixed(2) + " tick=" + cube.angleTick.toFixed(1) + " n=" + cube.faceCount + "/" + cube.geometryCount + " d=" + cube.faceDistance.toFixed(0) + " v=" + cube.viewRadius.toFixed(0) + " sheet=" + (cube.isSheet ? 1 : 0) + " lim=" + cameraController.azimuthLimit.toFixed(0);
+        let line2 = "yaw=" + cube.cameraYaw.toFixed(1) + " pitch=" + root.debugEuler.x.toFixed(1) + " r=" + cameraController.radius.toFixed(0) + " op=" + root.faceOpacity.toFixed(2) + " tick=" + cube.angleTick.toFixed(1) + " n=" + cube.faceCount + "/" + cube.geometryCount + " d=" + cube.faceDistance.toFixed(0) + " v=" + cube.viewRadius.toFixed(0) + " sheet=" + (cube.isSheet ? 1 : 0) + " lim=" + (root.azimuthRange[0] === null ? "none" : root.azimuthRange[0] + ".." + root.azimuthRange[1]);
+        // Shape state (ADR-025): the resolved form, and — only while a
+        // cylinder branch is actually in effect — its radius: the drum's R
+        // plus the EFFECTIVE gap g_eff (what the mesh really used after the
+        // negative clamp; a mismatch with the KCM value is exactly what a
+        // hand-edited kwinrc would cause), the segment's fixed 3W/2pi with
+        // the "seg" tag (no g there). cyl(fallback) marks Shape=Cylinder
+        // without a mesh (QtQuick3D.Helpers missing): the solid degraded to
+        // the polygon formulas. The old cull= field is gone — faceCullMode
+        // is pinned to NoCulling (ADR-025 pt.12) — and replaced by the
+        // blend= diagnostic below.
+        line2 += " shape=" + Constants.shapeName(cube.shape);
+        if (cube.cylinderSegments) {
+            line2 += " seg R=" + cube.segmentRadius.toFixed(0);
+        } else if (cube.cylinderActive) {
+            line2 += " R=" + cube.cylinderRadius.toFixed(0) + " g_eff=" + cube.cylinderGap.toFixed(0);
+        } else if (cube.isCylinder) {
+            line2 += "(fallback)";
+        }
+        // Overlap diagnostic (ADR-025 pt.12, the problem the culling
+        // experiment did NOT solve): blend=1 means the faces sit in the
+        // transparent pass (rest/rotation face opacity < 0.99) and
+        // QtQuick3D orders them by object CENTROID — where a curved arc's
+        // centroid can lose against a front face; blend=0 (fully opaque)
+        // with an inner wall still "on top" would instead be a depth
+        // problem on the shared arc geometry. Capture the offending frame
+        // with op AND blend together: they pick which fix to write.
+        if (cube.isCylinder) {
+            line2 += " blend=" + (root.faceOpacity < 0.99 ? 1 : 0);
+        }
         for (let i = 0; i < cube.faceCount; ++i) {
             const cos = Math.cos((cube.angleTick * i - cube.cameraYaw) * Math.PI / 180);
             line2 += " f" + i + ":" + cos.toFixed(2);
@@ -523,6 +559,19 @@ Item {
             id: cube
             faceDisplacement: effect.configuration.CubeFaceDisplacement
             faceOpacity: root.faceOpacity
+            // Shape (ADR-025): resolved here through Constants.shape() so a
+            // hand-edited kwinrc value can only ever mean Polygon; below 3
+            // desktops it picks the representation (flat sheet vs curved
+            // segment), never the drum (ADR-024/ADR-025).
+            shape: Constants.shape(effect.configuration.Shape)
+            // Live camera distance for the culling seed kept ready
+            // (ADR-025 point 12 reverted): the runtime ignores it
+            // (faceCullMode is pinned to NoCulling) but the TODO fix and
+            // scripts/check-cylinder-wiring.py drive it through
+            // cylinderCullMode(). cameraController is declared later in
+            // this same component — QML ids resolve component-wide, the
+            // binding re-evaluates like the gradient-yaw one.
+            cameraRadius: cameraController.radius
             faceSize: Qt.size(root.width, root.height)
             // The yaw feeds only the debug overlay now that the face LOD is
             // retired (ADR-023): debugEuler decomposes the quaternion once,
@@ -541,12 +590,19 @@ Item {
             camera: camera
             xInvert: effect.configuration.MouseInvertedX
             yInvert: effect.configuration.MouseInvertedY
-            // Sheet azimuth cap (ADR-024): the same live count Cube branches
-            // on (faceCount, not geometryCount). The limit alone is not enough
-            // when the count CHANGES mid-open — interaction kills the state
-            // bindings — so the onFaceCountChanged handler below rewrites the
-            // rotation/radius from the current state's formulas.
-            azimuthLimit: Constants.sheetAzimuthLimit(cube.faceCount)
+            // Turn range (ADR-024 / ADR-025), see root.azimuthRange:
+            // the flat sheet answers [-80, 80] with one desktop (mirrored
+            // back rule) and none with two; the curved segment answers the
+            // asymmetric band [-60, 60] / [-60, 180] (the first symmetric
+            // ±80/±120 were rectified by geometry: past an arc edge there is
+            // no front surface, and ±120 parked in the back gap); the drum
+            // and the polygon are open, i.e. free wrap. Same live count Cube
+            // branches on (faceCount, not geometryCount). The range alone is
+            // not enough when the count or the shape CHANGES mid-open —
+            // interaction kills the state bindings — so the handlers below
+            // rewrite rotation/radius from the current state's formulas.
+            azimuthMin: root.azimuthRange[0]
+            azimuthMax: root.azimuthRange[1]
             // Zoom limits relative to the solid (ADR-022): safeViewRadius is
             // positive by construction — the sheet's half-face, or the polygon
             // apothem, whose displacement can be negative (KCM range -500..500,
@@ -590,15 +646,17 @@ Item {
             }
 
             // State target yaw: the desktop's own azimuth, put through the
-            // sheet clamp (ADR-024). desktopAzimuth already answers inside the
-            // limit for sheets (0 or 180 with the count's own tick), and with
-            // limit 360 clampSheetAzimuth returns the angle verbatim — exactly
-            // the pre-sheet behaviour; only a real cap (<360) normalizes.
+            // range clamp (ADR-024/ADR-025). desktopAzimuth already answers
+            // inside the range for sheets (0 or 180 with the count's own
+            // tick) and for the segment band (0 or 120), and with an open
+            // range clampAzimuthRange returns the angle verbatim — exactly
+            // the pre-sheet behaviour; only a real range normalizes.
             function targetAzimuth() {
-                // Bare names: azimuthLimit resolves on this controller (the
-                // object the function is declared in), currentDesktop and cube
-                // through ScreenView's component scope (as in the states).
-                return Constants.clampSheetAzimuth(cube.desktopAzimuth(currentDesktop), azimuthLimit);
+                // Bare names: azimuthMin/azimuthMax resolve on this
+                // controller (the object the function is declared in),
+                // currentDesktop and cube through ScreenView's component
+                // scope (as in the states).
+                return Constants.clampAzimuthRange(cube.desktopAzimuth(currentDesktop), azimuthMin, azimuthMax);
             }
 
             // Camera distance that makes a face of faceSize.height fill the
@@ -635,23 +693,31 @@ Item {
                 radius = state === "distant" ? distantRadius() : closeRadius();
             }
 
+            // The live list of face azimuths, straight from Cube.faceAzimuth
+            // (the same function the delegate places the faces with — an
+            // arrow can never aim at an azimuth without a face).
+            function faceAzimuthList() {
+                const out = [];
+                for (let i = 0; i < cube.faceCount; ++i) {
+                    out.push(cube.faceAzimuth(i));
+                }
+                return out;
+            }
+
             function rotateToLeft() {
                 if (rotationAnimation.running) {
                     return;
                 }
                 const eulerAngles = rotation.toEulerAngles();
-                let next = Math.floor(eulerAngles.y / cube.angleTick) * cube.angleTick;
-                if (Math.abs(next - eulerAngles.y) < 0.05 * cube.angleTick) {
-                    next -= cube.angleTick;
-                }
-                // The limited sheet clamps its target here (ADR-024): at the
-                // +/-80 edge the next tick resolves inside the bound, so the
-                // arrow holds there instead of wrapping through the mirrored
-                // back; with limit 360 the angle passes verbatim (the
-                // verbatim rule of clampSheetAzimuth keeps the pre-sheet
-                // quaternion signs intact). The drag path clamps directly in
-                // CubeCameraController instead.
-                next = Constants.clampSheetAzimuth(next, azimuthLimit);
+                // ADR-025 point 13: the arrow picks the NEXT REAL FACE to
+                // the left — with an open range the old tick arithmetic
+                // (verbatim, wrap kept); with a band (the segment's
+                // [-60, 180] is asymmetric) it cycles the faces, wrapping
+                // inside the band instead of clamping a raw tick to the
+                // edge (that left desktop 2 unreachable and did -180
+                // backwards turns). The drag path still clamps raw bounds
+                // in CubeCameraController: edges, not faces.
+                const next = Constants.arrowAzimuth(eulerAngles.y, -1, cube.angleTick, azimuthMin, azimuthMax, faceAzimuthList());
                 rotation = Quaternion.fromEulerAngles(0, next - eulerAngles.y, 0).times(rotation);
             }
 
@@ -660,11 +726,9 @@ Item {
                     return;
                 }
                 const eulerAngles = rotation.toEulerAngles();
-                let next = Math.ceil(eulerAngles.y / cube.angleTick) * cube.angleTick;
-                if (Math.abs(next - eulerAngles.y) < 0.05 * cube.angleTick) {
-                    next += cube.angleTick;
-                }
-                next = Constants.clampSheetAzimuth(next, azimuthLimit);
+                // ADR-025 point 13, mirrored: RIGHT 0 -> 120, RIGHT 120 -> 0
+                // (no -180 backwards), open ranges verbatim as before.
+                const next = Constants.arrowAzimuth(eulerAngles.y, 1, cube.angleTick, azimuthMin, azimuthMax, faceAzimuthList());
                 rotation = Quaternion.fromEulerAngles(0, next - eulerAngles.y, 0).times(rotation);
             }
         }
@@ -698,6 +762,35 @@ Item {
         target: cube
         function onFaceCountChanged() {
             cameraController.resyncToState();
+        }
+        // Shape switch with the cube open (KCM change, or the arc mesh
+        // appearing/failing — ADR-025): same story as a desktop-count change,
+        // the state bindings may be dead and R replaced the apothem (or the
+        // segment replaced the flat sheet, with its own radius and turn cap),
+        // so rewrite rotation/radius from the live shape. The two handlers
+        // cover both cylinder branches; every other flip goes through
+        // onFaceCountChanged.
+        function onCylinderActiveChanged() {
+            cameraController.resyncToState();
+        }
+        function onCylinderSegmentsChanged() {
+            cameraController.resyncToState();
+        }
+        // R changes WITH the drum in effect (ADR-025, review): the KCM can
+        // move CubeFaceDisplacement while the cube is open and a screen
+        // resize re-runs R = N(W+g)/2pi; the state radius bindings may be
+        // dead, so re-apply the live state. Gated on cylinderActive: the
+        // polygon (whose apothem moves the same way) and the flat sheet keep
+        // the exact pre-cylinder behaviour — no new resync paths for them.
+        function onCylinderRadiusChanged() {
+            if (cube.cylinderActive) {
+                cameraController.resyncToState();
+            }
+        }
+        function onFaceSizeChanged() {
+            if (cube.cylinderActive) {
+                cameraController.resyncToState();
+            }
         }
     }
 

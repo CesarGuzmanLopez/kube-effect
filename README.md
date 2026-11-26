@@ -3,17 +3,22 @@
 Clon del cubo de escritorios de KDE (efecto KWin en **QML puro**). Arranca como
 el **cubo virgen** de KDE (caras planas en polígono) y crece feature a feature.
 
-- Id: `kube-effect`. Atajo: `Meta+K`. Licencia: GPL-2.0-or-later. Versión: 0.0.0.3.
+- Id: `kube-effect`. Atajo: `Meta+K`. Licencia: GPL-2.0-or-later. Versión: 0.0.0.4.
 
 ## Qué es (estado actual)
 
-N escritorios alrededor de un polígono (el cubo virgen de KDE), con giro por
-ratón y teclado. Con 1-2 escritorios la forma es **hoja 2D** (ADR-024): doble
-cara con 2 (giro completo), simple con 1 (giro limitado a ±80°; el dorso se vería
-espejado). Sobre el virgen: **casco configurable** (Color / Imagen / Degradado
-/ **Vídeo**, con sus claves en `package/contents/config/main.xml`) y un
-**KCM genérico con UI dinámica** (combo de modo + páginas apiladas vía
-`<connections>`, sin C++). El arnés de test anidado apaga el resto de efectos.
+N escritorios alrededor de un **polígono** (el cubo virgen de KDE) o de un
+**cilindro** — las mismas caras curvadas sobre arcos isométricos sin distorsión
+(`Shape = Cylinder`, ADR-025; 64 segmentos por cara, una sola malla compartida).
+Con 1-2 escritorios el tambor no cierra: con Polygon la forma es **hoja 2D**
+(ADR-024: doble cara con 2 (giro completo), simple con 1 (giro limitado a
+±80°; el dorso se vería espejado)) y con Cylinder es un **segmento curvo** de
+arcos de 120° (giro [-60°, 60°] con 1 y [-60°, 180°] con 2, tick 120°; la
+pared interior se ve como en el polígono — ADR-025). Sobre
+el virgen: **casco configurable** (Color / Imagen / Degradado / **Vídeo**, con sus
+claves en `package/contents/config/main.xml`) y un **KCM genérico con UI
+dinámica** (combo de modo + páginas apiladas vía `<connections>`, sin C++). El
+arnés de test anidado apaga el resto de efectos.
 
 La imagen y el **vídeo** comparten mapeo (equirect 360 o plano), ajuste y giro: el
 vídeo puede envolver la escena como skydome animado o quedarse fijo como una foto.

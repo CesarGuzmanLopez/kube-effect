@@ -133,7 +133,9 @@ Item {
                     azimuthDelta = -azimuthDelta;
                 }
                 let azimuth;
-                if (root.azimuthMin !== null && root.azimuthMax !== null) {
+                // != null catches undefined too (a not-yet-evaluated binding
+                // must read as "no range", never crash the drag branch).
+                if (root.azimuthMin != null && root.azimuthMax != null) {
                     // Limited shape (ADR-024/ADR-025): the drag NEVER wraps,
                     // so clamp the raw sum between the bounds instead of
                     // reducing it modulo 360 first — a hard pull crossing a

@@ -72,6 +72,10 @@ echo "Optional (extra features only):"
 # hull falls back to the linear paint and the effect keeps working.
 check "QtQuick.Shapes (radial gradient)" "$QML/QtQuick/Shapes/qmldir" optional qt6-declarative qml6-module-qtquick-shapes
 check "RuntimeLoader (glTF runtime)" "$QML/QtQuick3D/AssetUtils/qmldir" optional qt6-quick3d qml6-module-qtquick3d-assetutils
+# Cylinder arcs (ADR-025): the ProceduralMesh of CylinderArcMesh.qml. Without
+# it the Loader fails only in cylinder mode and the solid degrades to the flat
+# polygon faces (the shape-sheet fallback documented in the catalog).
+check "QtQuick3D.Helpers (cylinder arcs)" "$QML/QtQuick3D/Helpers/qmldir" optional qt6-quick3d qml6-module-qtquick3d
 check "assimp importer plugin" "/usr/lib/qt6/plugins/assetimporters/libassimp.so" optional assimp libassimp6
 if ldconfig -p 2>/dev/null | grep -q 'libassimp\.so\.6'; then
     printf '  [ok]      %-34s %s\n' "libassimp.so.6" "ldconfig"

@@ -55,6 +55,25 @@ lint-ci: check
 # del SkyBox con probeExposure (1.0 quieto, 0.4 girando con atenuación del 40 %)
 # y falla si la propiedad no existe o el binding muere al animarla; su --selftest
 # comprueba que una propiedad inexistente sí falla.
+# check-cylinder.py instancia la malla cilíndrica REAL (CylinderArcMesh.qml
+# -> ProceduralMesh de QtQuick3D.Helpers, ADR-025) en un motor QML offscreen y
+# exige: vértices finitos sobre el radio (cilindricidad), UVs en [0,1] con u
+# lineal en s (isometría), longitud de arco total = W (integral de R·dphi),
+# normales radiales unitarias, índices en rango, winding CCW uniforme hacia
+# fuera y el clamp del desplazamiento negativo (malla idéntica a g=0). Además
+# comprueba que dos Models comparten la misma geometría (el patrón del cubo).
+# Su --selftest verifica que el validador rechaza mallas rotas (winding
+# invertido, vértice fuera del radio, UV/índice fuera, NaN, triángulo
+# ausente). Se salta (exit 0) si faltan PySide6 o QtQuick3D.Helpers.
+# check-cylinder-wiring.py instancia el Cube.qml REAL (no la malla suelta) contra
+# el stub org.kde.kwin de check-video-dome con Shape=Cylinder: 3 escritorios
+# (tambor: flags, Loader→Ready con Geometry no-nula o fallback documentado sin
+# Helpers, angleTick=360/N, faceDistance=R y paridad NoCulling dentro/margen/
+# fuera — el culling dinámico se retiró, ADR-025 pt.12), 2 (segmento:
+# cylinderSegments, angleTick 120, faceDistance 3W/2π, NoCulling) y 1 (una cara
+# en 0°, 3W/2π). Cada caso helpers comprueba además que hypot(x,z) del primer
+# vértice == el R esperado (el binding del Holder llegó a la malla).
+# No renderiza nada: basta el motor offscreen. Se salta sin PySide6.
 # check-video.py instancia HullVideo.qml (el único fichero que importa
 # QtMultimedia) con un motor QML real y comprueba los dos caminos del Loader de
 # ScreenView: módulo presente -> item y VideoOutput creados; módulo ausente y
@@ -93,6 +112,9 @@ check:
 	@if grep -q '^function ' $(QML_DIR)/contents/ui/constants.js 2>/dev/null; then python3 scripts/check-constants.py; else echo "check-constants: skipped (no helpers in constants.js)"; fi
 	@python3 scripts/check-scene-environment.py
 	@python3 scripts/check-scene-environment.py --selftest
+	@python3 scripts/check-cylinder.py
+	@python3 scripts/check-cylinder.py --selftest
+	@python3 scripts/check-cylinder-wiring.py
 	@python3 scripts/check-video.py
 	@python3 scripts/check-video-dome.py
 	@python3 scripts/check-features.py

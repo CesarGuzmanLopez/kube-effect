@@ -27,38 +27,109 @@ casco a través de los huecos (como el cubo de KDE).
   separación puede ser **negativa** (las caras se solapan, R encoge) hasta
   `-anchoCara` (R→0); positiva = huecos entre caras; 0 = pegadas.
 
-### 2.2 Cilindro (isométrico, sin shader)
+### 2.2 Cilindro (isométrico, sin shader) — cómo ES (ADR-025)
 
 El cilindro es una superficie **desarrollable** (curvatura gaussiana K=0): un plano
 se envuelve sobre él **sin distorsión**. Por eso el contenido del escritorio se
-puede curvar sobre un cilindro sin estirarlo → **sin vertex shader**.
+curva sobre un cilindro sin estirarlo → **sin vertex shader**, QML puro.
 
-Geometría (arco de cilindro, eje Y, radio R, ancho de cara W, alto H):
+Geometría real (arco de cilindro, eje Y, radio R, ancho de cara W, alto H; la
+cara se centra en el azimut 0 = +Z y la rotación por cara hace el resto):
 
 ```
-φ(s) = φ0 + s / R          s ∈ [0, W]        (mapeo isométrico: arco = R·φ = W)
-P(s,t) = ( R·sin(φ), t, R·cos(φ) )           t ∈ [0, H]
-normal(s) = ( sin(φ), 0, cos(φ) )
-UV:        u = s / W,   v = t / H
+g      = max(0, CubeFaceDisplacement)   → hueco LINEAL entre arcos (negativos = 0)
+R      = N·(W + g) / (2π)               → cylinderRadius(N, W, g)   (constants.js)
+θ      = W / R                          → cylinderArcAngle(W, R)    (arco = R·θ = W)
+φ(s)   = (s − W/2) / R                  → arco centrado en +Z, s ∈ [0, W]
+P(s,t) = ( R·sin φ, t − H/2, R·cos φ )  → t ∈ [0, H]
+normal = ( sin φ, 0, cos φ )            → radial saliente
+UV:    u = s / W,  v = t/H              → misma convención que #Rectangle (v=0 abajo)
 ```
 
-Relación clave: **θ = W / R** (si no se cumple, la textura se estira/comprime).
-el radio dependera de la resolucion ratio de pantalla
-Implementación en QML puro con **`ProceduralMesh`** (`import QtQuick3D.Helpers`,
-Qt 6.6+):
+Cómo está implementado:
 
-- Segmentos: 32 (moderado) – 64 (arco grande/cerca). Crear la malla una vez; no
-  regenerarla por frame si solo cambia la transformación.
-- `ProceduralMesh` es sólo QML (suficiente aquí). Para máximo rendimiento/multi-
-  pantalla, la alternativa sería `QQuick3DGeometry` en C++ (fuera del contrato
-  QML-puro).
+- **Función pura** `cylinderArcGeometry(faceWidth, faceHeight, radius, segments)`
+  en `constants.js`: devuelve `{positions, normals, uvs, indexes}` como listas de
+  `Qt.vector3d/vector2d/uint` (130 vértices, 384 índices con 64 segmentos). Sin
+  KWin ni escena: es lo que validan los checks (ADR: decisión testeable).
+- **Componente con módulo aislado** (`CylinderArcMesh.qml`): es el
+  **único** fichero del efecto que importa `QtQuick3D.Helpers` (el patrón de
+  `HullVideo.qml`/`HullRadial.qml`, ADR-022). `Cube.qml` lo alcanza solo con
+  `isCylinder` y a través del `source` de un `Loader` — la URL se resuelve en
+  tiempo de ejecución, y un delegate inline habría convertido el import en
+  dependencia de compilación de todo el efecto. Como un `Loader` solo carga
+  raíces `Item`, el fichero es un holder `Item` de tamaño cero que expone el
+  `ProceduralMesh` en su propiedad `mesh`. Si el módulo faltara, solo falla
+  ese `Loader`: `cylinderMesh` queda nulo, `cylinderActive` pasa a false y el
+  sólido degrada al polígono plano (caras rectangulares, fórmulas de cámara
+  poligonales). Cuando el módulo está, el objeto es el `ProceduralMesh` y se
+  construye **una vez por cambio de (W, H, R)** — los bindings no corren por
+  frame; girar y hacer zoom son transformaciones.
+- **Una sola malla para las N caras** (`ADR-025` decisión): el `ProceduralMesh`
+  vive en `CylinderArcMesh.qml` (holder `Item` de tamaño cero; `Cube.qml` lo
+  lee por `item.mesh`) y cada `CubeFace` (un `Model`) lo referencia con su
+  propiedad `geometry` (con `source` vacío). En QML/QtQuick3D un `Geometry` puede
+  referenciarlo más de un `Model` — es exactamente el patrón de los primitivos
+  compartidos (`"#Rectangle"`); `scripts/check-cylinder-wiring.py` lo prueba con
+  dos Models sobre la misma geometría. Si el anidado mostrara un problema de
+  referenciación múltiple, el plan B es una instancia por cara (la fórmula no
+  cambia; solo dónde vive el objeto).
+- **Colocación**: `eulerRotation.y = angleTick * index` (idéntico al polígono
+  con 3+; el segmento de 1-2 fija sus propios azimuts — punto segmento
+  abajo) y
+  `position = (0,0,0)`; el radio vive en los **vértices** de la malla, no en la
+  traslación. Winding **CCW hacia fuera**, verificado por `check-cylinder.py`;
+  el `DefaultMaterial` mantiene `NoCulling` SIEMPRE — polígono, hoja, tambor
+  y segmento: por los huecos y cantos se ven los dorso de las caras lejanas
+  (paridad con el cubo virgen, ADR-003/ADR-023; en el tambor con g=0 los
+  arcos se tocan y no hay huecos). El culling dinámico que se probó aquí
+  (fuera de 1.05·R `BackFaceCulling`) **se retiró del runtime**: eliminaba
+  también la visión de la pared interior que el usuario quiere conservar;
+  el problema real —que esa pared se DIBUJE ENCIMA de las frontales al
+  girar— es de orden de pintado/profundidad, no de culling (ADR-025 pt.12).
+  El helper `cylinderCullMode` queda testeado como semilla del fix:
+  devuelve tokens 1/0 y los ints del enum NO se hardcodean (Qt 6.12.1:
+  Back=1, Front=2, None=3; un 2 fijo habría dado FrontFaceCulling, el
+  efecto opuesto). El overlay distingue los dos fixes posibles con
+  `blend=0|1` (1 = caras en pasada transparente → orden por centroide;
+  0 con overlap = bug de profundidad entre geometría compartida).
+- **Cámara**: `viewRadius`/`faceDistance` valen `R` en cilindro; close/distant,
+  min/maxRadius y `safeViewRadius` reutilizan la infraestructura de
+  ADR-022/024 sin fórmula nueva.
+- **Contenido**: el `DesktopView` compuesto (wallpaper + ventanas) se aplica como
+  `diffuseMap` sobre la malla curva con el mismo material que el plano (ADR-021
+  heredado sin cambios).
+- Segmentos: **64 fijos** (`CYLINDER_SEGMENTS`) — ADR-002 admitía 32–64; 64 por
+  arcos grandes/cerca (130 vértices por malla, no por cara).
 - `#Cylinder` primitivo NO sirve para un arco parcial con UV isométrica; es un
   cilindro completo con UV propias.
+- **Segmento curvo (1-2 escritorios, ADR-025)**: el tambor no cierra con menos
+  de 3 arcos, así que Cylinder debajo de 3 se representa con arcos de **120°
+  fijos**: `cylinderSegments = isCylinder && count < 3 && mesh`, radio fijo
+  `segmentRadius = cylinderArcRadius(W) = 3W/2π` (el hueco `g` no aplica:
+  R depende solo de W), azimuts `cylinderSegmentAzimuth(index, count)`
+  (1→0; 2→0 y 120 — banda continua de 240° con el hueco de 120° detrás),
+  tick de selección 120° y topes de azimut `cylinderAzimuthRange(count)`
+  ([-60,60] con uno, [-60,180] con dos — los bordes de la banda de superficie
+  frontal; los ±80/±120 simétricos iniciales fueron rectificados por geometría:
+  ±80 dejaba 20° de dorso con un arco y ±120 aparcaba en el centro del hueco
+  trasero). La selección normaliza y espeja: |a| ≤ 60 cara 0, más abierto cara
+  1 (`cylinderSegmentDesktopAt`). La malla es la MISMA generadora (θ = W/R
+  da 120° con R = 3W/2π por construcción) y el mismo `Loader`: su binding de
+  radius elige `segmentRadius` o `cylinderRadius` según la rama. `faceDistance
+  = viewRadius = 3W/2π`; close llena la pantalla en vertical — en horizontal
+  la cuerda del arco mide ≈ 0.826·W (los bordes curvos dejan ~8-9 % de casco
+  a cada lado; es la proyección, no un bug). Con
+  `Polygon`, 1-2 sigue siendo §2.3 sin tocar.
 
-### 2.3 Hoja 2D (1-2 escritorios)
+### 2.3 Hoja 2D plana (1-2 escritorios, Shape = Polygon)
 
-Implementada dentro de `Cube.qml` (ADR-024): `isSheet = count < 3`, y el
-delegate coloca los quads en el centro en vez de sobre el perímetro.
+Implementada dentro de `Cube.qml` (ADR-024): `isSheet = count < 3 &&
+!cylinderSegments` — la hoja PLANA es la representación cuando `Shape` es
+`Polygon` (o cuando `Cylinder` no pudo conseguir malla: la caída degrada
+aquí, ADR-025), y el delegate coloca los quads en el centro en vez de sobre
+el perímetro. Con `Shape = Cylinder` y 1-2 escritorios la representación
+es el **segmento curvo** (§2.2, punto segmento).
 
 - **2 escritorios**: un quad por escritorio (`CubeFace`, `#Rectangle` con
   `Material.NoCulling`) en `position.z = ±sheetGap` (**separación proporcional
@@ -69,11 +140,13 @@ delegate coloca los quads en el centro en vez de sobre el perímetro.
 - **1 escritorio**: solo el frente (z = +`sheetGap`, `eulerRotation.y = 0`,
   `angleTick = 360`). Como `NoCulling` muestra el dorso **espejado**, el azimut
   se clampa a ±80° (`SHEET_AZIMUTH_LIMIT_DEG` en `constants.js`, fijo, sin
-  clave). El **arrastre** con límite real clampa la suma cruda
+  clave; expresado como rango `flatAzimuthRange` = [-80, 80]). El **arrastre**
+  con rango real clampa la suma cruda
   (`euler.y + delta`, sin `%360` ni normalizar: un tirón que cruzara ±180 no
   debe teletransportar de +80 a −80); las **flechas y los estados** usan
-  `clampSheetAzimuth`, que normaliza a (-180,180] solo con límite < 360 y
-  devuelve el ángulo tal cual si no (paridad literal con el código pre-hoja).
+  `clampAzimuthRange` (heredero del retirado `clampSheetAzimuth`), que
+  normaliza a (-180,180] solo con rango real y devuelve el ángulo tal cual si
+  no (paridad literal con el código pre-hoja).
 - **Radios**: `viewRadius = 0.5·anchoCara` (en hoja; leer `faceDistance` sería
   ciclo: el gap deriva del radius), `faceDistance = sheetGap` (close llena la
   pantalla igual que el cubo: `sheetGap + 0.5·h/tan(fov/2)`), y distant/zoom se
@@ -87,8 +160,15 @@ delegate coloca los quads en el centro en vez de sobre el perímetro.
   azimut a la forma nueva, re-alinea al escritorio actual y fuerza el radius
   del estado vigente).
 - `CubeFaceDisplacement` **no aplica a la hoja** (su `faceDistance` es el gap).
-- Con <3 escritorios la forma es hoja **siempre** (pre-cilindro): la futura
-  clave `Shape` no aplica. `PlaceholderView.qml` quedó retirado.
+- Con <3 escritorios no existe el tambor: la representación la fija `Shape`
+  — hoja plana con `Polygon` (esta sección, ADR-024 intacto) o **segmento
+  curvo de 120°** con `Cylinder` (§2.2, ADR-025). `PlaceholderView.qml`
+  quedó retirado.
+- El re-sincronizado del punto anterior escucha también
+  `cube.cylinderActive`/`cube.cylinderSegments` y — con tambor activo —
+  `cube.cylinderRadius`/`cube.faceSize`: cambiar `Shape` o la separación con
+  el efecto abierto re-clampa (±80↔[-60,60]↔[-60,180]↔sin límite), re-alinea
+  (tick 120) y fuerza el radius nuevo (`3W/2π` o R), mismo mecanismo ADR-024.
 
 ## 2.4 Capas de ventana (z-index / separación) — cómo se aplicó
 

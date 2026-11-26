@@ -36,14 +36,16 @@ por fases, pero el spec es entero).
 
 | Escritorios | Forma                                                                                                                                      | Interior                                              |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| 1           | **Hoja simple**: un solo quad; giro limitado a ±80° de azimut (el dorso se vería espejado, no debe verse)                                 | **No permitido** (no hay volumen)                     |
-| 2           | **Hoja 2D doble cara**: un quad por escritorio, separación proporcional en z (`sheetGap`, ≥2 unidades); giro completo (cada lado es un escritorio real)         | **No permitido** (no hay volumen donde poner objetos) |
-| 3+          | **Polígono** (default) o **Cilindro** (elegible)                                                                                           | Sí                                                    |
+| 1           | Con `Polygon` (default): **hoja simple**, un solo quad; giro limitado a ±80° (el dorso se vería espejado, no debe verse). Con `Cylinder`: **segmento curvo** — un arco de 120° centrado en 0°, giro limitado a [-60°, 60°] (la banda del arco: pasado ±60 no hay superficie frontal) (§1.2) | **No permitido** (no hay volumen)                     |
+| 2           | Con `Polygon`: **hoja 2D doble cara**, un quad por escritorio, separación proporcional en z (`sheetGap`, ≥2 unidades); giro completo (cada lado es un escritorio real). Con `Cylinder`: **dos arcos de 120° adyacentes** (centrados en 0° y 120°: banda de 240°, hueco de 120° detrás por donde se ve el casco), giro limitado a [-60°, 180°] (la banda entera; un tope simétrico ±120 aparcaba la cámara en el centro del hueco), tick de selección 120° (§1.2) | **No permitido** (no hay volumen donde poner objetos) |
+| 3+          | **Polígono** (default) o **Cilindro** — tambor cerrado de N arcos (elegible)                                                               | Sí                                                    |
 
-**Regla permanente (pre-cilindro)**: con 1-2 escritorios la forma es SIEMPRE
-hoja, ignore lo que diga la futura clave `Shape`. El polígono/cilindro empieza
-en 3. No hay placeholder: KWin siempre tiene al menos 1 escritorio y la hoja
-simple ya es útil (ADR-024).
+**Regla permanente**: con 1-2 escritorios el **tambor** cilíndrico no
+existe (no cierra con menos de 3 arcos): la forma es hoja —en su representación
+plana de siempre con `Polygon` (ADR-024 intacto) o en **segmento curvo de
+120°** con `Cylinder` (ADR-025)—, y `CubeFaceDisplacement` no hace nada
+aquí. El polígono/tambor empieza en 3. No hay placeholder: KWin siempre
+tiene al menos 1 escritorio y la hoja simple ya es útil (ADR-024).
 
 ### 1.1 Polígono (default)
 
@@ -51,23 +53,101 @@ simple ya es útil (ADR-024).
 - No deforma nada: las caras son planas; se ven las aristas entre caras.
 - N = número de escritorios (3 = triángulo, 4 = cubo, 5 = pentágono…).
 
-### 1.2 Cilindro
+### 1.2 Cilindro (implementado, ADR-025)
 
 - Las MISMAS caras, pero curvadas sobre un cilindro. Mapeo **isométrico**: el
   cilindro es una superficie **desarrollable** (curvatura gaussiana K=0), así que
   un plano se envuelve sobre él **sin distorsión** (una recta se vuelve arco de
   igual longitud; el contenido no se estira).
-- Implementación: malla curva generada en QML (`ProceduralMesh`, ver
-  `doc/ARQUITECTURA.md`); UVs con `θ = W/R` y `u = s/W`. **Sin vertex shader.**
-- N ≥ 3 (el mínimo lo fija la forma; con 2 solo cabe la hoja 2D).
-- Relación arco↔textura: `arco = R·θ` debe igualar el ancho de la cara; si no, la
-  textura se estira o comprime.
+- N ≥ 3 (el mínimo lo fija la forma; con 2 solo cabe la hoja 2D). Con 1-2 y
+  esta opción la representación es el **segmento curvo** de abajo, no un
+  tambor; con `Shape = Polygon` 1-2 es la hoja plana (ADR-024 intacto).
+- Fórmulas reales (todas en `constants.js`, con `W` = ancho de cara, `H` = alto,
+  `N` = nº de escritorios):
+  - `g = max(0, CubeFaceDisplacement)` — en cilindro la separación es **hueco
+    lineal entre arcos** y los valores negativos se tratan como 0 (la isometría
+    no permite solapar: el arco tiene que medir W).
+  - `R = N·(W + g) / (2π)` (`cylinderRadius()`) — el radio crece con el hueco.
+  - `θ = W / R` por cara (`cylinderArcAngle()`); el arco mide `R·θ = W`
+    **siempre** (isometría: la textura ni se estira ni se comprime). El hueco
+    angular entre arcos es `2π/N − θ`, que sobre la superficie mide exactamente
+    `g` px.
+  - Malla del arco: `P(s,t) = (R·sin φ, t − H/2, R·cos φ)` con
+    `φ = (s − W/2)/R`, `s ∈ [0,W]`, `t ∈ [0,H]` — centrada en el azimut +Z; la
+    colocación por cara usa `eulerRotation.y = (360/N)·index`, igual que el
+    polígono (en el tambor los azimuts y `desktopAt()` no cambian de forma; en
+    el segmento de 1-2, abajo, son 0°/120° fijos).
+  - UVs: `u = s/W`, `v = t/H` (convención medida del `#Rectangle` nativo: la
+    base de la cara lleva `v = 0`), con lo que el compuesto de la cara se ve
+    igual de derecho que en el polígono.
+  - `ProceduralMesh` (`QtQuick3D.Helpers`) con **64 segmentos fijos**, una sola
+    malla compartida por las N caras, reconstruida SOLO al cambiar (W, H, R).
+    **Sin vertex shader.**
+- Con `g = 0` los arcos se tocan: cilindro cerrado pero **sin piel** (ADR-003:
+  la superficie entre caras no existe). Con `g > 0` entre arcos se ve el casco,
+  igual que por los huecos del polígono. Nota: el texto anterior de esta
+  sección usaba la notación `arco = R·θ`; se conserva la relación, pero `θ`
+  ahora es consecuencia de R (arriba), no un ajuste libre.
+- Cámara: `R` sustituye al apotema del polígono — `faceDistance = viewRadius =
+  R`, y close/distant/límites de zoom usan la infraestructura existente
+  (ADR-022/024) sin fórmulas nuevas.
+- **Segmento curvo (1-2 escritorios, ADR-025)**: un tambor no cierra con
+  menos de 3 arcos, así que con `Shape = Cylinder` y 1-2 escritorios cada
+  cara es un arco de **120° fijos** (un tercio de círculo) — la misma
+  generadora de malla con `θ = 2π/3`, es decir `R = W/θ = 3W/(2π)`
+  (`cylinderArcRadius()`; el hueco `g` **no aplica**: arcos adyacentes o
+  en posiciones fijas, R depende solo de W):
+  - 1 escritorio: un arco centrado en 0°; azimut limitado a **[-60°, 60°]**
+    (la banda del arco: su superficie frontal vive exactamente ahí; ±80° con
+    el borde en ±60° dejaba 20° de dorso/vacío. Topes rectificados por
+    geometría tras medirlos en el anidado — el ±80° inicial era herencia de
+    la hoja simple).
+  - 2 escritorios: arcos centrados en 0° y 120° — **banda continua de
+    240°** con un hueco de 120° detrás por donde se ve el casco (ADR-003);
+    azimut limitado a **[-60°, 180°]** — los extremos de la banda (un tope
+    simétrico ±120° aparcaba la cámara en -120°, centro exacto del hueco:
+    vista vacía y sin escritorio posible). Tick de selección **120°** (la
+    cara 1 vive en 120°, no en 180°). Rango puro:
+    `cylinderAzimuthRange(count)`; el clamp simétrico de la hoja
+    (`clampSheetAzimuth`) quedó retirado en favor de `clampAzimuthRange`
+    (normaliza a (-180,180] y clampa a [min,max]; null = verbatim), y el
+    arrastre sigue clampeando la suma cruda sin normalizar — 190° crudos se
+    quedan en 180°, no saltan al otro extremo.
+  - Flechas (`arrowAzimuth`, ADR-025 pt.13): con banda asimétrica el
+    múltiplo de tick ya NO es una cara — la flecha salta a la siguiente
+    cara real en la dirección pedida (0→120→0 en ambos sentidos; desde el
+    borde 180 RIGHT envuelve a 0; sin cara en la dirección, envolver dentro
+    de la banda). Con una sola cara la flecha no mueve nada. Rango abierto
+    (polígono/tambor/hoja-2): idéntico a siempre, current±tick verbatim.
+  - Selección normalizada con espejo: |a| ≤ 60° → cara 0; más abierto
+    (también en negativo) → cara 1 (`cylinderSegmentDesktopAt()`).
+  - Cámara: `faceDistance = viewRadius = R = 3W/2π` — la misma
+    sustitución que el tambor. Honestidad del close: llena la pantalla en
+    **vertical** (la generatriz no se deforma); en horizontal la cuerda del
+    arco de 120° mide ≈ 0.826·W → close deja ~8-9 % de casco a cada lado
+    (bordes curvos proyectados, no un bug).
+- **Culling: NoCulling siempre, también en cilindro** (rectificación del
+  usuario sobre ADR-025 pt.12): la pared interior espejada de las caras
+  traseras **debe verse** por los huecos y cantos — paridad con el polígono
+  (ADR-023); lo que no debe es pintarse ENCIMA de las frontales (overlap,
+  sobre todo al girar). Un `BackFaceCulling` dinámico (fuera de 1.05·R) se
+  probó y **se retiró del runtime**: suprimía las dos cosas. El helper puro
+  `cylinderCullMode(cam, r)` (tokens 1/0) queda en `constants.js` testeado
+  como semilla documentada del fix real, que es de orden de pintado: el
+  overlay imprime `blend=0|1` (`1` = las caras están en la pasada
+  transparente por `FaceOpacity/FaceRotationOpacity < 0.99`) para que la
+  captura del momento «encima» distinga el orden por centroide (blend=1) de
+  un bug de profundidad (blend=0).
+- Con `Shape = Polygon` los casos 1-2 siguen siendo la hoja plana exacta de
+  §1.3 (ADR-024 intacto).
 
-### 1.3 Hoja 2D (1-2 escritorios)
+### 1.3 Hoja 2D plana (1-2 escritorios, Shape = Polygon)
 
 La hoja vive dentro de `Cube` (ADR-024): con menos de 3 escritorios el sólido no
 es un polígono, son quads pegados en el centro. `ScreenView`, el casco, las
-capturas, la dim, el debug y la cámara son los mismos que con cubo.
+capturas, la dim, el debug y la cámara son los mismos que con cubo. Con
+`Shape = Cylinder` estos dos casos se curvan como **segmento de 120°** (§1.2,
+ADR-025); lo de abajo es la representación plana, default e intacta.
 
 **2 escritorios — hoja doble cara:**
 
@@ -88,24 +168,32 @@ capturas, la dim, el debug y la cámara son los mismos que con cubo.
   **limita a ±80° de azimut** (160° de recorrido): el revés nunca queda frente a
   la cámara. El límite es fijo en `constants.js` (`SHEET_AZIMUTH_LIMIT_DEG`);
   no hay clave de configuración (futuro si el usuario la pide).
-- Las flechas y la activación respetan el mismo límite (clamp único en
-  `clampSheetAzimuth`).
+- Las flechas eligen la siguiente **cara real** (una sola cara →
+  la misma: delta 0, sin salto; helper puro `arrowAzimuth` con el rango
+  `flatAzimuthRange(1)` = [-80, 80]); la activación y los estados siguen a
+  `desktopAzimuth` (la cara del escritorio actual, no tick crudo).
 - El arrastre que cruza ±180 **no teletransporta**: el drag clampa la suma
-  directa (sin `%360` ni normalizar); solo las flechas y los estados usan
-  `clampSheetAzimuth`.
+  directa (sin `%360` ni normalizar); solo las flechas y los estados
+  normalizan (`arrowAzimuth` / `clampAzimuthRange`).
 
 Común:
 
 - Sin interior (no hay volumen). El casco se sigue viendo alrededor.
-- `Shape` (futura) **no aplica con <3 escritorios**: la forma es hoja siempre.
-- **`CubeFaceDisplacement` no aplica a la hoja**: su `faceDistance` es el
-  `sheetGap` de las caras, no el radio de un polígono. La separación entre
-  caras solo significa algo con 3+ escritorios (ver §4).
-- Cambiar el nº de escritorios **con el efecto abierto** re-sincroniza la cámara
-  (`Connections` sobre `cube.faceCount`): re-clampa el azimut al límite de la
-  forma nueva, re-alinea al escritorio actual y recalcula el `radius` con el
-  `viewRadius` nuevo (los `PropertyChanges` de los estados mueren al primer
-  arrastre/flecha/rueda; el handler reescribe rotation/radius explícitamente).
+- Esta sección es la representación con `Shape = Polygon`; con `Cylinder`
+  1-2 escritorios se curvan como segmento de 120° (§1.2) — con sus propios
+  límites de giro ([-60, 60] / [-60, 180]) y su tick (120°).
+- **`CubeFaceDisplacement` no aplica a la hoja ni al segmento**: en la hoja
+  su `faceDistance` es el `sheetGap` de las caras, no el radio de un
+  polígono; el segmento vive a radio fijo `3W/2π` y sus arcos son adyacentes
+  por construcción. La separación entre caras solo significa algo con 3+
+  escritorios (ver §4).
+- Cambiar el nº de escritorios **con el efecto abierto** re-sincroniza la
+  cámara (`Connections` sobre `cube.faceCount`, y también sobre
+  `cylinderActive`/`cylinderSegments` cuando cambia la forma sin cambiar el
+  número): re-clampa el azimut al límite de la forma nueva, re-alinea al
+  escritorio actual y recalcula el `radius` con el `viewRadius` nuevo (los
+  `PropertyChanges` de los estados mueren al primer arrastre/flecha/rueda;
+  el handler reescribe rotation/radius explícitamente).
 
 ## 2. Sólido: caras
 
@@ -118,9 +206,9 @@ Común:
 
 Las caras pueden ser semitransparentes mientras el cubo gira, para ver el casco
 y las caras de detrás a través del sólido (como la transparencia de Compiz). En
-reposo vuelven a ser opacas por defecto. Es modificable y queda **preparada para
-el cilindro**: la opacidad se aplica al material de cada cara, no a su geometría,
-así que la futura malla curva (ADR-002) la hereda sin cambios.
+reposo vuelven a ser opacas por defecto. Es modificable y aplica a **las dos
+formas**: la opacidad se aplica al material de cada cara, no a su geometría,
+así que la malla curva del cilindro (ADR-025) la hereda sin cambios.
 
 | Clave             | Tipo   | Rango | Default | Requerimiento                                                       |
 | ----------------- | ------ | ----- | ------- | ------------------------------------------------------------------- |
@@ -241,7 +329,7 @@ panorámica 360.
 | `MouseInvertedX`       | Bool   | —           | false   | Invertir eje X del arrastre                                                                                  |
 | `MouseInvertedY`       | Bool   | —           | false   | Invertir eje Y del arrastre                                                                                  |
 | `CursorScreenOnly`     | Bool   | —           | false   | Dibuja el cubo solo en el monitor donde está el cursor al lanzarse; el resto de pantallas quedan normales. Sustituye al antiguo «casco por pantalla»; default `false` = todas las pantallas |
-| `CubeFaceDisplacement` | Double | −500…500 px | 100     | Separación entre caras. 0 = caras pegadas; **negativo = se solapan** (el polígono encoge); positivo = huecos |
+| `CubeFaceDisplacement` | Double | −500…500 px | 100     | Separación entre caras. 0 = caras pegadas; **negativo = se solapan** (el polígono encoge); positivo = huecos. **En el tambor cilíndro (3+) es el hueco lineal entre arcos: los valores negativos se tratan como 0** (ADR-025). El segmento curvo de 1-2 lo ignora (R fija 3W/2π) |
 | `DistanceFactor`       | Double | 0.5–5       | 1.75    | Distancia de la cámara al activar                                                                            |
 
 - Atajo por defecto: **Meta+K**. Se registra con `ShortcutHandler` → **KGlobalAccel**, y se
@@ -250,9 +338,15 @@ panorámica 360.
   valor en `kglobalshortcutsrc` y ese valor **pisa** al `sequence` del QML, así que una clave
   en `main.xml` sería una segunda fuente que nunca manda. El KCM solo muestra un aviso.
 - Giro por arrastre del ratón y teclado; zoom por rueda **con límites**
-  (ADR-022): el radio queda entre `0.6 · faceDistance` y `8 · faceDistance`,
-  así la rueda no puede meter la cámara dentro del sólido (por debajo de
-  `clipNear` las caras desaparecían) ni alejarla hasta perder el cubo de vista.
+  (ADR-022): el radio queda entre `0.6 · safeViewRadius` y `8 · safeViewRadius`
+  — el apotema del polígono, el **radio R del tambor** o el `3W/2π` del
+  segmento (ADR-025), pinned positivo—. Nota honesta: la rueda **sí puede**
+  meter la cámara dentro del sólido (hasta 0.6·R) — es posible a propósito:
+  el cilindro muestra su interior por los huecos igual que el polígono
+  (`NoCulling` siempre, ADR-023/ADR-025 pt.12; el único matiz es el overlap
+  pendiente, diagnosticado con `blend=`). Lo que los límites
+  evitan es el fallo real: por debajo de `clipNear` las caras desaparecían,
+  y a distancia absurda se perdía el sólido de vista.
 
 ## 5.1 Advanced (opciones avanzadas)
 
@@ -321,9 +415,13 @@ Implementación (QML puro, sin C++):
 
 ## 6. Configuración (referencia)
 
-Enum `Shape`: `Polygon` (default) / `Cylinder`. El número de escritorios manda:
-1 → hoja simple con giro limitado a ±80°; 2 → hoja doble cara con giro
-completo (ADR-024; el placeholder quedó retirado); 3+ → forma elegida.
+Enum `Shape`: `Polygon` (0, default) / `Cylinder` (1) (ADR-025; tabla y
+helper `shape()` en `constants.js`). El número de escritorios manda:
+1 → hoja simple con giro limitado a ±80° (Polygon) o **segmento curvo** de un
+arco de 120° con giro [-60°, 60°] (Cylinder); 2 → hoja doble cara con giro
+completo (Polygon) o **dos arcos adyacentes de 120°** con giro [-60°, 180°]
+y tick 120° (Cylinder); 3+ → polígono o tambor cilíndro elegido
+(ADR-024/ADR-025; el placeholder quedó retirado).
 
 Enum `Background`: `Color` (0, default) / `Image` (1) / `Gradient` (2) / `Video` (3,
 añadido al final para no reinterpretar los valores guardados). El índice 1 se

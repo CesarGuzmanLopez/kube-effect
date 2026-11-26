@@ -78,7 +78,7 @@
         "label": "Forma: hoja 2D (1-2 escritorios)",
         "requires": [],
         "native": false,
-        "notes": "Con 1-2 escritorios la forma es hoja SIEMPRE (pre-cilindro, ADR-024): la futura clave Shape no aplica y CubeFaceDisplacement no hace nada aquí. 2 = doble cara (un quad por escritorio, separación proporcional sheetGap ≥2 unidades, giro completo); 1 = hoja simple con el giro limitado a ±80° (SHEET_AZIMUTH_LIMIT_DEG en constants.js, fijo, sin clave: el dorso con NoCulling se vería espejado). PlaceholderView retirado: KWin siempre tiene >=1 escritorio.",
+        "notes": "Con 1-2 escritorios no hay tambor: Polygon deja la hoja plana SIEMPRE (ADR-024) y Cylinder la curva en segmento de 120° (ADR-025: giro [-60°,60°] con 1 y [-60°,180°] con 2, banda real de superficie frontal, y tick 120°; el hueco g no aplica, R = 3W/2π fija). En hoja plana CubeFaceDisplacement no hace nada. 2 = doble cara (un quad por escritorio, separación proporcional sheetGap ≥2 unidades, giro completo); 1 = hoja simple con el giro limitado a ±80° (SHEET_AZIMUTH_LIMIT_DEG en constants.js, fijo, sin clave: el dorso con NoCulling se vería espejado). PlaceholderView retirado: KWin siempre tiene >=1 escritorio.",
         "status": "stable",
         "since": "0.0.0.3"
     },
@@ -86,12 +86,12 @@
         "id": "shape-cylinder",
         "label": "Forma: cilindro",
         "requires": [
-            "QtQuick3D"
+            "QtQuick3D.Helpers"
         ],
         "native": false,
-        "notes": "Cilindro isométrico con ProceduralMesh (ADR-002), sin shader. Enum Shape=Cylinder.",
-        "status": "planned",
-        "since": "0.0.0.1"
+        "notes": "Cilindro isométrico sin shader (ADR-025): cada cara es un arco de ProceduralMesh generado por cylinderArcGeometry() en constants.js. Radio R = N·(W + g)/(2π) con g = max(0, CubeFaceDisplacement): en cilindro la separación entre caras es el hueco LINEAL g medido sobre la superficie, así que los valores negativos se tratan como 0 (no existe el solape). Ángulo de arco θ = W/R, 64 segmentos fijos; la malla se reconstruye solo cuando cambia (W, H, R). Una sola malla compartida por las N caras (cada Model referencia el mismo ProceduralMesh que expone el Loader). La cámara mide close/distant/zoom sobre R (faceDistance = viewRadius = R); desktopAt, ángulo por cara y selección de escritorio no cambian. NoCulling siempre, también aquí (paridad con el polígono, ADR-023): la pared interior de las traseras debe verse por los huecos; lo pendiente es que no se pinte ENCIMA de las frontales (overlap al girar) — el experimento de BackFaceCulling fuera de 1.05·R se retiró del runtime (ADR-025 pt.12) y el helper cylinderCullMode queda testeado como semilla del fix real (orden de pintado); el overlay añade blend=0|1 para diagnosticarlo (1 = pasada transparente, orden por centroide; 0 con overlap = profundidad). Con 1-2 escritorios el tambor no cierra: Cylinder se representa como segmento curvo de arcos de 120° (R = 3W/2π fija — el hueco g no aplica; uno centrado en 0° con giro [-60,60], dos adyacentes en 0° y 120° con giro [-60,180] y tick 120°; la selección normaliza con espejo |a|≤60 → cara 0). Flechas: `arrowAzimuth` salta a la siguiente cara real (0↔120 en ambos sentidos dentro de la banda, envuelve, no clampa tick crudos al borde; ADR-025 pt.13; `Cube.faceAzimuth` única fuente). QtQuick3D.Helpers es la única dependencia del cilindro y vive aislada en CylinderArcMesh.qml, cargado por Loader: si el módulo falta solo fallan las caras curvas — el sólido cae al rectángulo plano (forma poligonal) y se avisa una vez.",
+        "status": "stable",
+        "since": "0.0.0.4"
     },
     {
         "id": "interior",

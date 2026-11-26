@@ -47,6 +47,7 @@ VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:\.\d+)?$")
 # new dependency.
 REQUIREMENT_PROBES = {
     "QtQuick3D": "QtQuick3D/qmldir",
+    "QtQuick3D.Helpers": "QtQuick3D/Helpers/qmldir",
     "QtQuick.Shapes": "QtQuick/Shapes/qmldir",
     "QtMultimedia": "QtMultimedia/qmldir",
     "org.kde.kwin": "org/kde/kwin",
