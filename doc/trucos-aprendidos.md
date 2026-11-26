@@ -251,6 +251,26 @@ diagnosticó el bug del LOD de caras.
 - Curvar el contenido sobre una superficie **no desarrollable** (K>0) SÍ estira →
   exige shader/teselado → fuera de alcance.
 
+### ⚠️ OJO: los `PropertyChanges` de `states` son bindings que mata la primera escritura directa
+
+Síntoma: con el efecto abierto, cambiar la forma / el nº de escritorios / R deja
+la cámara apuntando al escritorio viejo (o con el radio del sólido viejo): 2→1
+escritorios con yaw 170 no aplicó el nuevo clamp ±80 (se vio el dorso espejado),
+2→3 dejó yaw 180 (Enter/click seleccionaban el escritorio 3, no el actual), y el
+radio quedó 2616 en vez de 2080. Causa: los `PropertyChanges` de los `states` de
+`CubeCameraController` (close/distant) crean **bindings vivos**, pero la primera
+escritura directa (drag, flechas, rueda) los **MATA**; un cambio posterior de
+entrada (shape/desktops/R/faceSize) ya no re-evalúa el `radius`/`rotation` del
+estado. Fix: `resyncToState()` en `CubeCameraController` re-escribe
+`rotation`/`radius` desde las fórmulas del estado activo, y `ScreenView` lo llama
+en `onFaceCountChanged` / `onCylinderActiveChanged` / `onCylinderRadiusChanged` /
+`onFaceSizeChanged` y en `onCurrentDesktopChanged` (un desktop removido cae en
+vecino). Idempotente mientras el binding sigue vivo, y sobrevive a su muerte: el
+próximo flip de estado (cada deactivate/activate) reconstruye el `PropertyChanges`.
+**Patrón general para cualquier estado futuro**: si un estado deriva de entradas
+que pueden cambiar con el efecto abierto, re-sincroniza explícitamente; nunca
+confíes en que el binding del `PropertyChanges` se re-evalúe solo.
+
 ## G. KConfigXT y formato
 
 - **Enum = ENTERO en kwinrc** (p. ej. `Background=0`). Un string rompe el
@@ -372,6 +392,13 @@ en su `config.ui`.
   siempre `config.ui` (KCM genérico) porque la metadata del efecto sigue apuntando a
   `kcm_kwin4_genericscripted` (KF6 no hace fallback, ADR-011). El KCM nativo aparece
   como módulo aparte en Preferencias → Gestión de ventanas → «Kube Effect Plus».
+- **Ruido benigno del anidado** (no son bugs del efecto, no perseguirlos):
+  `Activated service 'org.kde.KSplash' failed` (no hay splash en la sesión
+  anidada), `kf.coreaddons ... explicitly states an 'Id' in the embedded
+  metadata` (aviso de metadata de un plugin KF6) y `qt.qpa.services: Failed to
+  register with host portal ... App info not found for 'kcm_kube_effect_plus'`
+  (el KCM nativo lanzado dentro del anidado no puede registrarse en el portal
+  del host).
 
 ## K. Ficha rápida de comandos
 
@@ -491,4 +518,89 @@ alcanza y el clamp deja pasar el suelo. Fix (ADR-022): en `constants.js`
 tratar `value === null || value === ""` como no-numérico → default de la
 rama activa; `scripts/check-constants.qml` lo clava (`face(rest null -> 1)`,
 `fade(null) -> 120`, `dim(on, null) -> 0.4`, `stop(null) -> 0.5`).
+
+## M. QtQuick3D: pintado, orden y enums
+
+### ⚠️ OJO: NUNCA hardcodear los ints de `Material.CullMode`
+
+En Qt 6.12.1 el enum vale `BackFaceCulling = 1, FrontFaceCulling = 2,
+NoCulling = 3` (medido en
+`/usr/include/qt6/QtQuick3D/6.12.1/QtQuick3D/private/qquick3dmaterial_p.h`).
+Un `2` hardcodeado habría dado `FrontFaceCulling` — el cull **opuesto** al
+buscado (mostrar solo la pared interior en vez de la piel exterior). Pasa
+siempre los enums simbólicos `Material.X`. La semilla `cylinderCullMode` de
+`constants.js` devuelve tokens (1/0) y se mapea simbólicamente por eso; el
+runtime ni siquiera la usa hoy (`faceCullMode` está clavado a
+`Material.NoCulling`, ADR-025 pt.12 / ADR-026).
+
+### ⚠️ OJO: `DefaultMaterial` con `diffuseMap: Texture { sourceItem }` entra SIEMPRE en la pasada transparente
+
+Síntoma: con `opacity === 1` las caras igual se solapaban (la pared interior se
+pintaba sobre la frontal). Causa: el motor marca transparencia cuando la textura
+del item capturado tiene canal alfa (`prepareImage`, caso `Type::Diffuse` en
+`qssglayerrenderdata.cpp`); el grab de un `DesktopView` la tiene siempre, así que
+**aunque `opacity` valga 1** la cara acaba en la pasada transparente. Y esa pasada
+ordena por el **centro del bbox del objeto en mundo proyectado sobre el eje de
+visión** (`getCameraDistanceSq` usa `worldCenterPoint =
+globalTransform(bounds.center())`, medido en `qssglayerrenderdata.cpp` de Qt
+6.12.1): las caras que comparten origen (0,0,0) **empatan** → orden arbitrario.
+Fix en ADR-026: malla re-centrada en el nodo (cada arco lleva su radio en la
+`position`, N centroides distintos como el polígono) + `PrincipledMaterial` con
+`alphaMode` explícito (ver abajo). Con `PrincipledMaterial` el `baseColorMap` NO
+dispara transparencia (el tipo `BaseColor` se salta a propósito), así que la
+pasada la decide el umbral, no el contenido.
+
+### ⚠️ OJO: `alphaMode: Mask` descarta alpha<cutoff y pinta el resto OPACO escribiendo profundidad
+
+`Mask` descarta los fragmentos con alpha < `alphaCutoff` (el escritorio se sigue
+viendo por los huecos de la textura de cara) y pinta el resto **opaco escribiendo
+profundidad**: un arco lejano no puede quedar encima de uno cercano ni aunque el
+orden falle. `SetToOpaque` **no existe** en Qt 6.12: el enum es
+`AlphaMode { Default, Mask, Blend, Opaque }` (medido en
+`qquick3dprincipledmaterial_p.h` / `qquick3dspecularglossymaterial_p.h`). Ojo:
+`Opaque` (el «SetToOpaque» histórico) **pinta de negro los huecos** — ignora el
+alpha del mapa y borra el escritorio que se ve a través de la cara (medido,
+ADR-026) — por eso el reposo es `Mask`, no `Opaque`. `alphaCutoff` se fija
+explícito en `0.5` (no depende del default de Qt, para que un cambio de motor no
+mueva el borde duro/suave de los huecos). El `Mask` queda solo en las caras
+cilíndricas en reposo: `faceOpacity < 0.99 || cylinderMesh === null → Blend`
+(polígono y hoja nunca tuvieron solape y su look virgen manda, ADR-023).
+
+## N. KWin 6: modelo de ventanas y testing (PySide6 + stubs)
+
+### ⚠️ OJO: `Window.internalId` es QUuid en KWin 6 → el wId nulo de `WindowThumbnail` es `""`, no `0`
+
+Verificado en `/usr/include/kwin/window.h` (`\qmlproperty uuid Window::internalId`,
+`Q_PROPERTY(QUuid internalId ...)`) y `/usr/include/kwin/effect/effectwindow.h`
+(`QUuid internalId() const`). Por eso el valor de liberación del `wId` de
+`WindowThumbnail` es **cadena vacía** (`""`, el QUuid nulo), que desengancha el
+thumbnail y libera su captura; un `0` entero no convierte a QUuid y **no libera**
+la captura. En `DesktopView.qml`:
+`wId: model.window ? model.window.internalId : ""`.
+
+### ⚠️ OJO: `qInstallMessageHandler` ANTES de `setSource` DEADLOCKEA (PySide6 + QML)
+
+Medido con faulthandler: el hilo main se bloquea en `QQmlTypeLoader::getType`
+(`setSource`) mientras el hilo QML espera el GIL para entregar su `qWarning` de
+parseo (hang de ~12 s, traza bajo `QWaitCondition`). Sin handler instalado, este
+PySide6 **se traga en silencio** todos los mensajes QML (ni logging ni stderr los
+ven): un `TypeError` silencioso deja bindings rotos con el test en verde. Fix
+(`scripts/check-video-dome.py`): carga de **calentamiento sin handler** (parsea
+todos los tipos y llena la caché del motor), **después** se instala el handler y
+se crea la vista real (los mensajes restantes llegan al hilo main), y **un
+subproceso por escenario** (un segundo `QGuiApplication.exec()` tras el primer
+`exit()` nunca retornó).
+
+### ⚠️ OJO: un `Component` hijo de `ListModel` se parsea como `ListElement` y rompe
+
+En el stub de `org.kde.kwin` para los tests de render, declarar el escritorio/la
+ventana como `Component { ... }` hijo del `ListModel` hace que QML lo interprete
+como `ListElement` (y falla). Fix: inyectar **objetos reales** con
+`Qt.createQmlObject` (desktops con `x11DesktopNumber`, parentados al singleton
+para que sobrevivan al binding) y `append({ "desktop": desktop, ... })` — el role
+lleva un `QObject` real que los delegates leen de vuelta (`CubeFace` declara
+`required property QtObject desktop`; `Cube.desktopAzimuth` lee
+`.x11DesktopNumber`, que con `null` tiraba un `TypeError` matando el binding sin
+fallar el test). Ver `check-video-dome.py` (STUB_MODULE, `VirtualDesktopModel.qml`
+y `WindowFilterModel.qml`).
 
