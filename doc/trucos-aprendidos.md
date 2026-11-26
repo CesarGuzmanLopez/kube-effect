@@ -442,3 +442,33 @@ es `Stretch` (fotograma completo); el fit solo aplica a la capa plana.
 `scripts/check-video-dome.py` exige `fillMode == Stretch` en el caso 360.
 Medido 2026-11-25 con clip 608×304. (ADR-020, corrección.)
 
+### ⚠️ OJO: delegate de SceneEffect evaluado una vez
+
+Síntoma: el cubo nunca aparece tras crear el escritorio nº 3 con el efecto ya
+cargado — el PlaceholderView queda clavado (y al inverso: con 2 escritorios
+sigue vivo el ScreenView). Causa: `delegate` se resuelve UNA vez por
+SceneEffect; un binding con `Qt.createComponent(...)` sobre
+`Workspace.desktops.length` no vuelve a evaluarse, así que la alternativa
+placeholder/cubo no cambia nunca. Fix (ADR-022): dos `Component` inline
+(`placeholderComponent`, `cubeComponent`) y `delegate:` enlazado a
+`readonly property int desktopCount: Workspace.desktops.length` — al
+re-evaluarse el binding, KWin **recrea los SceneViews** cuando cambia el
+delegate. No sirve `reconfigureEffect` ni timers: la recreación es del
+propio SceneEffect al ver otro componente. Verificado en la fuente de KWin
+(`QuickSceneEffect`: los SceneViews se recrean cuando cambia el delegate) y con
+`make check` (qmllint); **confirmación manual en el anidado pendiente** (pasar
+de 2 a 4 escritorios con el efecto cargado).
+
+### ⚠️ OJO: `Number(null) === 0` (el vacío no es el suelo)
+
+Síntoma: un valor vacío del KCM (`null` o `""` antes de guardar) se comporta
+como el mínimo del rango en vez del default: `FaceOpacity` vacío → 0.1
+(caras casi invisibles), `FaceFadeMs` vacío → 0 ms (corte seco). Causa:
+guardar solo con `!isFinite(Number(value))`; en JavaScript `Number(null)` es
+`0` y `Number("")` es `0`, ambos finitos, así que el default nunca se
+alcanza y el clamp deja pasar el suelo. Fix (ADR-022): en `constants.js`
+(`faceOpacity`, `faceFadeDuration`, `dimOpacity`, `gradientStopPosition`)
+tratar `value === null || value === ""` como no-numérico → default de la
+rama activa; `scripts/check-constants.qml` lo clava (`face(rest null -> 1)`,
+`fade(null) -> 120`, `dim(on, null) -> 0.4`, `stop(null) -> 0.5`).
+

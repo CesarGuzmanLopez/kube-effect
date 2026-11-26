@@ -2,11 +2,12 @@ import QtQuick
 import QtQuick3D
 
 // Runs inside scripts/check-scene-environment.py. The scene environment is
-// declared the way ScreenView.qml declares the SkyBox one: inside a Loader,
-// with probeExposure fed by a binding and a Behavior to blend the change. The
-// goal is to catch a property that does not exist (TypeError at runtime) or a
-// binding that breaks when the value is animated on a non-Item QtQuick3D
-// object. No KWin and no renderer: the engine is set to the null backend.
+// declared the way ScreenView.qml declares it since ADR-022: ONE inline
+// SceneEnvironment object (no Loader), with probeExposure fed by a binding and
+// a Behavior to blend the change. The goal is to catch a property that does
+// not exist (TypeError at runtime) or a binding that breaks when the value is
+// animated on a non-Item QtQuick3D object. No KWin and no renderer: the engine
+// is set to the null backend.
 Item {
     id: root
 
@@ -14,7 +15,7 @@ Item {
     property bool ok: true
     property string log: ""
 
-    readonly property QtObject environment: environmentLoader.item
+    readonly property QtObject environment: sceneEnvironment
 
     function check(name, actual, expected) {
         const passed = actual === expected;
@@ -39,17 +40,16 @@ Item {
         id: defaultEnvironment
     }
 
-    Loader {
-        id: environmentLoader
-        active: true
-        sourceComponent: SceneEnvironment {
-            backgroundMode: SceneEnvironment.SkyBox
-            probeExposure: root.exposure
-            Behavior on probeExposure {
-                NumberAnimation {
-                    duration: 120
-                    easing.type: Easing.OutQuad
-                }
+    // Same shape as ScreenView's inline environment: a plain child object of
+    // the root (Item.data accepts QObjects), not a loaded component.
+    SceneEnvironment {
+        id: sceneEnvironment
+        backgroundMode: SceneEnvironment.SkyBox
+        probeExposure: root.exposure
+        Behavior on probeExposure {
+            NumberAnimation {
+                duration: 120
+                easing.type: Easing.OutQuad
             }
         }
     }

@@ -97,6 +97,14 @@ Reglas:
 - Orden de pintado: con alfa < 1 el material entra en el pase transparente de
   QtQuick3D, que ordena las caras de atrás hacia delante (equivalente a las dos
   pasadas de Wayfire); no se reordena el modelo a mano.
+- **LOD con caras opacas** (ADR-022): cada cara es una capa offscreen que se
+  captura por frame, así que con `FaceOpacity >= 0.99` las caras que dan la
+  espalda a la cámara (ocluidas por el sólido) **no capturan** (`visible:
+  false`); con caras semitransparentes se capturan todas, porque hay que ver
+  las lejanas a través. El criterio es angular (`cos(azimut de cara − yaw de
+  cámara) >= 0`: hasta 90° la cara sigue siendo visible desde dentro, así que
+  no se oculta con margen positivo para no perder el sliver frontal ni dejar
+  asomar el casco por el canto); no cambia ninguna clave.
 
 ## 2.1 Capas de ventana (z-index / separación de ventanas)
 
@@ -131,7 +139,7 @@ panorámica 360.
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | **Color** (0, default)         | Un color sólido                                                                                                               | `Background` Enum; `BackgroundColor` Color, default `#1b3fd8`                                                                     |
 | **Image** (1)                  | Imagen de fondo. Si el mapeo resuelve equirect **y** gira con el centro es **SkyBox** (entorno 360); si no, capa plana fullscreen estática | `SkyBox` Url (vacío = sin imagen); `BackgroundImageLayout` Enum (ver abajo); `BackgroundImageRotate` Bool default true; `BackgroundColor` actúa de color de respaldo |
-| **Gradient** (2)               | Degradado de dos colores sin shaders (Rectangle + Gradient QML). Tipos: vertical (arriba→abajo), horizontal, radial (real, con Shapes) | `Background` Enum; `BackgroundGradientType` Enum (ver abajo); `BackgroundColor` Color `#1b3fd8`; `BackgroundColor2` Color `#ff8a00`; `BackgroundGradientStop` Int 0–100, default 50 (posición del corte: 0 = todo color2 salvo borde, 100 = transición hasta el final) |
+| **Gradient** (2)               | Degradado de dos colores sin shaders (Rectangle + Gradient QML). Tipos: vertical (arriba→abajo), horizontal, radial (real con Shapes; **opcional**: sin el módulo cae al lineal y avisa una vez) | `Background` Enum; `BackgroundGradientType` Enum (ver abajo); `BackgroundColor` Color `#1b3fd8`; `BackgroundColor2` Color `#ff8a00`; `BackgroundGradientStop` Int 0–100, default 50 (posición del corte: 0 = todo color2 salvo borde, 100 = transición hasta el final) |
 | **Video** (3)                  | **Vídeo** de fondo, igual que una imagen con otra fuente: equirect **y** girando = panorama 360 animado en una cúpula (ADR-020); Flat **o** sin girar = capa plana fullscreen con el ajuste. Requiere el módulo opcional QtMultimedia; sin él se pinta `BackgroundColor` y se avisa una vez | `BackgroundVideo` Url (vacío = sin vídeo; solo `file:`); `BackgroundImageLayout` / `BackgroundImageFit` / `BackgroundImageRotate` (compartidas con la imagen); `BackgroundColor` de respaldo |
 | (arena, futuro)                | Atenuación global del casco (0 = sin atenuar, 1 = negro)                                                                      | (sin clave aún) `CascoDim` reservado                                                                                              |
 
@@ -155,6 +163,7 @@ panorámica 360.
   la escena del efecto, no en el color de la ventana, y desaparece con él.
 - Enum `BackgroundGradientType`: `LinearVertical` (0, default, arriba→abajo) / `LinearHorizontal` (1) / `Radial` (2, centrado). Enum = entero en kwinrc (grupo `[Effect-kube-effect]`).
 - **Radial sin shader**: se implementa con `QtQuick.Shapes.RadialGradient` (expone `centerX/centerY/centerRadius/focal*` y `stops` en Qt 6.12); deja de caer a vertical. **No** hay tipo cónico/circular. No se inventan shaders ni C++.
+- **Shapes pasa a ser opcional** (ADR-022): el radial vive en `HullRadial.qml`, cargado con `Loader` desde `HullGradient.qml`. Si el módulo `QtQuick.Shapes` falta, solo ese `Loader` falla: el degradado cae al lineal existente y se avisa **una vez** por log. Antes el import era dependencia dura de TODO el efecto (sin Shapes no había ni placeholder); las features `background-color`/`background-gradient`/`background-gradient-rotation` pasan a `requires: []` en `features.json`.
 - `BackgroundGradientRotation` (Enum, default `Fixed`, solo casco degradado):
   `Fixed` (0) no gira; `FollowCube` (1) gira el degradado con el yaw del cubo;
   `FollowCubeInverse` (2) gira en sentido contrario. La rotación lineal es un
@@ -197,7 +206,10 @@ panorámica 360.
   (estándar KDE). No se duplica en el KCM del efecto a propósito: `KGlobalAccel` guarda el
   valor en `kglobalshortcutsrc` y ese valor **pisa** al `sequence` del QML, así que una clave
   en `main.xml` sería una segunda fuente que nunca manda. El KCM solo muestra un aviso.
-- Giro por arrastre del ratón y teclado; zoom por rueda.
+- Giro por arrastre del ratón y teclado; zoom por rueda **con límites**
+  (ADR-022): el radio queda entre `0.6 · faceDistance` y `8 · faceDistance`,
+  así la rueda no puede meter la cámara dentro del sólido (por debajo de
+  `clipNear` las caras desaparecían) ni alejarla hasta perder el cubo de vista.
 
 ## 5.1 Advanced (opciones avanzadas)
 

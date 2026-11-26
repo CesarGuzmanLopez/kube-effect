@@ -2,33 +2,27 @@
     {
         "id": "background-color",
         "label": "Fondo: color sólido",
-        "requires": [
-            "QtQuick.Shapes"
-        ],
+        "requires": [],
         "native": false,
-        "notes": "Casco de un solo color (Background=Color). Claves: BackgroundColor. QtQuick.Shapes es obligatorio para TODO el efecto: HullGradient.qml lo importa siempre, aunque el modo sea Color (ADR-013).",
+        "notes": "Casco de un solo color (Background=Color). Claves: BackgroundColor. No usa QtQuick.Shapes (ADR-022): tras aislar el radial en HullRadial.qml con Loader, el modo Color no depende de ningún módulo opcional.",
         "status": "stable",
         "since": "0.0.0.1"
     },
     {
         "id": "background-gradient",
         "label": "Fondo: degradado",
-        "requires": [
-            "QtQuick.Shapes"
-        ],
+        "requires": [],
         "native": false,
-        "notes": "Degradado vertical y horizontal con Rectangle+Gradient, y radial real con QtQuick.Shapes (ADR-013). Claves: BackgroundColor, BackgroundColor2, BackgroundGradientType, BackgroundGradientStop.",
+        "notes": "Degradado vertical y horizontal con Rectangle+Gradient, y radial real con QtQuick.Shapes (ADR-013). Shapes es OPCIONAL (ADR-022): el radial se carga con Loader desde HullRadial.qml; sin el módulo la feature SIGUE FUNCIONANDO con el degradado lineal y avisa una vez, por lo que no va en requires. Claves: BackgroundColor, BackgroundColor2, BackgroundGradientType, BackgroundGradientStop.",
         "status": "stable",
         "since": "0.0.0.1"
     },
     {
         "id": "background-gradient-rotation",
         "label": "Fondo: degradado giratorio",
-        "requires": [
-            "QtQuick.Shapes"
-        ],
+        "requires": [],
         "native": false,
-        "notes": "Orientación del degradado (ADR-017). Clave: BackgroundGradientRotation. Fixed (0, default) deja el degradado quieto; FollowCube (1) lo gira con el yaw del cubo y FollowCubeInverse (2) al revés. La rotación es un transform (no se recrean objetos por frame). En el tipo Radial, girar el degradado centrado no se ve: se desplaza el punto focal sobre un círculo de 0.25*max(w,h).",
+        "notes": "Orientación del degradado (ADR-017). Clave: BackgroundGradientRotation. Fixed (0, default) deja el degradado quieto; FollowCube (1) lo gira con el yaw del cubo y FollowCubeInverse (2) al revés. La rotación es un transform (no se recrean objetos por frame). En el tipo Radial, girar el degradado centrado no se ve: se desplaza el punto focal sobre un círculo de 0.25*max(w,h). Sin QtQuick.Shapes el radial cae al lineal (ADR-022), que sí gira.",
         "status": "stable",
         "since": "0.0.0.2"
     },

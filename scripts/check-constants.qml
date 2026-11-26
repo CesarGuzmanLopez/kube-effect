@@ -79,6 +79,9 @@ Item {
         check("dim(on, 150)", Constants.dimOpacity(true, 150), 1);
         check("dim(on, -20)", Constants.dimOpacity(true, -20), 0);
         check("dim(on, undefined)", Constants.dimOpacity(true, undefined), 0.4);
+        // Number(null)/Number("") are 0: unset amount uses the default (ADR-022).
+        check("dim(on, null)", Constants.dimOpacity(true, null), 0.4);
+        check("dim(on, empty)", Constants.dimOpacity(true, ""), 0.4);
         check("dim(undefined, 40)", Constants.dimOpacity(undefined, 40), 0);
 
         // SkyBox exposure: 1.0 when not dimming or not rotating, otherwise the
@@ -96,9 +99,10 @@ Item {
         check("exposure(undefined, rotating)", Constants.skyBoxExposure(undefined, true, 40), 1);
         check("exposure(on, undefined)", Constants.skyBoxExposure(true, undefined, 40), 1);
 
-        // Gradient stop: percentage clamped to 0..1, non-finite -> schema
-        // default (50 %). KConfigXT hands a typed Int, so null only comes from
-        // a hand-edited value and is clamped like any other number (0).
+        // Gradient stop: percentage clamped to 0..1, non-finite or empty ->
+        // schema default (50 %). KConfigXT hands a typed Int, so null only
+        // comes from a hand-edited value; it means "unset" (default), not 0
+        // (ADR-022).
         check("stop(0)", Constants.gradientStopPosition(0), 0);
         check("stop(50)", Constants.gradientStopPosition(50), 0.5);
         check("stop(100)", Constants.gradientStopPosition(100), 1);
@@ -106,7 +110,8 @@ Item {
         check("stop(-20)", Constants.gradientStopPosition(-20), 0);
         check("stop(string)", Constants.gradientStopPosition("abc"), 0.5);
         check("stop(undefined)", Constants.gradientStopPosition(undefined), 0.5);
-        check("stop(null)", Constants.gradientStopPosition(null), 0);
+        check("stop(null)", Constants.gradientStopPosition(null), 0.5);
+        check("stop(empty)", Constants.gradientStopPosition(""), 0.5);
 
         // Gradient rotation: only the gradient hull (ADR-017). Fixed is always
         // 0, FollowCube copies the yaw, FollowCubeInverse mirrors it, and an
@@ -164,9 +169,13 @@ Item {
         check("face(rest 2, clamp)", Constants.faceOpacity(2, 0.7, false), 1);
         check("face(rest NaN -> 1)", Constants.faceOpacity(undefined, 0.7, false), 1);
         check("face(rot NaN -> 0.7)", Constants.faceOpacity(1, undefined, true), 0.7);
-        // Number(null) is 0, not NaN: null clamps to the floor like 0 does.
-        check("face(rest null -> floor)", Constants.faceOpacity(null, 0.7, false), 0.1);
-        check("face(rot null -> floor)", Constants.faceOpacity(1, null, true), 0.1);
+        // Number(null) is 0, not NaN: null/empty must read as "never
+        // configured" and take the default of the active branch (ADR-022),
+        // while a real 0 still clamps to the floor.
+        check("face(rest null -> default)", Constants.faceOpacity(null, 0.7, false), 1);
+        check("face(rot null -> default)", Constants.faceOpacity(1, null, true), 0.7);
+        check("face(rest empty -> default)", Constants.faceOpacity("", 0.7, false), 1);
+        check("face(rot 0 -> floor)", Constants.faceOpacity(1, 0, true), 0.1);
         check("face(rest numeric string)", Constants.faceOpacity("0.5", 0.7, false), 0.5);
         check("face(rest bad string -> 1)", Constants.faceOpacity("abc", 0.7, false), 1);
         check("face(rot undefined rotating)", Constants.faceOpacity(1, 0.7, undefined), 1);
@@ -178,7 +187,11 @@ Item {
         check("fade(-5)", Constants.faceFadeDuration(-5), 0);
         check("fade(5000)", Constants.faceFadeDuration(5000), 1000);
         check("fade(undefined)", Constants.faceFadeDuration(undefined), 120);
-        check("fade(null)", Constants.faceFadeDuration(null), 0);
+        // null is "unset", not 0 ms: the default fade (ADR-022).
+        check("fade(null)", Constants.faceFadeDuration(null), 120);
+        check("fade(empty)", Constants.faceFadeDuration(""), 120);
+        // Number(" ") is 0: a whitespace-only value is unset, not the floor.
+        check("fade(whitespace)", Constants.faceFadeDuration("  "), 120);
         check("fade(string)", Constants.faceFadeDuration("abc"), 120);
 
         // Url entry: url value or string, empty/undefined/null -> no image,

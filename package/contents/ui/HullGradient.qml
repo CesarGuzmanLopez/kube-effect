@@ -4,7 +4,6 @@
 */
 
 import QtQuick
-import QtQuick.Shapes
 
 import "constants.js" as Constants
 
@@ -14,6 +13,12 @@ import "constants.js" as Constants
 // without any shader. Radial has no gradient primitive in QtQuick, so it is
 // painted with QtQuick.Shapes: one ShapePath filled with a RadialGradient
 // (centerX/centerY/centerRadius + stops, available since Qt 6).
+//
+// Shapes is OPTIONAL (ADR-022): the radial lives in HullRadial.qml behind a
+// Loader, exactly like the video behind HullVideo.qml for QtMultimedia. If the
+// module is missing only that Loader errors; this layer falls back to the
+// linear gradient and warns once. Before that, the import here made Shapes a
+// hard dependency of the whole effect (no placeholder without it).
 //
 // Why Shapes and not a shader (ADR-013): a ShaderEffect would break the "QML
 // only" contract, needs recompilation at KWin start and a GL context the
@@ -44,6 +49,9 @@ Item {
     // that jumps +180 -> -180 is harmless: the pattern is invariant under 360°.
     readonly property real rotationAngle: Constants.gradientRotationAngle(root.gradientRotation, root.yaw)
     readonly property real rotationRadians: root.rotationAngle * Math.PI / 180
+
+    // One warning per session is enough: Loader.Error sticks anyway.
+    property bool radialWarned: false
 
     // Linear layer: a Rectangle + Gradient turned with a Rotation transform
     // (never re-created per frame). Turning a w x h rectangle exposes corners,
@@ -77,7 +85,8 @@ Item {
         anchors.centerIn: parent
         width: root.diagonal
         height: root.diagonal
-        visible: root.gradientType !== Constants.BackgroundGradientType.Radial
+        // Also the fallback while/after a failed HullRadial load (no Shapes).
+        visible: root.gradientType !== Constants.BackgroundGradientType.Radial || radialLoader.status === Loader.Error
         gradient: Gradient {
             orientation: root.horizontalGradient ? Gradient.Horizontal : Gradient.Vertical
             // Stops live in 0..1 of the oversized rectangle: the visible area is
@@ -103,59 +112,30 @@ Item {
         }
     }
 
-    Shape {
-        id: radialBackground
+    Loader {
+        id: radialLoader
         anchors.fill: parent
-        visible: root.gradientType === Constants.BackgroundGradientType.Radial
-
-        ShapePath {
-            strokeColor: "transparent"
-            strokeWidth: 0
-            fillGradient: RadialGradient {
-                centerX: radialBackground.width / 2
-                centerY: radialBackground.height / 2
-                // The focal point defaults to the origin (0,0), which pins the
-                // gradient to the top-left corner instead of the centre; it is
-                // set explicitly, and moved around the centre when the
-                // gradient follows the cube (see focalDistance). Turning the
-                // gradient itself would be invisible: a centred radial is
-                // rotationally symmetric.
-                focalX: radialBackground.width / 2 + root.focalDistance * Math.cos(root.rotationRadians)
-                focalY: radialBackground.height / 2 + root.focalDistance * Math.sin(root.rotationRadians)
-                // Corner distance from the centre is at most 0.707 * max(w, h);
-                // 0.75 covers the whole screen with a small margin.
-                centerRadius: Math.max(radialBackground.width, radialBackground.height) * 0.75
-                GradientStop {
-                    position: 0.0
-                    color: root.firstColor
-                }
-                GradientStop {
-                    position: root.stopPosition
-                    color: root.secondColor
-                }
-                GradientStop {
-                    position: 1.0
-                    color: root.secondColor
-                }
+        // The radial type is the only Shapes consumer (ADR-022): loaded lazily
+        // through its own file, never imported at this level, because a failed
+        // top-level import would take the whole effect down with it. On
+        // Loader.Error (module missing) linearBackground stays visible and
+        // paints the linear gradient instead, warning once.
+        active: root.gradientType === Constants.BackgroundGradientType.Radial
+        source: "HullRadial.qml"
+        onStatusChanged: {
+            if (status === Loader.Error && !root.radialWarned) {
+                root.radialWarned = true;
+                console.warn("kube-effect: QtQuick.Shapes unavailable; painting the linear gradient instead of the radial one");
             }
-            startX: 0
-            startY: 0
-            PathLine {
-                x: radialBackground.width
-                y: 0
-            }
-            PathLine {
-                x: radialBackground.width
-                y: radialBackground.height
-            }
-            PathLine {
-                x: 0
-                y: radialBackground.height
-            }
-            PathLine {
-                x: 0
-                y: 0
-            }
+        }
+        onLoaded: {
+            // Bindings on the created item (the video loader's pattern): the
+            // KCM can change colours or rotation while the effect is loaded.
+            item.firstColor = Qt.binding(() => root.firstColor);
+            item.secondColor = Qt.binding(() => root.secondColor);
+            item.stopPosition = Qt.binding(() => root.stopPosition);
+            item.focalDistance = Qt.binding(() => root.focalDistance);
+            item.rotationRadians = Qt.binding(() => root.rotationRadians);
         }
     }
 }

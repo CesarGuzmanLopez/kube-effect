@@ -36,9 +36,6 @@ echo "KKube dependency check"
 echo
 echo "Required (shipped with Plasma 6; no extra installs needed):"
 check "QtQuick3D" "$QML/QtQuick3D/qmldir" required qt6-quick3d qml6-module-qtquick3d
-# HullGradient.qml imports QtQuick.Shapes unconditionally (radial hull gradient,
-# ADR-013), so the whole effect needs it even when the background is a colour.
-check "QtQuick.Shapes" "$QML/QtQuick/Shapes/qmldir" required qt6-declarative qml6-module-qtquick-shapes
 check "org.kde.kwin" "$QML/org/kde/kwin" required kwin kwin-wayland
 check "org.kde.kirigami" "$QML/org/kde/kirigami/qmldir" required kirigami qml6-module-org-kde-kirigami
 check "plasma.components" "$QML/org/kde/plasma/components/qmldir" required libplasma qml6-module-org-kde-plasma-components
@@ -70,6 +67,10 @@ done
 
 echo
 echo "Optional (extra features only):"
+# Radial hull gradient (ADR-013): since ADR-022 HullGradient loads the Shapes
+# radial through a Loader (HullRadial.qml); without the module the gradient
+# hull falls back to the linear paint and the effect keeps working.
+check "QtQuick.Shapes (radial gradient)" "$QML/QtQuick/Shapes/qmldir" optional qt6-declarative qml6-module-qtquick-shapes
 check "RuntimeLoader (glTF runtime)" "$QML/QtQuick3D/AssetUtils/qmldir" optional qt6-quick3d qml6-module-qtquick3d-assetutils
 check "assimp importer plugin" "/usr/lib/qt6/plugins/assetimporters/libassimp.so" optional assimp libassimp6
 if ldconfig -p 2>/dev/null | grep -q 'libassimp\.so\.6'; then

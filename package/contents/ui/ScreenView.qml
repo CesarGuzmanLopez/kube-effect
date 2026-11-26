@@ -18,6 +18,17 @@ Item {
     property QtObject currentDesktop: KWinComponents.Workspace.currentDesktopForScreen(root.targetScreen)
 
     function switchTo(desktop) {
+        // desktopAt can hand out null while the model is mid-sync (ADR-022
+        // guard in Cube.desktopAt): switching to nothing would only close the
+        // effect with no visible change.
+        if (desktop === null || desktop === undefined) {
+            return;
+        }
+        // A click or Enter during the closing animation must not move the
+        // desktop without feedback: the effect already deactivated (ADR-022).
+        if (!effect.activated) {
+            return;
+        }
         KWinComponents.Workspace.setCurrentDesktopForScreen(desktop, root.targetScreen);
         effect.deactivate();
     }
@@ -80,7 +91,9 @@ Item {
     property bool videoEverShown: false
     readonly property bool videoActive: root.videoWanted && root.videoEverShown
     readonly property bool videoReady: videoLoader.status === Loader.Ready
-    readonly property bool videoPainted: root.videoReady && videoLoader.item.frameAvailable === true
+    // Loader.Ready survives a transient null item for one frame (unload); the
+    // item reference must be checked before reading through it (ADR-022).
+    readonly property bool videoPainted: root.videoReady && videoLoader.item !== null && videoLoader.item !== undefined && videoLoader.item.frameAvailable === true
     // Qt Quick 3D refuses a Texture.sourceItem as a light probe ("Cannot use
     // QSGTexture from Texture.sourceItem as light probe."), so a video can NOT
     // be wrapped by SceneEnvironment.SkyBox. The 360 clip is painted on a
@@ -93,7 +106,7 @@ Item {
     readonly property bool showFlatVideo: root.videoActive
     // Texture.sourceItem takes a QQuickItem (verified in Qt 6.12 qmltypes) and
     // VideoOutput is one, so the skybox samples the very same video output.
-    readonly property Item videoProbeItem: root.videoReady ? videoLoader.item.videoOutput : null
+    readonly property Item videoProbeItem: root.videoReady && videoLoader.item !== null && videoLoader.item !== undefined ? videoLoader.item.videoOutput : null
     // The warning must not repeat every frame: Loader.Error sticks anyway, so
     // one line tells the user qt6-multimedia is missing.
     property bool videoWarningShown: false
@@ -107,6 +120,27 @@ Item {
         // today) must not wait for a change that never comes.
         if (root.backgroundsActive) {
             root.videoEverShown = true;
+        }
+    }
+    // The "never reset" comment was a lie (ADR-022): a new clip or mode must
+    // rebuild the item and be allowed to warn again; otherwise a source change
+    // while the effect is off keeps the OLD decoder state and silences the new
+    // one's failures forever. A view that already holds a live HullVideo is
+    // not re-created by the reset (same source list), so the diagnosis timer
+    // is rearmed here: without it a broken NEW clip stays silent until the
+    // next activation (ADR-022, second review).
+    onBackgroundVideoSourceChanged: {
+        root.videoWarningShown = false;
+        root.videoEverShown = root.backgroundsActive;
+        if (videoLoader.status === Loader.Ready) {
+            videoDiagnosis.restart();
+        }
+    }
+    onBackgroundModeChanged: {
+        root.videoWarningShown = false;
+        root.videoEverShown = root.backgroundsActive;
+        if (videoLoader.status === Loader.Ready) {
+            videoDiagnosis.restart();
         }
     }
     // QtQuick3D's Texture exposes no load status (checked in Qt 6.12), so a tiny
@@ -182,7 +216,10 @@ Item {
     Image {
         id: skyBoxProbe
         visible: false
-        source: root.skyBoxBackground && root.backgroundsActive ? root.backgroundImageSource : ""
+        // drawOnThisScreen (ADR-022): KWin creates one SceneView per output
+        // even when CursorScreenOnly paints on one, so without the gate every
+        // screen decoded its own probe and its own lightProbe texture.
+        source: root.skyBoxBackground && root.backgroundsActive && root.drawOnThisScreen ? root.backgroundImageSource : ""
         sourceSize.width: 64
         asynchronous: true
     }
@@ -199,7 +236,9 @@ Item {
 
     // Hull: two-colour gradient without shaders (Background == Gradient).
     // Linear orientations are a Rectangle + Gradient; Radial is a real radial
-    // painted with QtQuick.Shapes (see HullGradient.qml for why, ADR-013).
+    // painted with QtQuick.Shapes through an optional Loader (see
+    // HullGradient.qml for why, ADR-013; ADR-022 makes Shapes fall back to the
+    // linear gradient when the module is missing).
     HullGradient {
         id: gradientBackground
         anchors.fill: parent
@@ -210,10 +249,12 @@ Item {
         secondColor: effect.configuration.BackgroundColor2
         // FollowCube/Inverse (ADR-017): the camera yaw is the same azimuth the
         // cube uses for desktop selection, so the layer turns with the solid.
-        // toEulerAngles() is decomposed every frame because the binding must
-        // track the camera; with Fixed the value is ignored and nothing repaints.
+        // toEulerAngles() costs a quaternion decomposition; it is only needed
+        // while the gradient hull is the active background (ADR-022): with the
+        // layer hidden or Fixed the binding was decomposing every frame for a
+        // value nothing read.
         gradientRotation: effect.configuration.BackgroundGradientRotation
-        yaw: cameraController.rotation.toEulerAngles().y
+        yaw: root.backgroundMode === Constants.Background.Gradient ? cameraController.rotation.toEulerAngles().y : 0
     }
 
     // Hull: flat image (Background == Image, not wrapping the scene). The
@@ -258,7 +299,12 @@ Item {
     Loader {
         id: videoLoader
         anchors.fill: parent
-        active: root.videoActive
+        // drawOnThisScreen (ADR-022, second review): KWin creates one SceneView
+        // per output even with CursorScreenOnly, and an active Loader decodes —
+        // without the gate every screen ran its own MediaPlayer for a view
+        // that is never painted. drawOnThisScreen is true whenever
+        // CursorScreenOnly is off, so the single-screen case is untouched.
+        active: root.videoActive && root.drawOnThisScreen
         visible: root.hullVisible && root.showFlatVideo
         source: "HullVideo.qml"
         onStatusChanged: {
@@ -289,7 +335,9 @@ Item {
         id: videoDiagnosis
         interval: 3000
         onTriggered: {
-            if (root.videoWarningShown || !root.videoActive) {
+            // The clip pauses (and legitimately stops advancing) with the
+            // effect closed: diagnosing then is a false positive (ADR-022).
+            if (root.videoWarningShown || !root.videoActive || !effect.visible) {
                 return;
             }
             const item = videoLoader.item;
@@ -336,40 +384,38 @@ Item {
         // TODO: Use the Underlay mode again when the QtQuick3D renderer accounts for QQuickRenderTarget::mirrorVertically().
         renderMode: View3D.Offscreen
 
-        // Transparent clear: the hull rectangles above paint the background.
-        // Never bind the window colour here; it outlives the effect. It stays on
-        // whenever the image SkyBox is not painting, which also covers the 360
-        // video case: that panorama is a sphere *inside* the scene (videoDome),
-        // so a transparent environment is exactly what it needs behind it.
-        Loader {
-            id: transparentSceneEnvironment
-            active: !root.skyBoxImageReady
-            sourceComponent: SceneEnvironment {
-                backgroundMode: SceneEnvironment.Transparent
+        // ONE SceneEnvironment for the whole lifetime of the view (ADR-022).
+        // The previous pair of Loaders destroyed and rebuilt the environment
+        // on every mode flip (mid-animation even), churning the scene's render
+        // setup; backgroundMode now toggles in place: Transparent while the
+        // SkyBox is not painting — which covers Color/Gradient/flat image/flat
+        // video and the 360 video dome (a sphere inside the scene needs a
+        // transparent environment behind it) — and SkyBox once the probe is
+        // Ready. Never bind the window colour here; it outlives the effect.
+        // Honesty note (second review): KWin DESTROYS the SceneView on every
+        // deactivation (QuickSceneEffect::stopInternal; view caching is
+        // off and not a Q_PROPERTY), so the panorama re-decodes per activation
+        // no matter what QML holds: keeping the texture across activations
+        // needs view caching in C++ (outside the QML-only contract). The
+        // probe gate below still avoids decoding while the effect is off or on
+        // screens that never paint (drawOnThisScreen, same multi-monitor
+        // reason as the skyBoxProbe).
+        environment: SceneEnvironment {
+            backgroundMode: root.skyBoxImageReady ? SceneEnvironment.SkyBox : SceneEnvironment.Transparent
+            lightProbe: Texture {
+                source: root.skyBoxImageReady && root.drawOnThisScreen ? root.backgroundImageSource : ""
             }
-        }
-
-        // Only active for an equirectangular image that rotates with the
-        // centre; an empty source would leave a SkyBox environment with no
-        // texture, so skyBoxBackground already requires the image to be set and
-        // the environment follows the probe status (see skyBoxImageReady).
-        Loader {
-            id: skyboxSceneEnvironment
-            active: root.skyBoxBackground && root.backgroundsActive
-            sourceComponent: SceneEnvironment {
-                backgroundMode: SceneEnvironment.SkyBox
-                // Dimming for this mode (see skyBoxExposure): probeExposure is
-                // the environment's brightness, so it darkens the panorama and
-                // nothing else. The item is created once and keeps the binding;
-                // the value is animated, the object is never re-created.
-                probeExposure: root.skyBoxExposure
-                lightProbe: Texture {
-                    source: root.backgroundImageSource
+            // Dimming for this mode (see skyBoxExposure): probeExposure is the
+            // environment's brightness, so it darkens the panorama and nothing
+            // else. The object is never re-created; the value is animated.
+            probeExposure: root.skyBoxExposure
+            Behavior on probeExposure {
+                NumberAnimation {
+                    duration: 120
+                    easing.type: Easing.OutQuad
                 }
             }
         }
-
-        environment: root.skyBoxImageReady ? skyboxSceneEnvironment.item : transparentSceneEnvironment.item
 
         PerspectiveCamera {
             id: camera
@@ -421,6 +467,14 @@ Item {
             faceDisplacement: effect.configuration.CubeFaceDisplacement
             faceOpacity: root.faceOpacity
             faceSize: Qt.size(root.width, root.height)
+            // One yaw binding feeds the face LOD (ADR-022): the camera azimuth
+            // is what decides which faces see the camera, so hide the captures
+            // of the back-facing ones while the solid is opaque.
+            cameraYaw: cameraController.rotation.toEulerAngles().y
+            // Screen identity for DesktopView, explicit (ADR-022): no dynamic
+            // scope through Cube/Repeater3D into this root.
+            screenName: root.targetScreen !== null && root.targetScreen !== undefined ? root.targetScreen.name : ""
+            screenGeometry: root.targetScreen !== null && root.targetScreen !== undefined ? root.targetScreen.geometry : Qt.rect(0, 0, 0, 0)
         }
 
         CubeCameraController {
@@ -430,6 +484,11 @@ Item {
             camera: camera
             xInvert: effect.configuration.MouseInvertedX
             yInvert: effect.configuration.MouseInvertedY
+            // Zoom limits relative to the solid (ADR-022): faceDistance is a
+            // guaranteed positive real now (geometryCount >= 3), so the wheel
+            // can neither dive under clipNear (faces vanished) nor run away.
+            minRadius: cube.faceDistance * 0.6
+            maxRadius: cube.faceDistance * 8
 
             states: [
                 State {

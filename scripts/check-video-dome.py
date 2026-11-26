@@ -74,12 +74,23 @@ QtObject {
     function screenAt(pos) { return null; }
 }
 """,
+    # The desktop role carries a real QObject (verified: ListModel.append()
+    # keeps it and delegates read it back), because CubeFace declares
+    # "required property QtObject desktop": rows without the role make the
+    # delegate fail to build and the render test would never touch the faces
+    # or the ADR-022 LOD. x11DesktopNumber is read by Cube.desktopAzimuth.
     "VirtualDesktopModel.qml": """import QtQuick
 ListModel {
+    id: vdm
     Component.onCompleted: {
-        append({ "x11DesktopNumber": 1, "name": "1" });
-        append({ "x11DesktopNumber": 2, "name": "2" });
-        append({ "x11DesktopNumber": 3, "name": "3" });
+        for (let n = 1; n <= 3; ++n) {
+            // createQmlObject, not a Component child element: a ListModel
+            // parses any nested element as a ListElement.
+            const desktop = Qt.createQmlObject("import QtQuick; QtObject { property int x11DesktopNumber; property string name }", vdm);
+            desktop.x11DesktopNumber = n;
+            desktop.name = String(n);
+            append({ "desktop": desktop, "x11DesktopNumber": n, "name": String(n) });
+        }
     }
 }
 """,

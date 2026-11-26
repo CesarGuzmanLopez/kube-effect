@@ -21,8 +21,9 @@ target_link_libraries(kube_effect_reload_test
 # Same domain as the KCM so i18n() does not warn about a missing domain in tests.
 target_compile_definitions(kube_effect_reload_test PRIVATE TRANSLATION_DOMAIN="kube_effect_kcm")
 
-# Install-location decision (system prefix vs private prefix). Pure path strings:
-# it never scans the filesystem nor creates a widget.
+# Install-location decision (system prefix vs private prefix) plus the command
+# block and its shell quoting (ADR-022): path strings and one temp directory;
+# it never creates a widget nor starts a process.
 add_executable(kube_effect_install_test
     kube_effect_install_test.cpp
     ../kube_effect_install.cpp
@@ -33,7 +34,11 @@ target_include_directories(kube_effect_install_test PRIVATE ${CMAKE_CURRENT_SOUR
 target_link_libraries(kube_effect_install_test
     Qt6::Core
     Qt6::Test
+    KF6::I18n
 )
+
+# Same domain as the KCM so i18n() in commandsBlock() does not warn.
+target_compile_definitions(kube_effect_install_test PRIVATE TRANSLATION_DOMAIN="kube_effect_kcm")
 
 add_test(NAME kube_effect_install COMMAND kube_effect_install_test)
 

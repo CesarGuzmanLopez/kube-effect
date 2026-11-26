@@ -13,6 +13,10 @@ Model {
     required property QtObject desktop
     required property int index
     required property size faceSize
+    // Screen identity from Cube (ADR-022): DesktopView must not resolve
+    // ScreenView.targetScreen through dynamic scope.
+    required property string screenName
+    required property rect screenGeometry
     // Material opacity (ADR-021), animated by ScreenView between the rest and
     // rotation values. Below 1 the material joins QtQuick3D's transparent
     // pass, which sorts blended faces back-to-front (Wayfire's two-pass
@@ -29,6 +33,8 @@ Model {
             diffuseMap: Texture {
                 sourceItem: DesktopView {
                     desktop: face.desktop
+                    screenName: face.screenName
+                    screenGeometry: face.screenGeometry
                     width: faceSize.width
                     height: faceSize.height
                 }

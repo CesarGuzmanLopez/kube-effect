@@ -78,6 +78,23 @@ function imageFit(value) {
     return DEFAULT_IMAGE_FIT;
 }
 
+// Number(null) and Number("") are 0, not NaN: a KConfig value that was never
+// saved (null/empty) would otherwise clamp to the RANGE FLOOR instead of the
+// schema default of the active branch (ADR-022). Parse to a finite number, or
+// null when there is no usable value.
+function finiteOr(nullable) {
+    if (nullable === null || nullable === undefined) {
+        return null;
+    }
+    // A whitespace-only string is "unset" too: Number(" ") is 0, which the
+    // floor clamps would take as a real minimum (ADR-022, second review).
+    if (typeof nullable === "string" && nullable.trim() === "") {
+        return null;
+    }
+    const value = Number(nullable);
+    return isFinite(value) ? value : null;
+}
+
 // Opacity of the black veil drawn over the hull while the cube rotates:
 // 0 when DimWhileRotating is off, otherwise amount/100 clamped to 0..1. A
 // missing or non-numeric amount uses the schema default (40 %).
@@ -85,8 +102,8 @@ function dimOpacity(enabled, amount) {
     if (enabled !== true) {
         return 0;
     }
-    var percent = Number(amount);
-    if (!isFinite(percent)) {
+    var percent = finiteOr(amount);
+    if (percent === null) {
         percent = DEFAULT_DIM_AMOUNT;
     }
     return Math.min(1, Math.max(0, percent / 100));
@@ -111,8 +128,8 @@ function skyBoxExposure(enabled, rotating, amount) {
 // carry anything, and a non-numeric value would poison the stop with NaN, so a
 // non-finite value uses the schema default (50 %) and the rest is clamped.
 function gradientStopPosition(value) {
-    var percent = Number(value);
-    if (!isFinite(percent)) {
+    var percent = finiteOr(value);
+    if (percent === null) {
         percent = DEFAULT_GRADIENT_STOP;
     }
     return Math.min(1, Math.max(0, percent / 100));
@@ -184,10 +201,13 @@ const MIN_FACE_OPACITY = 0.1;
 // FaceRotationOpacity (the same "moving" signal as the hull dim: drag or the
 // rotation animation, never the wheel zoom). Applied to the face material,
 // not the geometry, so the future cylinder mesh inherits it unchanged. A
-// non-finite value uses the schema default; the result stays in [0.1, 1].
+// null/empty/non-finite value uses the schema default; 0 is a real value and
+// still clamps up to the 0.1 floor. The result stays in [0.1, 1].
 function faceOpacity(restOpacity, rotationOpacity, rotating) {
-    var value = Number(rotating === true ? rotationOpacity : restOpacity);
-    if (!isFinite(value)) {
+    // A null/empty stored value means "never configured", not 0 (the floor):
+    // finiteOr maps it to the default of the active branch (ADR-022).
+    var value = finiteOr(rotating === true ? rotationOpacity : restOpacity);
+    if (value === null) {
         value = rotating === true ? DEFAULT_FACE_ROTATION_OPACITY : DEFAULT_FACE_OPACITY;
     }
     return Math.min(1, Math.max(MIN_FACE_OPACITY, value));
@@ -196,8 +216,8 @@ function faceOpacity(restOpacity, rotationOpacity, rotating) {
 // Duration of the rest<->rotation opacity fade (FaceFadeMs, 0..1000 ms).
 // 0 is a hard cut; a non-finite value uses the schema default (120 ms).
 function faceFadeDuration(value) {
-    var ms = Number(value);
-    if (!isFinite(ms)) {
+    var ms = finiteOr(value);
+    if (ms === null) {
         ms = 120;
     }
     return Math.min(1000, Math.max(0, ms));

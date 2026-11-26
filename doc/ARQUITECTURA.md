@@ -111,6 +111,17 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
 - Sin shaders: es una textura estándar sobre el quad/cilindro.
 - Encima van las ventanas de ese escritorio (composite o capas 3D).
 - Multi-monitor: una captura por pantalla (`WindowFilterModel { screenName }`).
+- **LOD de captura** (ADR-022): la cara es un `Texture.sourceItem`, o sea una
+  capa offscreen a resolución completa que se renderiza por frame. Con el
+  sólido opaco (`faceOpacity >= 0.99`) las caras que dan la espalda a la cámara
+  quedan totalmente ocluidas: se marcan `visible: false` y cuestan cero
+  capturas. Con caras semitransparentes (ADR-021) no se puede: hay que ver las
+  lejanas a través y se mantienen todas. El ángulo de cámara (`cameraYaw`) llega
+  a `Cube` desde el binding de `cameraController` en `ScreenView`.
+- **Sin scope dinámico** (ADR-022): `DesktopView` no resuelve `targetScreen`
+  subiendo el grafo de objetos; `ScreenView` → `Cube` → `CubeFace` →
+  `DesktopView` pasan `screenName` y `screenGeometry` explícitos, y un modelo
+  nulo deja `wId = 0` (nullWId) para liberar la captura.
 
 ## 4. Casco: espacio alrededor
 
@@ -121,10 +132,22 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
     - **Degradado** lineal (arriba→abajo u horizontal): un `Rectangle` con
       `Gradient` DENTRO de la escena. `Radial` es **real** con
       `QtQuick.Shapes.RadialGradient` (expone `centerX/centerY/centerRadius/focal*`
-      y `stops` en Qt 6.12); no cae a vertical. Sin shaders ni C++.
+      y `stops` en Qt 6.12); no cae a vertical. Sin shaders ni C++. **Opcional**
+      (ADR-022): vive en `HullRadial.qml` cargado con `Loader`; si falta el
+      módulo, cae al lineal y avisa una vez (antes el import hacía de
+      `QtQuick.Shapes` dependencia dura de todo el efecto).
     - **Imagen / SkyBox**: si el mapeo es `Equirect` (panorámica 360) se usa
       `SceneEnvironment { backgroundMode: SkyBox; lightProbe: Texture { source } }`
-      → **SkyBox**: entorno que envuelve la escena y gira con el centro. Si es
+      → **SkyBox**: entorno que envuelve la escena y gira con el centro. Un solo
+      `SceneEnvironment` inline del `View3D` (sin `Loaders`, ADR-022): alterna
+      `SkyBox`/`Transparent` con `backgroundMode` sin recrear el entorno en cada
+      cambio de modo. El `source` del `lightProbe` se gatea por `skyBoxImageReady`
+      (la sonda solo decodifica con el efecto visible). Limite honesto: KWin
+      destruye el SceneView en cada desactivación (`QuickSceneEffect::stopInternal`,
+      view caching off y no expuesto a QML), así que el panorama **re-decodifica
+      por activación** desde QML; evitarlo exige caching de views en C++, fuera
+      del contrato. En multi-monitor el `source` del probe solo se crea en la pantalla donde
+      se pinta (`drawOnThisScreen`). Si es
       `Flat`, se pinta como **quad plano** (fondo fijo), con `BackgroundImageFit`
       (`Cover`/`Contain`/`Stretch`, default `Cover`) para decidir cómo encaja
       la imagen plana. Ya no hay `Auto`: el usuario elige explícitamente
@@ -146,9 +169,14 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
       El `MediaPlayer` (bucle infinito, `AudioOutput { muted: true }` —en Qt 6.12
       `MediaPlayer` no tiene `muted`) solo reproduce con `effect.visible`:
       `playing` está ligado a esa propiedad, y el item no se crea hasta la
-      primera activación, así que no consume CPU en segundo plano.
-      Atenuación al girar: capa plana → velo 2D `hullDim`; 360 →
-      `probeExposure`, exactamente igual que la imagen (no hay lógica duplicada).
+      primera activación, así que no consume CPU en segundo plano. En
+      multi-monitor el `Loader` del vídeo se crea solo en la pantalla que pinta
+      (`active: videoActive && drawOnThisScreen`, ADR-022 segunda revisión):
+      KWin genera un SceneView por salida y un Loader activo decodificaría en
+      cada una. Cambiar de clip o de modo con el `Loader` ya montado rearma el
+      temporizador de diagnóstico (si no, un clip nuevo roto quedaría mudo).
+      Atenuación al girar: capa plana → velo 2D `hullDim`; 360 → esfera-velo
+      negra dentro de la cúpula (ADR-020; `probeExposure` es solo para la imagen).
 - **Orientación del degradado** (`BackgroundGradientRotation`, ADR-017; solo el
   casco degradado). `ScreenView.qml` pasa el yaw de la cámara
   (`cameraController.rotation.toEulerAngles().y`) como propiedad `yaw` a
@@ -291,7 +319,10 @@ native/
      - **«Reconfigurar efecto»** → D-Bus
        `org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect("kube-effect")`,
        con el fallo visible en una etiqueta. Solo re-lee la config: **no**
-       recompila QML.
+       recompila QML. **Asíncrono** (ADR-022): `QDBusConnection::asyncCall()` +
+       `QDBusPendingCallWatcher`; antes el `call` síncrono congelaba el hilo GUI
+       hasta 25 s si KWin no respondía (el aviso «en curso…» se muestra antes de
+       lanzar la llamada y la etiqueta recoge el resultado al terminar).
      - **«Aplicar cambios de código»** → cierra la sesión, no reinicia KWin
        (2026-11-25, medido: el restart mata la sesión Wayland y el escritorio
        queda muerto). `KMessageDialog` de aviso con tres salidas: «Cerrar
@@ -336,7 +367,11 @@ native/
   `./build.sh --system` + `./build.sh --clean`. El botón **«Copiar comandos»**
   (`QApplication::clipboard()`) pega la secuencia sin escribir rutas. Si el
   stamp es antiguo y no tiene `source`, se imprime la ruta de la copia instalada
-  con un aviso de que hay que ajustarla.
+  con un aviso de que hay que ajustarla. La ruta del stamp se **entrecomilla**
+  para la shell (`shellQuote()` en `kube_effect_install.*`, ADR-022: `cd %1` a
+  pelo permitía inyectar comandos con una ruta con `'` del stamp) y solo se
+  acepta si es absoluta; el `commandsBlock()` es función pura testeada con
+  ctest.
 - `native-stamp.json` (`plasma`, `qt`, `pkg`, `built`, `prefix`, `source`) lo
   escribe `build.sh` con las versiones que CMake registró en
   `kube-native-info.json`, no con una consulta posterior: el stamp no puede

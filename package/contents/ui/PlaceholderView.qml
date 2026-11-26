@@ -8,7 +8,6 @@ import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 import org.kde.kwin as KWinComponents
-import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.extras as PlasmaExtras
 
 Rectangle {

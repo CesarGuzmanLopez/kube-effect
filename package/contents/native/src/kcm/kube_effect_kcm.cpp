@@ -21,8 +21,10 @@
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDBusConnection>
-#include <QDBusInterface>
 #include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDialog>
 #include <QDir>
 #include <QFile>
@@ -167,54 +169,8 @@ QString checkMark(bool available)
     return available ? QStringLiteral("\u2713") : QStringLiteral("\u2717");
 }
 
-// Command block for the "Comandos" box: copy/paste ready, real project path when
-// the stamp carries "source" (written by native/build.sh). An old stamp without
-// the field just gets the placeholder plus a note, never an empty cd.
-QString commandsBlock(const QString &sourceRoot)
-{
-    const bool sourceExists = !sourceRoot.isEmpty() && QFileInfo(sourceRoot).isDir();
-    // A store install keeps the sources under contents/native, so build.sh sits
-    // directly in the stamp source; a build from the repo points at the repo
-    // root (build.sh lives in native/, one level down). Both are supported by
-    // build.sh itself, which derives everything from its own location.
-    const bool packagedCopy = sourceExists
-        && QFileInfo(sourceRoot + QStringLiteral("/build.sh")).isFile();
-    const QString directory = sourceExists
-        ? sourceRoot
-        : QStringLiteral("~/.local/share/kwin/effects/kube-effect/contents/native");
-
-    QString firstLine = QStringLiteral("cd %1").arg(directory);
-    if (!sourceExists) {
-        firstLine += QStringLiteral("  # ") + i18n("ruta no encontrada, ajústala");
-    }
-
-    // Comments start in the same column so the block reads as a table when
-    // pasted into the shell (a long cd line simply pushes its own comment).
-    const auto commandLine = [](const QString &command, const QString &comment) {
-        return command.leftJustified(28, QLatin1Char(' ')) + QStringLiteral("# ") + comment;
-    };
-
-    if (packagedCopy) {
-        return QStringList{
-                   firstLine,
-                   commandLine(QStringLiteral("./build.sh"), i18n("instala para tu usuario (sin root)")),
-                   commandLine(QStringLiteral("./build.sh --system"), i18n("aparece en Preferencias (pide contraseña)")),
-                   commandLine(QStringLiteral("./build.sh --clean"), i18n("borra los árboles de build")),
-               }
-                   .join(QLatin1Char('\n'))
-            + QLatin1Char('\n');
-    }
-
-    return QStringList{
-               firstLine,
-               commandLine(QStringLiteral("make native"), i18n("instala para tu usuario (sin root)")),
-               commandLine(QStringLiteral("make native-install"),
-                           i18n("pide la contraseña solo al instalar")),
-               commandLine(QStringLiteral("make native-status"), i18n("comprueba versión compilada vs instalada")),
-           }
-               .join(QLatin1Char('\n'))
-        + QLatin1Char('\n');
-}
+// The build command (KubeInstall::commandsBlock, in kube_effect_install.*)
+// lives with the quoting helper so ctest can exercise both without a widget.
 
 // The build command is compiled out unless -DKUBE_SHOW_BUILD_COMMAND=ON
 // (ADR-015): the nested harness builds native/ itself, so the hint would only
@@ -383,7 +339,7 @@ QWidget *KubeEffectKcm::buildCommandsBox(const QString &sourceRoot, QWidget *par
     commands->setReadOnly(true);
     commands->setWordWrapMode(QTextOption::NoWrap);
     commands->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    commands->setPlainText(commandsBlock(sourceRoot));
+    commands->setPlainText(KubeInstall::commandsBlock(sourceRoot));
     commands->setFixedHeight(commands->fontMetrics().lineSpacing() * 4 + 24);
     layout->addWidget(commands);
 
@@ -554,23 +510,32 @@ QWidget *KubeEffectKcm::buildActionBox()
 
 void KubeEffectKcm::reconfigureEffect()
 {
-    QDBusInterface interface(QStringLiteral("org.kde.KWin"),
-                             QStringLiteral("/Effects"),
-                             QStringLiteral("org.kde.kwin.Effects"),
-                             QDBusConnection::sessionBus());
-    if (!interface.isValid()) {
-        m_actionStatusLabel->setText(i18n("KWin no responde por D-Bus (org.kde.KWin /Effects): %1",
-                                          interface.lastError().message()));
-        return;
-    }
-
-    const QDBusMessage reply = interface.call(QStringLiteral("reconfigureEffect"), QStringLiteral("kube-effect"));
-    if (reply.type() == QDBusMessage::ErrorMessage) {
-        m_actionStatusLabel->setText(i18n("reconfigureEffect falló: %1", reply.errorMessage()));
-        return;
-    }
-    m_actionStatusLabel->setText(
-        i18n("Ajustes reconfigurados. Si has cambiado código QML, usa «Aplicar cambios de código»."));
+    // Asynchronous (ADR-022): QDBusInterface::call blocks the GUI thread while
+    // D-Bus waits for the reply, and an unresponsive KWin froze the settings
+    // window for up to 25 s. asyncCall + watcher keeps the thread free; the
+    // outcome lands in the same label. No signals, no extra threads.
+    m_actionStatusLabel->setText(i18n("Reconfigurando efecto…"));
+    QDBusMessage message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"),
+                                                           QStringLiteral("/Effects"),
+                                                           QStringLiteral("org.kde.kwin.Effects"),
+                                                           QStringLiteral("reconfigureEffect"));
+    message << QStringLiteral("kube-effect");
+    // asyncCall() is this Qt's non-blocking call: Qt 6 dropped the
+    // QDBusMessage -> QDBusPendingCall conversion that made
+    // call(message, QDBus::NoBlock) usable in Qt 5. Same semantics, no sync wait.
+    const QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(message);
+    auto *watcher = new QDBusPendingCallWatcher(pending, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        const QDBusPendingReply<> reply = *w;
+        if (reply.isError()) {
+            m_actionStatusLabel->setText(i18n("reconfigureEffect falló: %1", reply.error().message()));
+            w->deleteLater();
+            return;
+        }
+        m_actionStatusLabel->setText(
+            i18n("Ajustes reconfigurados. Si has cambiado código QML, usa «Aplicar cambios de código»."));
+        w->deleteLater();
+    });
 }
 
 void KubeEffectKcm::reloadCompositor()
@@ -635,28 +600,31 @@ void KubeEffectKcm::requestLogout()
     // The supported route: Plasma's shutdown service, not a systemctl verb. It
     // is the same call the desktop's own "Log Out" uses, so apps get their
     // usual close notification instead of being killed with the compositor.
-    QDBusInterface interface(QStringLiteral("org.kde.Shutdown"),
-                             QStringLiteral("/Shutdown"),
-                             QStringLiteral("org.kde.Shutdown"),
-                             QDBusConnection::sessionBus());
-    if (!interface.isValid()) {
-        m_reloadStatusLabel->setText(i18n("org.kde.Shutdown no responde (%1). Cierra sesión a mano: "
-                                          "en Wayland es la única forma de recompilar el QML.",
-                                          interface.lastError().message()));
-        m_reloadButton->setEnabled(true);
-        return;
-    }
-
-    const QDBusMessage reply = interface.call(QStringLiteral("logout"));
-    if (reply.type() == QDBusMessage::ErrorMessage) {
-        m_reloadStatusLabel->setText(i18n("No se pudo cerrar la sesión: %1. Ciérrala a mano.",
-                                          reply.errorMessage()));
-        m_reloadButton->setEnabled(true);
-        return;
-    }
-    // No need to re-enable: the session is going away.
-    m_reloadStatusLabel->setText(i18n("Cerrando sesión… al volver a entrar, KWin recompila el QML y "
-                                      "el código nuevo queda activo."));
+    // Asynchronous for the same reason as reconfigureEffect (ADR-022): a hung
+    // org.kde.Shutdown must not freeze this window before the logout happens.
+    m_reloadStatusLabel->setText(i18n("Cerrando sesión…"));
+    const QDBusMessage message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.Shutdown"),
+                                                                QStringLiteral("/Shutdown"),
+                                                                QStringLiteral("org.kde.Shutdown"),
+                                                                QStringLiteral("logout"));
+    // asyncCall(): non-blocking on Qt 6 (see reconfigureEffect).
+    const QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(message);
+    auto *watcher = new QDBusPendingCallWatcher(pending, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        const QDBusPendingReply<> reply = *w;
+        if (reply.isError()) {
+            m_reloadStatusLabel->setText(i18n("No se pudo cerrar la sesión (%1). Ciérrala a mano: "
+                                              "en Wayland es la única forma de recompilar el QML.",
+                                              reply.error().message()));
+            m_reloadButton->setEnabled(true);
+            w->deleteLater();
+            return;
+        }
+        // No need to re-enable: the session is going away.
+        m_reloadStatusLabel->setText(i18n("Cerrando sesión… al volver a entrar, KWin recompila el QML y "
+                                          "el código nuevo queda activo."));
+        w->deleteLater();
+    });
 }
 K_PLUGIN_CLASS_WITH_JSON(KubeEffectKcm, "kube_effect_kcm.json")
 

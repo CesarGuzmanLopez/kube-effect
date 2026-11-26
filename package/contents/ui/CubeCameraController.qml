@@ -23,8 +23,13 @@ Item {
     property bool xInvert: false
     property bool yInvert: false
 
-    implicitWidth: parent.width
-    implicitHeight: parent.height
+    // Zoom bounds (ADR-022): unclamped wheel steps drove radius under
+    // clipNear, where the faces disappear, or off to absurd distances. The
+    // defaults are harmless; ScreenView links them to cube.faceDistance so the
+    // limits follow the actual solid size. Implicit width/height were dropped:
+    // ScreenView anchors this controller, so nothing ever read them.
+    property real minRadius: 100
+    property real maxRadius: 20000
 
     onRotationChanged: root.updateCamera()
     onRadiusChanged: root.updateCamera()
@@ -52,7 +57,9 @@ Item {
         target: null
         onWheel: event => {
             let delta = (event.inverted ? -1 : 1) * event.angleDelta.y * 0.01;
-            root.radius += root.radius * 0.1 * delta;
+            // Relative step, clamped (ADR-022): the zoom is proportional, so
+            // without limits a few frames of a fast wheel crossed clipNear.
+            root.radius = Math.max(root.minRadius, Math.min(root.maxRadius, root.radius + root.radius * 0.1 * delta));
         }
     }
 

@@ -24,9 +24,24 @@ KWinComponents.SceneEffect {
     // which is only an approximation of the pointer position.
     property string cursorScreenName: ""
 
-    // stored as a property to keep the component alive and cleanup afterwards
-    property var mainDelegate: KWinComponents.Workspace.desktops.length < 3 ? Qt.createComponent("PlaceholderView.qml") : Qt.createComponent("ScreenView.qml")
-    delegate: mainDelegate
+    // The delegate of a SceneEffect is evaluated ONCE (KWin does not re-resolve
+    // it when desktops are added or removed): Qt.createComponent() inside a
+    // binding left the placeholder stuck at 3 desktops and the cube alive below
+    // 2 (doc/trucos-aprendidos.md, "delegate de SceneEffect evaluado una vez").
+    // Inline Components plus a count property re-evaluate the delegate binding,
+    // and KWin recreates the SceneViews when the delegate changes.
+    readonly property int desktopCount: KWinComponents.Workspace.desktops.length
+    delegate: desktopCount < 3 ? placeholderComponent : cubeComponent
+
+    Component {
+        id: placeholderComponent
+        PlaceholderView {}
+    }
+
+    Component {
+        id: cubeComponent
+        ScreenView {}
+    }
     // Screen edges are stored as a comma-separated string ("1,7") so the generic
     // KCM (QLineEdit) can edit them; an older IntList value is also accepted.
     function toEdges(value) {
@@ -99,8 +114,15 @@ KWinComponents.SceneEffect {
     }
 
     function activate() {
-        if (activated || deactivateTimer.running) {
+        if (activated) {
             return;
+        }
+        // Pressing the shortcut during the closing animation must reopen the
+        // cube, not strand it: the old guard returned while deactivateTimer ran
+        // and the timer then hid a freshly "activated" effect forever. Stop the
+        // pending hide and continue with the activation.
+        if (deactivateTimer.running) {
+            deactivateTimer.stop();
         }
         cursorScreenName = screenUnderCursorName();
         visible = true;

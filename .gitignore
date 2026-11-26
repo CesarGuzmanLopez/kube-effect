@@ -6,6 +6,7 @@ package/contents/native/build/
 package/contents/native/build-system/
 __pycache__/
 *.pyc
+.mypy_cache/
 
 # tools
 .ruff_cache/

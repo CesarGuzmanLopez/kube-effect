@@ -330,3 +330,81 @@ esto las caras; pueden combinarse.
 (reposo/giro/clamp/NaN) y `make check` valida el esquema (widget
 QDoubleSpinBox por clave). Prueba visual solo en el anidado
 (`scripts/kwin-nested-test.sh`), nunca en el host.
+
+---
+
+## ADR-022 — Lote de estabilidad pre-cilindro.
+
+**Decisión**: correcciones puntuales de estabilidad y rendimiento encontradas en
+auditoría, sin cambiar claves de configuración ni el contrato QML-puro:
+
+1. **Delegate reactivo** (`main.qml`): el `delegate` de un SceneEffect se evalúa
+   una vez, así que un `Qt.createComponent(...)` en un binding dejaba el
+   PlaceholderView clavado al crecer a 3+ escritorios (y el cubo vivo al bajar de
+   2). Se pasa a dos `Component` inline y un binding sobre `desktopCount`
+   (`Workspace.desktops.length`); KWin recrea los SceneViews cuando cambia el
+   delegate.
+2. **Geometría con `geometryCount >= 3`** (`Cube.qml`): `angleTick = 360/count`
+   sin guarda producía Infinity (count 0 → flood de NaN documentado en
+   trucos-aprendidos §C), −4e18 (count 1) o ~0 (count 2) en `faceDistance`.
+   `angleTick` y `faceDistance` usan `Math.max(3, faceRepeater.count)`;
+   `desktopAt()` tolera delegates nulos.
+3. **LOD de caras opacas**: cada cara mantiene un `Texture.sourceItem` = capa
+   offscreen a resolución completa por frame. Con `faceOpacity >= 0.99` las
+   caras que dan la espalda a la cámara están totalmente ocluidas y se marcan
+   `visible: false` (cero captura); con caras semitransparentes se mantienen
+   todas, porque hay que ver las lejanas a través. El criterio es
+   `cos(faceAzimuth - cameraYaw) >= 0` — umbral 0, no un margen positivo: una cara
+   a 89° sigue siendo frontal (un `> 0.15` la ocultaba y dejaba un hueco con el
+   casco asomando por el canto), y solo cruza `cos < 0` la que de verdad da la
+   espalda; `cameraYaw` llega a Cube desde el binding de `cameraController` en
+   ScreenView.
+4. **SceneEnvironment único** (`ScreenView.qml`): los dos Loaders
+   transparent/skybox se recreaban en cada cambio de modo (vaivén de objetos del
+   entorno en plena animación de cierre). Un solo `SceneEnvironment` inline
+   alterna `backgroundMode` y su `lightProbe` se gatea por `skyBoxImageReady` y
+   `drawOnThisScreen` (multi-monitor). Nota honesta (segunda revisión): **no**
+   hay latch `skyBoxEverShown` — KWin destruye el SceneView en cada desactivación
+   (`QuickSceneEffect::stopInternal`; el view caching está apagado y no es
+   `Q_PROPERTY`), así que el re-decode del panorama por activación es inevitable
+   desde QML: conservarlo exigiría activar el caching en C++, fuera del contrato
+   QML-puro. El fix real era eliminar el vaivén de los dos Loaders, no retener la
+   textura.
+5. **Clamp de zoom relativo a `faceDistance`** (`CubeCameraController.qml`): la
+   rueda sin límites dejaba `radius` bajo `clipNear` (caras desaparecidas).
+   `minRadius`/`maxRadius` enlazados a `faceDistance * 0.6` / `faceDistance * 8`.
+6. **`screenName`/`screenGeometry` explícitos** (`DesktopView.qml`): el
+   `targetScreen` resuelto por scope dinámico es frágil (qmllint no lo ve y
+   depende del encadenado de objetos). El ScreenView los pasa como propiedades
+   requeridas, y `wId` tolera modelos nulos (0 = nullWId, libera captura).
+7. **Shapes opcional con fallback lineal** (`HullRadial.qml`): el import de
+   `QtQuick.Shapes` era dependencia dura de TODO el efecto (sin Shapes no había
+   ni placeholder). El radial se carga con `Loader` desde `HullGradient.qml`;
+   en `Loader.Error` cae al degradado lineal y avisa una vez. La nota de las
+   features `background-*` en `features.json` documenta el fallback.
+8. **Plus: D-Bus asíncrono + quoting** (`native/src/kcm`): `reconfigureEffect`
+   y `logout` usaban `QDBusInterface::call` síncrono en el hilo GUI (hasta 25 s
+   congelado si KWin no responde); pasan a `QDBusConnection::asyncCall()` +
+   `QDBusPendingCallWatcher` con el resultado en la etiqueta existente. El
+   bloque de comandos copiaba la ruta del stamp sin comillas (`cd %1`): se
+   añade `shellQuote()` (comillas simples; una comilla literal se cierra y se
+   escapa como `'\''`), la ruta se valida absoluta y la lógica pasa a
+   `kube_effect_install.*`, testeable con ctest.
+9. **Menus y detalles**: activar durante el cierre reaprovecha el timer en vez
+   de dejar el efecto muerto; `switchTo()` ignora clics con el efecto cerrado;
+   `constants.js` trata `null` y `""` como «sin valor» (usa el default, no el
+   suelo, porque `Number(null) === 0`); el vídeo resetea
+   `videoEverShown`/`videoWarningShown` al cambiar fuente o modo (con rearma
+   del diagnóstico si el Loader ya estaba listo); el probe del skybox y el
+   Loader del vídeo se gatean por `drawOnThisScreen` (multi-monitor);
+   el `yaw` del degradado solo se descompone en modo Gradient; imports y
+   tamaños implícitos muertos fuera.
+
+**Porqué**: son fallos de orden de magnitud (cubo que no aparece, congelación
+de 25 s, reconstrucción de texturas por ciclo) que hay que cerrar antes de la
+forma cilíndrica (ADR-002), que multiplica delegates, caras y cargas.
+
+**Verificación**: `make check` (qmllint, check-constants con los tests null →
+default, check-scene-environment, check-video-dome, check-features) y
+`make native` (ctest: quoting del bloque de comandos). Prueba visual solo en
+el anidado (`scripts/kwin-nested-test.sh`).
