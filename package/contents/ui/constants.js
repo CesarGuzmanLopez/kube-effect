@@ -429,10 +429,14 @@ function cylinderArcAngle(faceWidth, radius) {
 // The turn range is OPEN at every cylinder count (like the drum): free
 // wrap, no band clamps, no asymmetric edges — and the mirrored back of the
 // far arcs seen through the gaps is tolerated exactly as the real drum
-// tolerates it (ADR-023). desktopAt/desktopAzimuth/arrows need no special
-// cases: Cube's standard tick-grid arithmetic modulo the slot count lands on
-// a missing delegate for empty slots, which Cube already maps to a null
-// desktop (a no-op selection, the camera parks facing the hull).
+// tolerates it (ADR-023). desktopAt/desktopAzimuth need no special cases:
+// Cube's standard tick-grid arithmetic modulo the slot count lands on a
+// missing delegate for empty slots, which Cube already maps to a null
+// desktop (a no-op selection; a DRAG can park facing the hull there). The
+// ARROWS are the exception (ADR-026b): with 1-2 desktops the grid has a
+// hole, so arrowAzimuth walks the real face list instead of the raw tick —
+// an empty slot is never an arrow stop («no se puede pasar» as measured by
+// the user).
 // cylinderArcRadius / cylinderSegmentAzimuth / cylinderAzimuthRange /
 // cylinderSegmentDesktopAt (the band design) are retired; the flat sheet
 // (Shape == Polygon, 1-2) is untouched (ADR-024).
@@ -588,9 +592,20 @@ function cylinderCullMode(cameraRadius, radius) {
 // unreachable — and RIGHT from 120 hit 240 -> normalized -120 -> clamped
 // -60, a -180 turn backwards. That band is RETIRED (three-slot drum design,
 // ADR-025 pt.11 re-rectified): today's only limited range is the symmetric
-// sheet-1 [-80, 80], and every cylinder turns freely on the slot grid (a
-// tick step may land on an empty slot by design). The helper keeps both
-// paths generic.
+// sheet-1 [-80, 80]. A cylinder with the arc mesh turns freely on the slot
+// grid — and with 1-2 desktops that grid has an EMPTY slot the raw tick walk
+// would park the camera on (Enter there is the guarded no-op — «no se puede
+// pasar», measured with the user's DebugOverlay at yaw=-103.9, parked). The
+// ADR-026b rule for the OPEN range: real faces that do NOT fill the grid
+// (faces.length < 360/tick — in practice exactly the three-slot drum at 1-2
+// desktops) make the arrow advance to the next REAL face in the requested
+// direction, wrapping the full circle and rotating the shortest way to it
+// (n=2: 0 <-> 120 from either side, never 240; n=1: no-op; an off-grid start
+// from a drag lands on the closest real face). Faces that DO fill the grid
+// (drum at 3+, polygon, two-sided sheet, and the empty transient of a
+// mid-sync model — with no faces to cycle the grid step must not freeze)
+// keep the pre-cylinder arithmetic verbatim, byte for byte (ADR-022/024
+// parity).
 //
 //   direction +1 = right (Keys.onRightPressed), -1 = left;
 //   tick         = cube.angleTick;
@@ -598,8 +613,8 @@ function cylinderCullMode(cameraRadius, radius) {
 //   faceAzimuths = the REAL face azimuths (Cube.faceAzimuth(i) per face —
 //                  the same function the delegate places the faces with).
 //
-// Open range: the pre-cylinder arithmetic verbatim — snap to the tick grid
-// (floor/ceil), advance one tick when already on it (the 0.05 tick
+// Open range, full grid: the pre-cylinder arithmetic verbatim — snap to the
+// tick grid (floor/ceil), advance one tick when already on it (the 0.05 tick
 // threshold), return the result WITHOUT normalizing (450 stays 450: the
 // equivalent-but-opposite-sign quaternion would let the Behavior slerp the
 // long way; the old clampAzimuthRange verbatim rule, kept as-is so polygon,
@@ -685,6 +700,49 @@ function arrowAzimuth(currentAzimuth, direction, tick, azimuthMin, azimuthMax, f
     if (!isFinite(t) || t <= 0) {
         return current;
     }
+
+    // Open range with holes in the tick grid (ADR-026b, the three-slot drum
+    // at 1-2 desktops: tick 120, faces [0] or [0, 120], slot 2 empty): walk
+    // the REAL faces circularly instead of the raw grid, so no arrow stop
+    // ever lands the camera on an empty slot. The standing face (within the
+    // same 0.05 tick threshold) is skipped; ahead in the requested direction
+    // wins, otherwise the sweep wraps the circle (the face that is furthest
+    // BEHIND is the first one past +-180). A single real face has no other
+    // stop: return the current verbatim, the arrow holds (n=1 drum). The
+    // answer is the chosen face's representative nearest to the current
+    // angle, so the quaternion Behavior always slerps the short way (same
+    // verbatim-sign rule as the grid path below).
+    const slots = Math.round(360 / t);
+    if (slots > 1 && faces.length > 0 && faces.length < slots) {
+        const threshold = t * 0.05;
+        const centre = normalizeSheetAzimuth(current);
+        let ahead = null;
+        let wrap = null;
+        for (let i = 0; i < faces.length; ++i) {
+            const face = Number(faces[i]);
+            if (!isFinite(face)) {
+                continue;
+            }
+            const offset = normalizeSheetAzimuth(face - centre);
+            if (Math.abs(offset) <= threshold) {
+                continue;
+            }
+            if (step > 0 ? offset > 0 : offset < 0) {
+                if (ahead === null || Math.abs(offset) < Math.abs(ahead)) {
+                    ahead = offset;
+                }
+            } else if (wrap === null || Math.abs(offset) > Math.abs(wrap)) {
+                wrap = offset;
+            }
+        }
+        const offset = ahead !== null ? ahead : wrap;
+        if (offset === null) {
+            return current;
+        }
+        const stop = centre + offset;
+        return stop + 360 * Math.round((current - stop) / 360);
+    }
+
     let next = step > 0 ? Math.ceil(current / t) * t : Math.floor(current / t) * t;
     if (Math.abs(next - current) < 0.05 * t) {
         next += step * t;

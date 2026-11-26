@@ -369,16 +369,40 @@ Item {
         check("arrow non-array faces", Constants.arrowAzimuth(60, 1, 120, band[0], band[1], undefined), 60);
         check("arrow open NaN tick", Constants.arrowAzimuth(70, 1, NaN, null, null, []), 70);
         // Cylinder arrows with 1-2 desktops (three-slot drum, OPEN range):
-        // the plain tick arithmetic verbatim — RIGHT from 0 lands on slot 1
-        // (120), RIGHT again on slot 2 (240: empty, the camera parks facing
-        // the hull; Enter there is the guarded no-op inside Cube.desktopAt),
-        // LEFT from 0 wraps negative. No band or wrap special case survives
-        // (cylinderSegmentDesktopAt is retired; the wiring check runs the
-        // real Cube.desktopAt grid).
-        check("cyl arrow RIGHT 0", Constants.arrowAzimuth(0, 1, 120, null, null, [0]), 120);
-        check("cyl arrow RIGHT 120 (empty slot ok)", Constants.arrowAzimuth(120, 1, 120, null, null, [0, 120]), 240);
-        check("cyl arrow LEFT 0", Constants.arrowAzimuth(0, -1, 120, null, null, [0, 120]), -120);
-        check("cyl arrow RIGHT 240", Constants.arrowAzimuth(240, 1, 120, null, null, [0]), 360);
+        // the tick grid has HOLES (slot 2 at 240 with two faces), so the
+        // arrows walk the REAL faces with a full wrap (ADR-026b) — the
+        // regression the user measured was parking on the empty slot where
+        // Enter is the guarded no-op: «no se puede pasar». n=1: the only
+        // real face is the standing one — no-op both directions. n=2: 0 <->
+        // 120 from BOTH sides, 240 never a stop. The returned representative
+        // keeps the rotation the short way (the slerp rule); modulo 360 it is
+        // congruent with a real face azimuth.
+        check("cyl1 RIGHT 0 no-op", Constants.arrowAzimuth(0, 1, 120, null, null, [0]), 0);
+        check("cyl1 LEFT 0 no-op", Constants.arrowAzimuth(0, -1, 120, null, null, [0]), 0);
+        checkClose("cyl1 RIGHT 45 lands on face 0", Constants.arrowAzimuth(45, 1, 120, null, null, [0]), 0, 1e-6);
+        checkClose("cyl1 LEFT -45 lands on face 0", Constants.arrowAzimuth(-45, -1, 120, null, null, [0]), 0, 1e-6);
+        check("cyl arrow RIGHT 240 (n=1, short way to 0)", Constants.arrowAzimuth(240, 1, 120, null, null, [0]), 360);
+        checkClose("cyl2 RIGHT 0", Constants.arrowAzimuth(0, 1, 120, null, null, [0, 120]), 120, 1e-6);
+        checkClose("cyl2 LEFT 0", Constants.arrowAzimuth(0, -1, 120, null, null, [0, 120]), 120, 1e-6);
+        checkClose("cyl2 RIGHT 120", Constants.arrowAzimuth(120, 1, 120, null, null, [0, 120]), 0, 1e-6);
+        checkClose("cyl2 LEFT 120", Constants.arrowAzimuth(120, -1, 120, null, null, [0, 120]), 0, 1e-6);
+        // From the empty slot itself and from the off-grid stuck point the
+        // user measured (yaw=-103.9, parked by a drag): the arrows escape to
+        // a real face in the requested direction.
+        checkClose("cyl2 RIGHT from hole 240", Constants.arrowAzimuth(-120, 1, 120, null, null, [0, 120]), 0, 1e-6);
+        checkClose("cyl2 LEFT from hole 240", Constants.arrowAzimuth(-120, -1, 120, null, null, [0, 120]), -240, 1e-6);
+        checkClose("cyl2 RIGHT off-grid", Constants.arrowAzimuth(-103.9, 1, 120, null, null, [0, 120]), 0, 1e-6);
+        checkClose("cyl2 LEFT off-grid", Constants.arrowAzimuth(-103.9, -1, 120, null, null, [0, 120]), -240, 1e-6);
+        // After a full spin the representative keeps the short path: 360 ->
+        // 480 (not 120: a -240 turn backwards would make the Behavior slerp
+        // the long way).
+        checkClose("cyl2 RIGHT 360", Constants.arrowAzimuth(360, 1, 120, null, null, [0, 120]), 480, 1e-6);
+        // n=3: the grid is FULL, so the old tick arithmetic runs VERBATIM
+        // (ADR-022/024 parity, 0 -> 120 -> 240 -> 360, no normalization).
+        check("cyl3 RIGHT 0", Constants.arrowAzimuth(0, 1, 120, null, null, [0, 120, 240]), 120);
+        check("cyl3 LEFT 0", Constants.arrowAzimuth(0, -1, 120, null, null, [0, 120, 240]), -120);
+        check("cyl3 RIGHT 240", Constants.arrowAzimuth(240, 1, 120, null, null, [0, 120, 240]), 360);
+        check("cyl3 RIGHT 359 verbatim", Constants.arrowAzimuth(359, 1, 120, null, null, [0, 120, 240]), 480);
         // desktopAzimuth for the states: slot number * tick (slot 0 with one
         // desktop -> the face is ALWAYS front-facing when the effect opens).
         checkClose("slot0 target verbatim", Constants.clampAzimuthRange(120 * 0, null, null), 0);

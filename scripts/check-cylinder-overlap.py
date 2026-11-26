@@ -27,6 +27,11 @@ turning). The diagnosis landed on two mechanisms, both proven here:
     "face behind" regression guard), with the same R = 3(W + g)/2pi the
     closed drum uses (the slot count is pinned to three, the missing
     delegates are exactly what the open range parks on).
+  * two-slot: the same drum with TWO desktops and one hole — the user's
+    Bug A setup (d=776 v=4 measured with the DebugOverlay): at rest the
+    middle row must be the slot-0 face again (never the mirrored inside:
+    with viewRadius frozen at the sheet gap the camera sat at 32 < R and
+    saw the shell; the wiring flip scenario pins the radius itself).
   * poly: the Polygon reference — Mask is bounded to the curved faces
     (re-review of ADR-026): a flat face at rest keeps Blend, the virgin
     ADR-023 look (distinct positions already order it; a Mask there would
@@ -93,6 +98,9 @@ DRUM_RADIUS = DESKTOPS * (FACE_WIDTH + GAP) / (2 * math.pi)
 #   re-rectified) — the user's "face behind" guard: the single face
 #   (slot 0, azimuth 0) owns the centre of the view, and the open
 #   range + slot-0 azimuth keep the resting target front-facing.
+#   two-slot: the THREE-SLOT drum with two desktops (the user's Bug A
+#   measurement: 2 faces + 1 hole) — same guard extended: at yaw 0 the
+#   middle row is the slot-0 face (red), never the inside of the far arc.
 #   poly: the Polygon reference (shape 0) — Mask is bounded to the
 #   cylinder (re-review of ADR-026): flat faces never had the overlap
 #   (their positions are distinct sort centroids) and the virgin ADR-023
@@ -103,6 +111,11 @@ SCENARIOS = {
     "turn": (60.0, 0.7, 1.0, 3, 1),
     "holes": (0.0, 1.0, 0.72, 3, 1),
     "single": (0.0, 1.0, 1.0, 1, 1),
+    # two-slot: the same three-slot drum with 2 desktops and one hole (the
+    # user's Bug A setup) — at rest, yaw 0, the slot-0 face owns the middle
+    # row exactly like in "single": the front face is never inside the drum
+    # and never painted over (ADR-026b radius + ADR-026 paint order).
+    "two-slot": (0.0, 1.0, 1.0, 2, 1),
     "poly": (0.0, 1.0, 1.0, 3, 0),
 }
 
@@ -204,7 +217,7 @@ def run_scenario(application, import_root, name, yaw, opacity, coverage, count, 
             snapshot = {}
         faces = snapshot.get("faces", [])
         cylinder = shape == 1
-        expected_faces = 3 if name not in ("single",) else 1
+        expected_faces = count if name in ("single", "two-slot") else 3
         want_active = cylinder
         ok = (
             len(faces) == expected_faces
@@ -223,12 +236,12 @@ def run_scenario(application, import_root, name, yaw, opacity, coverage, count, 
         # positions, which is what feeds the transparent-pass sort centroid
         # (ADR-026).
         expected_radius = (
-            DRUM_RADIUS
-            if cylinder
-            else 0.5 * FACE_WIDTH / math.tan(math.pi / 3) + GAP
+            DRUM_RADIUS if cylinder else 0.5 * FACE_WIDTH / math.tan(math.pi / 3) + GAP
         )
         radii = [math.hypot(face["x"], face["z"]) for face in faces]
-        ok = all(abs(radius - expected_radius) <= 1e-3 for radius in radii) and bool(faces)
+        ok = all(abs(radius - expected_radius) <= 1e-3 for radius in radii) and bool(
+            faces
+        )
         print(
             f"{'PASS' if ok else 'FAIL'} [{name}] face positions at the placement radius"
             f" = {expected_radius:.2f} (got {[round(r, 2) for r in radii]})"
@@ -278,7 +291,7 @@ def run_scenario(application, import_root, name, yaw, opacity, coverage, count, 
             return ((value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF)
 
         centre = classify(px(320, 180))
-        if name in ("rest", "single", "poly"):
+        if name in ("rest", "single", "two-slot", "poly"):
             band(image, 180, 160, 480, "R", "front arc owns the middle row")
             band(image, 120, 160, 480, "R", "front arc owns the upper row")
             band(image, 240, 160, 480, "R", "front arc owns the lower row")
@@ -329,7 +342,9 @@ def main(argv):
                 "check-cylinder-overlap: skipped (needs a real platform; QtQuick3D does not render offscreen)"
             )
             return 0
-        return run_scenario(application, import_root, name, yaw, opacity, coverage, count, shape)
+        return run_scenario(
+            application, import_root, name, yaw, opacity, coverage, count, shape
+        )
 
     if not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
         print(

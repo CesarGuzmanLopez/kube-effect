@@ -49,6 +49,14 @@ Item {
     readonly property string cylRangeJson: JSON.stringify(Constants.azimuthRangeFor(1, cube.faceCount, cube.cylinderMesh !== null))
     readonly property real angleTick: cube.angleTick
     readonly property real faceDistance: cube.faceDistance
+    // The radius chain the camera clamps and the states measure against
+    // (ADR-026b: with the drum in effect viewRadius must BE R — never the
+    // sheet's gap — or the wheel traps the camera inside the solid).
+    readonly property real viewRadius: cube.viewRadius
+    readonly property real sheetGap: cube.sheetGap
+    readonly property real safeViewRadius: cube.safeViewRadius
+    readonly property real cylinderRadiusValue: cube.cylinderRadius
+    readonly property real faceSizeHeight: cube.faceSize.height
     readonly property real faceSizeWidth: cube.faceSize.width
     readonly property int faceCullMode: cube.faceCullMode
     readonly property int faceCount: cube.faceCount

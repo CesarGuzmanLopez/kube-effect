@@ -74,13 +74,18 @@ lint-ci: check
 # SLOTS, ADR-025 pt.11 re-rectificado: cylinderActive, angleTick 120 —grid de
 # slots—, faceDistance 3(W+g)/2π CON el hueco del usuario, rango abierto sin
 # topes de banda, slot 0 en azimut 0 —la cara siempre de frente al activar—
-# y slot 1 vacío alcanzable a 120°, NoCulling). Cada caso helpers comprueba
-# además que hypot(x, z+R) del primer vértice == el R esperado, desde el eje
-# local (0,0,−R) (el binding del Holder llegó a la malla).
+# y slot 1 en la grid (las flechas no aparcan allí, ADR-026b), NoCulling).
+# Cada caso helpers comprueba además que hypot(x, z+R) del primer vértice ==
+# el R esperado, desde el eje local (0,0,−R) (el binding del Holder llegó a
+# la malla), y la CADENA DE RADIO (ADR-026b): viewRadius === faceDistance ===
+# R a cualquier count, viewRadius lejos del sheetGap (>100 px) y close/distant
+# > R — la congelación «v=4» medida por el usuario quedará fijada aquí. Y el
+# escenario FLIP (ScreenView.qml real, 2 escritorios, Shape Polígono→Cilindro
+# en caliente): el overlay debe leer v == d == R sin warning de binding loop.
 # No renderiza nada: basta el motor offscreen. Se salta sin PySide6.
 # check-cylinder-overlap.py RENDERIZA el Cube.qml REAL (Shape=Cylinder,
 # colores planos por cara vía los stubs de check-video-dome; tambor de 3
-# escritorios y tambor de 3 slots con 1) y
+# escritorios y tambor de 3 slots con 1 y con 2) y
 # fija el fix de ADR-026 en dos planos: píxeles — la cara frontal gana en toda
 # su huella en reposo (op=1, yaw 0) y a medio giro (yaw 60, op=0.7: el color
 # dominante sigue siendo la cara cercana; la pared interior sólo aparece por
@@ -89,9 +94,10 @@ lint-ci: check
 # estructura — los centroides de las N caras son dos a dos distintos (la
 # malla envuelve el nodo; el radius vive en la position, paridad con el
 # polígono) y alphaMode sale del umbral de faceOpacity (≥0.99 Mask, <0.99
-# Blend); escenario «single» — 1 escritorio: el tambor de 3 slots mantiene
-# la cara de frente (slot 0 centro de pantalla, R = 3(W+g)/2π) — el guard
-# del «detrás» que pidió el usuario. Necesita pantalla real (QtQuick3D no
+# Blend); escenarios «single»/«two-slot» — 1 y 2 escritorios: el tambor de 3
+# slots mantiene la cara de frente (slot 0 centro de pantalla, R = 3(W+g)/2π)
+# — el guard del «detrás» y del «v=4 dentro del tambor» que pidió el usuario
+# (ADR-026b). Necesita pantalla real (QtQuick3D no
 # renderiza offscreen) y PySide6; sin ellos se salta (exit 0).
 # check-video.py instancia HullVideo.qml (el único fichero que importa
 # QtMultimedia) con un motor QML real y comprueba los dos caminos del Loader de

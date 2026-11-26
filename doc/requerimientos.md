@@ -116,19 +116,29 @@ y la hoja simple ya es útil (ADR-024).
   - Giro **sin topes** (rango abierto igual que el tambor,
     `azimuthRangeFor` → `[null, null]`): rotación completa, sin clamps ni
     wraps asimétricos; el dorso espejado de los arcos lejanos se tolera por
-    los huecos y cantos igual que en el tambor de 3+ (ADR-023). Flechas y
-    estados: la aritmética estándar ±tick verbatim (con 1 cara en reposo el
-    target es azimut 0 → **la cara queda siempre de frente al activar**;
-    aparcar en un slot vacío enseña el casco — vista válida).
+    los huecos y cantos igual que en el tambor de 3+ (ADR-023). Estados:
+    la aritmética estándar verbatim (con 1 cara en reposo el target es
+    azimut 0 → **la cara queda siempre de frente al activar**). **Las
+    flechas solo visitan caras reales** (ADR-026b): si la grid tiene huecos
+    (el tambor de 1-2: slot 2 vacío), cada flecha avanza a la siguiente
+    CARA real en la dirección pedida con wrap completo — con 2 escritorios
+    0↔120 por ambos lados y **nunca 240**; con 1 no-op; con la grid llena
+    (tambor 3+, polígono, hoja doble) la cuenta ±tick verbatim de siempre
+    (paridad ADR-022/024). El drag sí puede dejar la cámara frente a un
+    slot vacío (el casco es vista válida); desde ahí las flechas salen al
+    parar en la cara real más cercana en la dirección pedida.
   - Selección: `desktopAt` estándar sobre la grid — slot vacío → delegate
     ausente → `null` → Enter/click no-op (guardas ya existentes, sin helper
     dedicado; `cylinderSegmentDesktopAt`, `cylinderSegmentAzimuth`,
     `cylinderArcRadius` y `cylinderAzimuthRange` murieron con la banda).
-  - Cámara: `faceDistance = viewRadius = R` (la del tambor con N = 3).
-    Honestidad del close: llena la pantalla en **vertical** (la generatriz
-    no se deforma); en horizontal la cuerda del arco ≈ 0.826·W con g = 0 →
-    close deja ~8-9 % de casco a cada lado (bordes curvos proyectados, no
-    un bug).
+  - Cámara: `faceDistance = viewRadius = R` (la del tambor con N = 3) para
+    **cualquier** count — 3, 2 o 1 (ADR-026b: con 1-2 el `viewRadius` no
+    puede tomar la rama de la hoja; **close/distant nunca quedan dentro del
+    tambor** y los topes de rueda valen `[0.6·R, 8·R]`, con R≈776 nada de
+    radios 32/28 dentro del sólido). Honestidad del close: llena la pantalla
+    en **vertical** (la generatriz no se deforma); en horizontal la cuerda
+    del arco ≈ 0.826·W con g = 0 → close deja ~8-9 % de casco a cada lado
+    (bordes curvos proyectados, no un bug).
 - **Culling: NoCulling siempre, también en cilindro** (rectificación del
   usuario sobre ADR-025 pt.12): la pared interior espejada de las caras
   traseras **debe verse** por los huecos y cantos — paridad con el polígono

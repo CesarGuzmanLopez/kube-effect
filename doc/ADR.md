@@ -980,3 +980,67 @@ real queda para el usuario en el anidado (`Meta+Shift+K`, DebugOverlay con
 `op=`/`blend=`): reposo sin pared sobre frontal, giro con la pared solo por
 huecos y cantos, y el wallpaper siguiéndose ver a través de los huecos de las
 caras.
+
+### Dos regresiones del tambor de 3 slots medidas por el usuario (ADR-026b)
+
+El usuario midió en el anidado (DebugOverlay) dos fallos del tambor con 1-2
+escritorios que ningún check del gate detectó:
+
+1. **`v=4` → la cámara dentro del tambor.** Línea medida exacta (2 escritorios):
+   `d=776 v=4 sheet=0 R=776 ... r=786`, y con 1 escritorio `r=32`/`r=28`.
+   `r=786 = 4·DistanceFactor(1.75) + faceFit` es el estado `distant` calculado
+   con `viewRadius=4`, y `r=32 = 8·4` es el `maxRadius` de la rueda con ese
+   `viewRadius`: la cámara queda atrapada DENTRO del tambor (solo casco, dorso
+   espejado, «no se puede pasar» al zoom). Causa raíz: ciclo de dependencias en
+   `Cube.qml` — `viewRadius` (línea 76, `isSheet ? 0.5·W : faceDistance`) →
+   `faceDistance` (rama hoja: `sheetGap`) → `sheetGap` (`0.005·viewRadius`) →
+   `viewRadius`. Con `count < 3` la fase inicial es de hoja (`isSheet` true:
+   el Loader de la malla monta asíncrono la primera vez que se compila
+   `CylinderArcMesh`, o al cambiar `Shape` en caliente); cuando la malla
+   aparece a mitad de un pase de reevaluaciones, Qt corta el ciclo y deja
+   `viewRadius` **congelado en `sheetGap` ≈ max(1, 0.005·R) ≈ 4`** mientras
+   `faceDistance` se recupera solo a R (de ahí `d=776 v=4` simultáneos). El
+   log del motor lo confesaba: `QML Cube: Binding loop detected for property
+   "viewRadius"` — reproducido fuera de KWin instanciando el `ScreenView.qml`
+   real offscreen (polígono-hoja con 2 escritorios y switch a Cylinder:
+   mismo `d=776 v=4 r=786`). Con 3+ escritorios `isSheet` nunca es true, el
+   ciclo no se cierra, y por eso el tambor de 3 funcionaba. Fix: la rama de
+   cilindro sale ANTES de tocar la cadena de hoja —
+   `viewRadius: cylinderActive ? cylinderRadius : isSheet ? 0.5 * faceSize.width : faceDistance`
+   — así con `cylinderActive` el valor es `R` estructuralmente (`viewRadius ===
+   faceDistance === cylinderRadius` para cualquier count) y el grafo queda
+   acíclico en las tres ramas (hoja: `viewRadius` no lee `faceDistance`;
+   polígono: `faceDistance` no lee `sheetGap`; cilindro: ninguna lee la cadena
+   de la otra). Consecuencia fijada por test: close/distant y los topes de
+   rueda miden contra R — con 1 escritorio `r=32`/`r=28` son imposibles
+   (`minRadius = 0.6·R`).
+2. **Flechas que aparcan en el slot vacío.** Con 2 escritorios la grid de 3
+   slots tiene un hueco (240°): la aritmética ±tick verbatim del rango abierto
+   paseaba la cámara `0 → 120 → 240`, y en 240 no hay delegate — Enter/click
+   son el no-op guardado y la siguiente flecha volvía a otro hueco o sumaba
+   120 sobre el vacío: «no se puede pasar» entre los dos escritorios reales
+   (medido: `yaw=-103.9 f0:-0.24 f1:-0.72` atascado). Fix en
+   `Constants.arrowAzimuth`: con rango ABIERTO y la lista de caras reales
+   (parámetro `faceAzimuths`, ya se pasaba) con **huecos** en la grid
+   (`faces.length < 360/tick` — el tambor de 1-2), la flecha avanza a la
+   siguiente CARA REAL en la dirección pedida con wrap completo y camino más
+   corto (n=2: 0↔120 por ambos lados, nunca 240; n=1: no-op; desde un punto
+   fuera de grid —drag— aterriza en la cara real más cercana en la dirección
+   pedida). Con la grid LLENA (tambor 3+, polígono, hoja doble cara) corre la
+   cuenta vieja verbatim — paridad ADR-022/024 intacta, ningún resultado
+   cambia fuera del tambor con hueco. La rama LIMITADA (hoja-1) no se toca.
+   El drag conserva el giro libre: puede dejar el casco en pantalla, y las
+   flechas salen de ahí a una cara real.
+
+**Verificación ADR-026b**: `check-constants.qml` fija las flechas del tambor
+(n=1 no-op, n=2 0↔120 ambos lados, n=3 grid intacta, polígono 4 caras
+verbatim); `check-cylinder-wiring.py` exige en los tres counts
+`viewRadius === faceDistance === R` + assert estructural «`viewRadius` no es
+`sheetGap`» (>100 px de diferencia con R=1272) + close/distant > R, y añade
+el escenario **flip** — `ScreenView.qml` real offscreen, hoja de 2
+escritorios y `Shape` a Cylinder en caliente, la secuencia que congelaba
+`v=4` — parseando el DebugOverlay y exigiendo `v == d == R` y `sheet=0`
+(con el código viejo este escenario falla: `v=4`, medido);
+`check-cylinder-overlap.py` gana el escenario **two-slot** (2 escritorios,
+yaw 0: la fila central es el rojo de la cara del slot 0 — la cara de frente
+también con huecos).

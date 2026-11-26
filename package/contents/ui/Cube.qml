@@ -62,24 +62,41 @@ Node {
     readonly property bool isSheet: faceRepeater.count < 3 && !cylinderActive
     // Angle between the centres of consecutive slots: the polygon tick at
     // >= 3 everywhere, 360/3 = 120 in the three-slot drum (faces live in
-    // slots 0..count-1, azimuths 0 and 120 — the arrows step through the
-    // grid including the empty slots), fixed values on the sheet so
-    // Infinity/NaN from 360/count can never happen.
+    // slots 0..count-1, azimuths 0 and 120 — the arrows cycle the REAL
+    // faces when this grid has holes, ADR-026b; a drag may still park on
+    // an empty slot), fixed values on the sheet so Infinity/NaN from
+    // 360/count can never happen.
     readonly property real angleTick: isSheet ? (faceRepeater.count === 2 ? 180 : 360) : 360 / geometryCount
     // Radius the distant state and the zoom clamps measure against. The flat
     // sheet has no apothem (its faceDistance is a gap, see below), so it
-    // measures against half a face; everywhere else this is exactly
-    // faceDistance (the polygon apothem or the drum's R) and the polygon
-    // behaviour is untouched. It must NOT read faceDistance in sheet mode:
-    // faceDistance derives from sheetGap which derives from viewRadius
-    // (cycle).
-    readonly property real viewRadius: isSheet ? 0.5 * faceSize.width : faceDistance
+    // measures against half a face; with the drum in effect this is R
+    // straight from cylinderRadius; otherwise (polygon, and the cylinder
+    // without mesh at >= 3) it is exactly faceDistance (the apothem) and the
+    // polygon behaviour is untouched. THE BRANCH ORDER IS THE FIX of the
+    // v=4 regression (ADR-026b): reading faceDistance while cylinderActive
+    // made the chain viewRadius -> faceDistance -> sheetGap -> viewRadius
+    // cyclic for a mid-evaluation isSheet flip (the arc Loader mounting
+    // asynchronously below 3 desktops, or a hot Shape change with the cube
+    // open): Qt cut the loop and left viewRadius frozen at sheetGap (~4)
+    // while faceDistance recovered to R — the engine even logged 'Binding
+    // loop detected for property "viewRadius"' at this line (measured
+    // offscreen with the real ScreenView: d=776 v=4, distant 786, wheel
+    // cap 32 = 8*4, the camera trapped inside the drum). With cylinderActive
+    // answered first the cylinder branch never touches the sheet chain, the
+    // graph is acyclic in all three branches, and viewRadius === faceDistance
+    // === R becomes structural at any count (3, 2 or 1).
+    readonly property real viewRadius: cylinderActive ? cylinderRadius : isSheet ? 0.5 * faceSize.width : faceDistance
     // Half-separation of the two sheet quads. Proportional, not a fixed 1 px:
     // with a 24-bit depth buffer and clipNear 10, a 1-unit gap at a ~15k
     // maxRadius is 1-2 quantisation steps and can still Z-fight on 4K, so the
     // gap scales with the solid (0.5 % of viewRadius, floor 1 -> the two faces
-    // are always >= 2 units apart). The order viewRadius -> sheetGap ->
-    // faceDistance keeps the chain acyclic.
+    // are always >= 2 units apart). The chain is acyclic in every branch
+    // (ADR-026b): the sheet's faceDistance reads sheetGap and viewRadius is
+    // the half-face (it never reads faceDistance there); the drum reads
+    // cylinderRadius in both; the polygon's faceDistance is the apothem.
+    // Before the branch reorder this WAS cyclic in the sheet -> drum flip
+    // (viewRadius -> faceDistance -> sheetGap -> viewRadius) and froze
+    // viewRadius at this very gap (measured v=4 with R=776).
     readonly property real sheetGap: Math.max(1, viewRadius * 0.005)
     // Cylinder (every count, ADR-025/ADR-026): CubeFaceDisplacement means
     // the LINEAR gap between neighbouring arcs measured on the surface —

@@ -598,9 +598,10 @@ Item {
             // back rule) and none with two; EVERY cylinder with the arc mesh
             // — drum at 3+, three-slot drum at 1-2 — is open, free wrap: the
             // asymmetric band [-60, 60] / [-60, 180] the user tested at the
-            // grill was retired (it "made jumps and felt choppy"; the camera
-            // may park on an empty slot, where the hull shows — a valid
-            // resting view, selection there is the guarded no-op). Same live
+            // grill was retired (it "made jumps and felt choppy"; a DRAG may
+            // park on an empty slot, where the hull shows — a valid resting
+            // view, selection there is the guarded no-op; the ARROWS never
+            // park there, ADR-026b cycles the real faces). Same live
             // inputs Cube branches on. The range alone is
             // not enough when the count or the shape CHANGES mid-open —
             // interaction kills the state bindings — so the handlers below
@@ -700,10 +701,11 @@ Item {
             }
 
             // The live list of face azimuths, straight from Cube.faceAzimuth
-            // (the same function the delegate places the faces with). Used
-            // only on limited ranges — the sheet, where every stop must be
-            // real; the cylinder's open grid may deliberately aim at an
-            // empty slot (hull view, no-op selection).
+            // (the same function the delegate places the faces with). Used on
+            // limited ranges — the sheet, where every stop must be real — and
+            // on open ranges WITH HOLES in the grid, the three-slot drum at
+            // 1-2 desktops (ADR-026b: the arrows cycle the real faces, never
+            // the empty slot; arrowAzimuth decides from the list length).
             function faceAzimuthList() {
                 const out = [];
                 for (let i = 0; i < cube.faceCount; ++i) {
@@ -717,14 +719,17 @@ Item {
                     return;
                 }
                 const eulerAngles = rotation.toEulerAngles();
-                // ADR-025 point 13: with a range (the one-desktop sheet)
-                // the arrow cycles the REAL faces instead of clamping a raw
-                // tick to an edge; with an open range — polygon, sheet-2 and
-                // every cylinder slot grid — the old tick arithmetic runs
-                // verbatim, so a 1-2 drum steps 120° at a time and may land
-                // on an empty slot (hull in view, Enter/click is the
-                // guarded no-op). The drag path clamps raw bounds in
-                // CubeCameraController: edges, not faces.
+                // ADR-025 point 13 + ADR-026b: with a range (the sheet-1) the
+                // arrow cycles the REAL faces instead of clamping a raw tick to
+                // an edge; with an open range whose grid has HOLES (the
+                // three-slot drum at 1-2 desktops) the arrow advances to the
+                // next REAL face with a full wrap — 0 <-> 120 from either side,
+                // never the empty slot at 240 («no se puede pasar», measured).
+                // Open ranges with a FULL grid — polygon, sheet-2, drum at 3+ —
+                // keep the old tick arithmetic verbatim. The drag path clamps
+                // raw bounds in CubeCameraController: edges, not faces, and a
+                // drag may still park facing the hull — from there the arrows
+                // move to the closest real face in the requested direction.
                 const next = Constants.arrowAzimuth(eulerAngles.y, -1, cube.angleTick, azimuthMin, azimuthMax, faceAzimuthList());
                 rotation = Quaternion.fromEulerAngles(0, next - eulerAngles.y, 0).times(rotation);
             }
@@ -734,10 +739,12 @@ Item {
                     return;
                 }
                 const eulerAngles = rotation.toEulerAngles();
-                // ADR-025 point 13, mirrored: limited ranges cycle the real
-                // faces (the one-desktop sheet holds); open ones — every
-                // cylinder grid included — step the raw tick verbatim, so a
-                // 1-2 drum goes 0 -> 120 -> 240 (empty slot, hull) -> 360.
+                // ADR-025 point 13 + ADR-026b, mirrored: limited ranges cycle
+                // the real faces (the one-desktop sheet holds); open ranges
+                // with holes in the grid — the 1-2 drum — take the next REAL
+                // face with a full wrap (0 <-> 120, never 240); open ranges
+                // with a full grid (drum 3+, polygon, sheet-2) step the raw
+                // tick verbatim as always.
                 const next = Constants.arrowAzimuth(eulerAngles.y, 1, cube.angleTick, azimuthMin, azimuthMax, faceAzimuthList());
                 rotation = Quaternion.fromEulerAngles(0, next - eulerAngles.y, 0).times(rotation);
             }
