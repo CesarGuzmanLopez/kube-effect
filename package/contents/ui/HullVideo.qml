@@ -29,8 +29,15 @@ Item {
     // compositor must not fetch the network when the effect activates.
     property url source
     // BackgroundImageFit value, shared with the flat image: Cover (default),
-    // Contain or Stretch.
+    // Contain or Stretch. It only applies to the flat layer.
     property int fit: Constants.BackgroundImageFit.Cover
+    // True when ScreenView wraps the clip on the 360 dome (Equirect + rotate).
+    // The whole frame must reach the texture: an equirect clip is 2:1 by
+    // definition and the sphere does the wrapping, so the output STRETCHES.
+    // Cover would crop the top and bottom of the panorama (the sky and the
+    // ground vanish and the horizon jumps) and Contain would letterbox black
+    // bars into the sphere's poles. Measured 2026-11-25 with a 608x304 clip.
+    property bool dome: false
     // effect.visible. Pausing (not stopping) keeps the position, so the clip
     // resumes where it was, and a hidden effect decodes nothing.
     property bool playing: false
@@ -43,6 +50,11 @@ Item {
     readonly property bool frameAvailable: player.hasVideo
     readonly property int mediaStatus: player.mediaStatus
     readonly property string errorString: player.errorString
+    // Int mirror of the VideoOutput's fillMode. scripts/check-video-dome.py
+    // reads the output through PySide, which cannot convert the
+    // QQuickVideoOutput::FillMode enum itself ("Can't find converter"); an int
+    // carries the same assertion (VideoOutput.Stretch == 0).
+    readonly property int fillModeValue: output.fillMode
 
     function applyPlayback() {
         if (root.playing && root.source.toString().length > 0) {
@@ -74,8 +86,12 @@ Item {
     VideoOutput {
         id: output
         anchors.fill: parent
-        // Same three fits as the flat image, so both modes share one setting.
+        // Dome: always Stretch (see the property). Flat layer: the same three
+        // fits as the flat image, so both modes share one setting.
         fillMode: {
+            if (root.dome) {
+                return VideoOutput.Stretch;
+            }
             switch (root.fit) {
             case Constants.BackgroundImageFit.Contain:
                 return VideoOutput.PreserveAspectFit;

@@ -290,6 +290,13 @@ con vídeo verificado: cientos de colores distintos y velo al 40 % exacto), y el
 resultado visual es el mismo panorama envolvente.
 **Nota**: el escenario previo (SkyBox + `sourceItem`) se elimina, con su `Loader`
 y su ruta de `probeExposure`, en vez de dejarlo como código muerto.
+**Corregido (2026-11-25)**: el `VideoOutput` de la cúpula ignora
+`BackgroundImageFit` mientras envuelve (`HullVideo.dome = true` →
+`fillMode: Stretch`). Con el default Cover el equirect se recortaba arriba y
+abajo (faltaba cielo y suelo y el horizonte saltaba al girar) y con Contain
+entraban barras negras a los polos. El ajuste del usuario solo manda en la
+capa plana; la esfera hace el envoltorio. Medido con un clip 608×304.
+`scripts/check-video-dome.py` ahora exige `fillMode == Stretch` en el caso 360.
 **Verificación**: `scripts/check-video-dome.py` renderiza el `ScreenView.qml` real
 (con un módulo `org.kde.kwin` simulado y un `effect` falso: `Background=Video`,
 Equirect, girar) y exige un frame con muchos colores distintos; cargar sin error

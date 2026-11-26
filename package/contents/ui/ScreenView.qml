@@ -272,6 +272,9 @@ Item {
             // fit while the effect is loaded, and effect.visible must pause it.
             item.source = Qt.binding(() => root.backgroundVideoSource);
             item.fit = Qt.binding(() => root.flatImageFit);
+            // The dome samples this very item: while it wraps the scene the
+            // output must show the full frame (Stretch), not the flat fit.
+            item.dome = Qt.binding(() => root.videoSkyBox);
             item.playing = Qt.binding(() => effect.visible);
             videoDiagnosis.restart();
         }

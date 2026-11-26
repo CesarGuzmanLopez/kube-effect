@@ -426,3 +426,19 @@ por `build.sh`; el `.so` se estampa con `KUBE_PLASMA_VERSION`, `KUBE_QT_VERSION`
 imprima el bloque de comandos con la ruta real en vez de un placeholder (un
 stamp viejo sin `source` no rompe nada: el bloque avisa y pone una ruta de
 ejemplo).
+
+### ❌ FALSO: el `BackgroundImageFit` del usuario vale también para la cúpula 360
+
+Síntoma: el vídeo 360 «se ve cortado» — falta cielo y suelo y el horizonte
+salta al girar; con Contain aparecen bandas negras arriba y abajo dentro de la
+esfera. Causa: la cúpula muestrea el mismo `VideoOutput` que pinta la capa 2D,
+y ese item llevaba el `fillMode` del fit del usuario. Cover
+(`PreserveAspectCrop`) recorta el frame para llenar el item (un equirect 2:1
+en pantalla 16:9 pierde franjas superior/inferior); Contain
+(`PreserveAspectFit`) cartonea con barras negras. Como textura de la esfera,
+ambas deforman el panorama: la envoltura la hace la geometría, no el ajuste.
+Fix: propiedad `dome` en `HullVideo.qml` — con Equirect + girar el `fillMode`
+es `Stretch` (fotograma completo); el fit solo aplica a la capa plana.
+`scripts/check-video-dome.py` exige `fillMode == Stretch` en el caso 360.
+Medido 2026-11-25 con clip 608×304. (ADR-020, corrección.)
+

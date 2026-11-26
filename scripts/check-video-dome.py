@@ -219,6 +219,23 @@ def main(argv):
                     application.exit(1)
                     return
 
+            # The dome samples the VideoOutput as Texture.sourceItem: while
+            # wrapping, the output must STRETCH the full frame. Cover (the
+            # default fit) crops the top and bottom of the equirect clip
+            # (lost sky/ground, jumping horizon); Contain letterboxes black
+            # bars into the sphere's poles. VideoOutput.Stretch == 0.
+            # PySide has no converter for the QQuickVideoOutput::FillMode enum
+            # (property("fillMode") raises RuntimeError), so the harness reads
+            # the int mirror HullVideo.qml exposes on the output's parent item.
+            probe = root.property("videoProbeItem")
+            holder = probe.parent() if probe is not None else None
+            fill = holder.property("fillModeValue") if holder is not None else None
+            print(
+                f"{'PASS' if fill == 0 else 'FAIL'} dome VideoOutput fillMode = {fill} (expected 0 = Stretch)"
+            )
+            if fill != 0:
+                result["ok"] = False
+
             image = view.grabWindow().convertToFormat(QImage.Format_RGB32)
             colours = len(
                 {

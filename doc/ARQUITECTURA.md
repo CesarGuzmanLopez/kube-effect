@@ -130,12 +130,13 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
       la imagen plana. Ya no hay `Auto`: el usuario elige explícitamente
       (`BackgroundImageLayout`: `Equirect`/`Flat`).
     - **Vídeo** (`Background=Video`): el clip se pinta **igual que una imagen**,
-      con dos caminos. `Equirect` + `BackgroundImageRotate` = 360: el
-      `SceneEnvironment.SkyBox` usa `lightProbe: Texture { sourceItem }` sobre el
-      `VideoOutput` (verificado en Qt 6.12: `Texture.sourceItem` es un
-      `QQuickItem` y `VideoOutput` lo es; el `VideoOutput` vive oculto y
-      QtQuick3D lo renderiza a una capa offscreen). Si no, capa plana
-      fullscreen detrás del `View3D` con `BackgroundImageFit` en el
+      con dos caminos. `Equirect` + `BackgroundImageRotate` = 360: una esfera
+      vista desde dentro con `baseColorMap: Texture { sourceItem: videoOutput }`
+      (ADR-020; Qt rechaza el `sourceItem` como `lightProbe`). Ahí el
+      `VideoOutput` fuerza `fillMode: Stretch` (`HullVideo.dome`): la esfera
+      envuelve el fotograma completo; el fit del usuario recortaba cielo y
+      suelo (Cover) o metía barras negras en los polos (Contain). Si no, capa
+      plana fullscreen detrás del `View3D` con `BackgroundImageFit` en el
       `VideoOutput.fillMode` (`Cover`/`Contain`/`Stretch`).
       **El import de QtMultimedia está aislado** en `package/contents/ui/HullVideo.qml`,
       que `ScreenView.qml` carga con un `Loader`: si el módulo opcional no está,

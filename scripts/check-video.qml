@@ -42,6 +42,28 @@ Item {
             check("missing QtMultimedia -> Loader.Error", root.videoStatus, Loader.Error);
             check("missing QtMultimedia -> no item, effect alive", root.videoHasItem, false);
         }
+        // Fill modes (ADR-020 fix): the 360 dome must always receive the FULL
+        // frame (VideoOutput.Stretch = 0) whatever the user's fit is, while the
+        // flat layer keeps honouring BackgroundImageFit (Cover=0 -> crop=2,
+        // Contain=1 -> fit=1, Stretch=2 -> stretch=0).
+        if (root.expectModule && root.videoHasItem) {
+            const video = root.videoItem;
+            const output = video.videoOutput;
+            video.dome = false;
+            video.fit = 0;
+            check("flat Cover -> PreserveAspectCrop", output.fillMode, 2);
+            video.fit = 1;
+            check("flat Contain -> PreserveAspectFit", output.fillMode, 1);
+            video.fit = 2;
+            check("flat Stretch -> Stretch", output.fillMode, 0);
+            video.dome = true;
+            video.fit = 0;
+            check("dome forces Stretch (Cover)", output.fillMode, 0);
+            video.fit = 1;
+            check("dome forces Stretch (Contain)", output.fillMode, 0);
+            video.fit = 2;
+            check("dome forces Stretch (Stretch)", output.fillMode, 0);
+        }
         // Simulated fallback: a Loader whose source does not exist must end in
         // Error and must not take the rest of the scene with it.
         check("broken source -> Loader.Error", root.brokenStatus, Loader.Error);
