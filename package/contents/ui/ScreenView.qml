@@ -178,7 +178,10 @@ Item {
         // The per-face cos kept the information that diagnosed the LOD bug
         // (yaw, pitch, op, tick, cos per face); with the LOD retired it is
         // purely informative: no face is ever hidden by orientation.
-        let line2 = "yaw=" + cube.cameraYaw.toFixed(1) + " pitch=" + root.debugEuler.x.toFixed(1) + " r=" + cameraController.radius.toFixed(0) + " op=" + root.faceOpacity.toFixed(2) + " tick=" + cube.angleTick.toFixed(1) + " n=" + cube.faceCount + "/" + cube.geometryCount + " d=" + cube.faceDistance.toFixed(0);
+        // sheet=1/0 and the azimuth limit (ADR-024): the sheet rules are live
+        // state (isSheet flips mid-sync) and a stuck clamp is invisible
+        // without them.
+        let line2 = "yaw=" + cube.cameraYaw.toFixed(1) + " pitch=" + root.debugEuler.x.toFixed(1) + " r=" + cameraController.radius.toFixed(0) + " op=" + root.faceOpacity.toFixed(2) + " tick=" + cube.angleTick.toFixed(1) + " n=" + cube.faceCount + "/" + cube.geometryCount + " d=" + cube.faceDistance.toFixed(0) + " v=" + cube.viewRadius.toFixed(0) + " sheet=" + (cube.isSheet ? 1 : 0) + " lim=" + cameraController.azimuthLimit.toFixed(0);
         for (let i = 0; i < cube.faceCount; ++i) {
             const cos = Math.cos((cube.angleTick * i - cube.cameraYaw) * Math.PI / 180);
             line2 += " f" + i + ":" + cos.toFixed(2);
@@ -538,27 +541,35 @@ Item {
             camera: camera
             xInvert: effect.configuration.MouseInvertedX
             yInvert: effect.configuration.MouseInvertedY
-            // Zoom limits relative to the solid (ADR-022): faceDistance is a
-            // guaranteed positive real now (geometryCount >= 3), so the wheel
-            // can neither dive under clipNear (faces vanished) nor run away.
-            minRadius: cube.faceDistance * 0.6
-            maxRadius: cube.faceDistance * 8
+            // Sheet azimuth cap (ADR-024): the same live count Cube branches
+            // on (faceCount, not geometryCount). The limit alone is not enough
+            // when the count CHANGES mid-open — interaction kills the state
+            // bindings — so the onFaceCountChanged handler below rewrites the
+            // rotation/radius from the current state's formulas.
+            azimuthLimit: Constants.sheetAzimuthLimit(cube.faceCount)
+            // Zoom limits relative to the solid (ADR-022): safeViewRadius is
+            // positive by construction — the sheet's half-face, or the polygon
+            // apothem, whose displacement can be negative (KCM range -500..500,
+            // pre-ADR-024 bug: negative limits let the wheel dive the camera
+            // inside the solid).
+            minRadius: cube.safeViewRadius * 0.6
+            maxRadius: cube.safeViewRadius * 8
 
             states: [
                 State {
                     name: "close"
                     PropertyChanges {
                         target: cameraController
-                        radius: cube.faceDistance + 0.5 * cube.faceSize.height / Math.tan(0.5 * camera.fieldOfView * Math.PI / 180)
-                        rotation: Quaternion.fromEulerAngles(0, cube.desktopAzimuth(currentDesktop), 0)
+                        radius: closeRadius()
+                        rotation: Quaternion.fromEulerAngles(0, targetAzimuth(), 0)
                     }
                 },
                 State {
                     name: "distant"
                     PropertyChanges {
                         target: cameraController
-                        radius: cube.faceDistance * effect.configuration.DistanceFactor + 0.5 * cube.faceSize.height / Math.tan(0.5 * camera.fieldOfView * Math.PI / 180)
-                        rotation: Quaternion.fromEulerAngles(0, cube.desktopAzimuth(currentDesktop), 0).times(Quaternion.fromEulerAngles(-20, 0, 0))
+                        radius: distantRadius()
+                        rotation: Quaternion.fromEulerAngles(0, targetAzimuth(), 0).times(Quaternion.fromEulerAngles(-20, 0, 0))
                     }
                 }
             ]
@@ -578,6 +589,52 @@ Item {
                 }
             }
 
+            // State target yaw: the desktop's own azimuth, put through the
+            // sheet clamp (ADR-024). desktopAzimuth already answers inside the
+            // limit for sheets (0 or 180 with the count's own tick), and with
+            // limit 360 clampSheetAzimuth returns the angle verbatim — exactly
+            // the pre-sheet behaviour; only a real cap (<360) normalizes.
+            function targetAzimuth() {
+                // Bare names: azimuthLimit resolves on this controller (the
+                // object the function is declared in), currentDesktop and cube
+                // through ScreenView's component scope (as in the states).
+                return Constants.clampSheetAzimuth(cube.desktopAzimuth(currentDesktop), azimuthLimit);
+            }
+
+            // Camera distance that makes a face of faceSize.height fill the
+            // screen vertically; both state radii sit on top of it.
+            function faceFit() {
+                return 0.5 * cube.faceSize.height / Math.tan(0.5 * camera.fieldOfView * Math.PI / 180);
+            }
+
+            function closeRadius() {
+                return cube.faceDistance + faceFit();
+            }
+
+            function distantRadius() {
+                return cube.safeViewRadius * effect.configuration.DistanceFactor + faceFit();
+            }
+
+            // Force the live state's values after a shape change while the
+            // effect stays open (ADR-024 review): the states' PropertyChanges
+            // are live bindings only until the first interaction — a drag,
+            // arrow or wheel assignment KILLS them — so with 2->1 desktops and
+            // yaw at 170 the new ±80 clamp was never applied (the mirrored
+            // back of the single quad showed), 2->3 left yaw at 180 (Enter or
+            // a click then selected desktop 3, not the current one), and the
+            // radius stayed the old solid's (2616 vs 2080). Rewriting
+            // rotation/radius here is idempotent while the bindings are still
+            // alive, and it survives their death: the next state flip (every
+            // deactivate/activate re-applies PropertyChanges) rebuilds them.
+            function resyncToState() {
+                const euler = rotation.toEulerAngles();
+                // Keep the current elevation (the states' own pitch comes from
+                // the -20 distant quaternion, already inside euler.x after a
+                // settled transition); re-aim the yaw at the new shape.
+                rotation = Quaternion.fromEulerAngles(euler.x, targetAzimuth(), 0);
+                radius = state === "distant" ? distantRadius() : closeRadius();
+            }
+
             function rotateToLeft() {
                 if (rotationAnimation.running) {
                     return;
@@ -587,6 +644,14 @@ Item {
                 if (Math.abs(next - eulerAngles.y) < 0.05 * cube.angleTick) {
                     next -= cube.angleTick;
                 }
+                // The limited sheet clamps its target here (ADR-024): at the
+                // +/-80 edge the next tick resolves inside the bound, so the
+                // arrow holds there instead of wrapping through the mirrored
+                // back; with limit 360 the angle passes verbatim (the
+                // verbatim rule of clampSheetAzimuth keeps the pre-sheet
+                // quaternion signs intact). The drag path clamps directly in
+                // CubeCameraController instead.
+                next = Constants.clampSheetAzimuth(next, azimuthLimit);
                 rotation = Quaternion.fromEulerAngles(0, next - eulerAngles.y, 0).times(rotation);
             }
 
@@ -599,6 +664,7 @@ Item {
                 if (Math.abs(next - eulerAngles.y) < 0.05 * cube.angleTick) {
                     next += cube.angleTick;
                 }
+                next = Constants.clampSheetAzimuth(next, azimuthLimit);
                 rotation = Quaternion.fromEulerAngles(0, next - eulerAngles.y, 0).times(rotation);
             }
         }
@@ -623,6 +689,18 @@ Item {
     Keys.onReturnPressed: root.switchToSelected()
     Keys.onSpacePressed: root.switchToSelected()
 
+    // Shape re-sync (ADR-024 review): faceCount is the only Cube input the
+    // camera state derives from that can change while the effect is open
+    // (desktops added/removed mid-animation, and the transient 0..2 counts of
+    // a model sync). One handler covers clamp, alignment and radius; the
+    // Behavior on rotation animates the correction unless a drag is active.
+    Connections {
+        target: cube
+        function onFaceCountChanged() {
+            cameraController.resyncToState();
+        }
+    }
+
     Connections {
         target: KWinComponents.Workspace
         function onCurrentDesktopChanged(previous, current, screen) {
@@ -631,6 +709,13 @@ Item {
             }
 
             root.currentDesktop = current;
+            // ADR-024 review: KWin may change the CURRENT desktop while the
+            // effect is open (a removal lands on a neighbour). The state's
+            // rotation binding is dead after any interaction, so re-aim
+            // explicitly instead of waiting for the next activate.
+            if (effect.activated) {
+                cameraController.resyncToState();
+            }
         }
     }
 }

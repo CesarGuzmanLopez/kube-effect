@@ -51,7 +51,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                             <item>
                                 <widget class="QLabel" name="tabShapePlaceholder">
                                     <property name="text">
-                                        <string>Forma e interior se añaden en fases posteriores (ver doc/requerimientos.md).</string>
+                                        <string>Con 1-2 escritorios la forma es HOJA automáticamente (ADR-024): doble cara con 2, simple con giro limitado a ±80° con 1. La elección de forma (polígono/cilindro) y el interior llegan con la fase Shape (ver doc/requerimientos.md).</string>
                                     </property>
                                     <property name="wordWrap">
                                         <bool>true</bool>
@@ -412,6 +412,9 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                         </item>
                                         <item row="0" column="1">
                                             <widget class="QDoubleSpinBox" name="kcfg_CubeFaceDisplacement">
+                                                <property name="toolTip">
+                                                    <string>Solo con 3+ escritorios: separa las caras del polígono. Con 1-2 la forma es hoja (ADR-024) y esta clave no aplica.</string>
+                                                </property>
                                                 <property name="minimum">
                                                     <double>-500.0</double>
                                                 </property>

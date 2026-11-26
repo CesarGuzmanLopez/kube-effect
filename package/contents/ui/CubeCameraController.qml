@@ -7,6 +7,8 @@
 import QtQuick
 import QtQuick3D
 
+import "constants.js" as Constants
+
 Item {
     id: root
 
@@ -30,6 +32,14 @@ Item {
     // ScreenView anchors this controller, so nothing ever read them.
     property real minRadius: 100
     property real maxRadius: 20000
+
+    // Sheet azimuth cap (ADR-024): ScreenView links it to
+    // Constants.sheetAzimuthLimit(faceCount) — 80 with one desktop (the
+    // mirrored back of the single quad must never face the camera), 360 =
+    // no limit for the two-sided sheet and the polygon. The drag path below
+    // clamps directly (no wrap, no normalization); arrows and states clamp
+    // through Constants.clampSheetAzimuth where they build their target.
+    property real azimuthLimit: 360
 
     onRotationChanged: root.updateCamera()
     onRadiusChanged: root.updateCamera()
@@ -118,7 +128,21 @@ Item {
                 if (xInvert) {
                     azimuthDelta = -azimuthDelta;
                 }
-                let azimuth = (eulerRotation.y + azimuthDelta) % 360;
+                let azimuth;
+                if (root.azimuthLimit < 360) {
+                    // Limited sheet (ADR-024): the drag NEVER wraps, so clamp
+                    // the raw sum around the current angle instead of reducing
+                    // it modulo 360 first — a hard pull crossing +/-180 would
+                    // otherwise reappear on the other side and teleport the
+                    // view from +80 to -80. No normalizeSheetAzimuth here
+                    // either: only arrows and states go through that helper.
+                    const bound = Math.min(180, Math.max(0, Number(root.azimuthLimit)));
+                    const target = eulerRotation.y + azimuthDelta;
+                    azimuth = Math.min(bound, Math.max(-bound, target));
+                } else {
+                    // Two-sided sheet and polygon: full turn, wrap kept.
+                    azimuth = (eulerRotation.y + azimuthDelta) % 360;
+                }
 
                 let elevationDelta = pixelDelta.y * ySpeed * dt;
                 if (yInvert) {

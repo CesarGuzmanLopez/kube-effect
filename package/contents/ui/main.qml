@@ -25,18 +25,13 @@ KWinComponents.SceneEffect {
     property string cursorScreenName: ""
 
     // The delegate of a SceneEffect is evaluated ONCE (KWin does not re-resolve
-    // it when desktops are added or removed): Qt.createComponent() inside a
-    // binding left the placeholder stuck at 3 desktops and the cube alive below
-    // 2 (doc/trucos-aprendidos.md, "delegate de SceneEffect evaluado una vez").
-    // Inline Components plus a count property re-evaluate the delegate binding,
-    // and KWin recreates the SceneViews when the delegate changes.
-    readonly property int desktopCount: KWinComponents.Workspace.desktops.length
-    delegate: desktopCount < 3 ? placeholderComponent : cubeComponent
-
-    Component {
-        id: placeholderComponent
-        PlaceholderView {}
-    }
+    // it when desktops are added or removed), so it stays an inline Component
+    // (doc/trucos-aprendidos.md, "delegate de SceneEffect evaluado una vez").
+    // Since ADR-024 there is exactly one: ScreenView covers every desktop
+    // count — Cube switches to the sheet below 3 — so no placeholder and no
+    // count gate remained, and growing/shrinking the desktop count no longer
+    // needs the delegate to change at all.
+    delegate: cubeComponent
 
     Component {
         id: cubeComponent

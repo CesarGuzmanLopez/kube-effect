@@ -74,6 +74,15 @@
         "since": "0.0.0.3"
     },
     {
+        "id": "shape-sheet",
+        "label": "Forma: hoja 2D (1-2 escritorios)",
+        "requires": [],
+        "native": false,
+        "notes": "Con 1-2 escritorios la forma es hoja SIEMPRE (pre-cilindro, ADR-024): la futura clave Shape no aplica y CubeFaceDisplacement no hace nada aquí. 2 = doble cara (un quad por escritorio, separación proporcional sheetGap ≥2 unidades, giro completo); 1 = hoja simple con el giro limitado a ±80° (SHEET_AZIMUTH_LIMIT_DEG en constants.js, fijo, sin clave: el dorso con NoCulling se vería espejado). PlaceholderView retirado: KWin siempre tiene >=1 escritorio.",
+        "status": "stable",
+        "since": "0.0.0.3"
+    },
+    {
         "id": "shape-cylinder",
         "label": "Forma: cilindro",
         "requires": [

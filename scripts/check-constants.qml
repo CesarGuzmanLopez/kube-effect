@@ -205,6 +205,85 @@ Item {
         check("fade(whitespace)", Constants.faceFadeDuration("  "), 120);
         check("fade(string)", Constants.faceFadeDuration("abc"), 120);
 
+        // Sheet azimuth limit (ADR-024): 1 desktop caps at ±80, everything
+        // else answers 360 ("no limit": 2 faces both real, >=3 is the polygon).
+        check("limit(0)", Constants.sheetAzimuthLimit(0), 360);
+        check("limit(1)", Constants.sheetAzimuthLimit(1), 80);
+        check("limit(2)", Constants.sheetAzimuthLimit(2), 360);
+        check("limit(3)", Constants.sheetAzimuthLimit(3), 360);
+        check("limit(4)", Constants.sheetAzimuthLimit(4), 360);
+        check("limit(-2)", Constants.sheetAzimuthLimit(-2), 360);
+        check("limit(undefined)", Constants.sheetAzimuthLimit(undefined), 360);
+        check("limit(null)", Constants.sheetAzimuthLimit(null), 360);
+        check("limit(string)", Constants.sheetAzimuthLimit("1"), 360);
+        check("limit(1.0 number)", Constants.sheetAzimuthLimit(1.0), 80);
+
+        // Normalization to (-180, 180]: wrap point lands on +180, non-finite
+        // reads as the front view (0).
+        checkClose("norm(0)", Constants.normalizeSheetAzimuth(0), 0);
+        checkClose("norm(90)", Constants.normalizeSheetAzimuth(90), 90);
+        checkClose("norm(180)", Constants.normalizeSheetAzimuth(180), 180);
+        checkClose("norm(-180)", Constants.normalizeSheetAzimuth(-180), 180);
+        checkClose("norm(181)", Constants.normalizeSheetAzimuth(181), -179);
+        checkClose("norm(360)", Constants.normalizeSheetAzimuth(360), 0);
+        checkClose("norm(-360)", Constants.normalizeSheetAzimuth(-360), 0);
+        checkClose("norm(540)", Constants.normalizeSheetAzimuth(540), 180);
+        checkClose("norm(-190)", Constants.normalizeSheetAzimuth(-190), 170);
+        checkClose("norm(NaN)", Constants.normalizeSheetAzimuth(NaN), 0);
+        check("norm(undefined)", Constants.normalizeSheetAzimuth(undefined), 0);
+        check("norm(string 45)", Constants.normalizeSheetAzimuth("45"), 45);
+
+        // Target clamp (arrows, states): limit >= 360 returns the angle VERBATIM
+        // (pre-sheet parity: no normalization, so the Behavior never slerps the
+        // opposite-sign equivalent quaternion); a real limit normalizes to
+        // (-180,180] and caps at +/-min(limit, 180). The drag path does not use
+        // this helper (CubeCameraController clamps the raw sum directly).
+        checkClose("clamp(40, 80)", Constants.clampSheetAzimuth(40, 80), 40);
+        checkClose("clamp(90, 80)", Constants.clampSheetAzimuth(90, 80), 80);
+        checkClose("clamp(-95, 80)", Constants.clampSheetAzimuth(-95, 80), -80);
+        checkClose("clamp(200, 80)", Constants.clampSheetAzimuth(200, 80), -80);
+        checkClose("clamp(-200, 80)", Constants.clampSheetAzimuth(-200, 80), 80);
+        checkClose("clamp(360, 360) verbatim", Constants.clampSheetAzimuth(360, 360), 360);
+        checkClose("clamp(180, 360) verbatim", Constants.clampSheetAzimuth(180, 360), 180);
+        checkClose("clamp(-180, 360) verbatim", Constants.clampSheetAzimuth(-180, 360), -180);
+        checkClose("clamp(270, 360) verbatim", Constants.clampSheetAzimuth(270, 360), 270);
+        checkClose("clamp(270, 361) verbatim", Constants.clampSheetAzimuth(270, 361), 270);
+        checkClose("clamp(1000, 190)", Constants.clampSheetAzimuth(1000, 190), -80); // 1000 % 360 = 280 -> -80
+        checkClose("clamp(90, 0)", Constants.clampSheetAzimuth(90, 0), 0);
+        checkClose("clamp(90, -30)", Constants.clampSheetAzimuth(90, -30), 0);
+        checkClose("clamp(90, NaN) verbatim", Constants.clampSheetAzimuth(90, NaN), 90);
+        checkClose("clamp(90, undefined) verbatim", Constants.clampSheetAzimuth(90, undefined), 90);
+        checkClose("clamp(NaN, 80)", Constants.clampSheetAzimuth(NaN, 80), 0);
+        checkClose("clamp(Infinity, 80)", Constants.clampSheetAzimuth(Infinity, 80), 0);
+
+        // Which face looks at the camera: front within ±90, back beyond it
+        // (2 desktops); -1 = not a sheet (0 mid-sync, >=3) or garbage azimuth.
+        check("face(0, 2)", Constants.sheetDesktopAt(0, 2), 0);
+        check("face(89, 2)", Constants.sheetDesktopAt(89, 2), 0);
+        check("face(90, 2)", Constants.sheetDesktopAt(90, 2), 0);
+        check("face(91, 2)", Constants.sheetDesktopAt(91, 2), 1);
+        check("face(180, 2)", Constants.sheetDesktopAt(180, 2), 1);
+        check("face(-180, 2)", Constants.sheetDesktopAt(-180, 2), 1);
+        check("face(-91, 2)", Constants.sheetDesktopAt(-91, 2), 1);
+        // Boundary: -90 is exactly the front/back border (inclusive front), and
+        // 270 normalizes to -90 -> also the front face.
+        check("face(-90, 2)", Constants.sheetDesktopAt(-90, 2), 0);
+        check("face(270, 2)", Constants.sheetDesktopAt(270, 2), 0);
+        check("face(200, 2)", Constants.sheetDesktopAt(200, 2), 1);
+        check("face(-200, 2)", Constants.sheetDesktopAt(-200, 2), 1);
+        check("face(0, 1)", Constants.sheetDesktopAt(0, 1), 0);
+        check("face(80, 1)", Constants.sheetDesktopAt(80, 1), 0);
+        check("face(-80, 1)", Constants.sheetDesktopAt(-80, 1), 0);
+        check("face(300, 1)", Constants.sheetDesktopAt(300, 1), 0);
+        check("face(0, 0)", Constants.sheetDesktopAt(0, 0), -1);
+        check("face(0, 3)", Constants.sheetDesktopAt(0, 3), -1);
+        check("face(0, 4)", Constants.sheetDesktopAt(0, 4), -1);
+        check("face(NaN, 2)", Constants.sheetDesktopAt(NaN, 2), -1);
+        check("face(undefined, 2)", Constants.sheetDesktopAt(undefined, 2), -1);
+        check("face(null, 1)", Constants.sheetDesktopAt(null, 1), 0);
+        check("face('abc', 2)", Constants.sheetDesktopAt("abc", 2), -1);
+        check("face(45, undefined)", Constants.sheetDesktopAt(45, undefined), -1);
+
         // Url entry: url value or string, empty/undefined/null -> no image,
         // remote schemes rejected (the compositor must not fetch the network).
         check("source(file url)", Constants.backgroundImageSource(h.fileUrl), "file:///home/user/My Wall.jpg");

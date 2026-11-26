@@ -239,8 +239,9 @@ diagnosticó el bug del LOD de caras.
 - La cámara mira hacia **-Z**. Un quad hijo de la cámara a `z = -d` muestra su
   cara **trasera** → con `BackFaceCulling` desaparece. Usar `Material.NoCulling`
   para quads colgados de la cámara.
-- Hoja 2D (2 escritorios): doble cara; un quad `NoCulling` (o dos quads) para
-  verla por delante y por detrás.
+- Hoja 2D (2 escritorios): doble cara; DOS quads `NoCulling` (uno por
+  escritorio, 0°/180°, separados ±`sheetGap`) para ver cada lado por delante
+  (ADR-024).
 - **Cilindro sin shader**: el cilindro es desarrollable (K=0), así que curvar el
   escritorio sobre él es isométrico (no estira). Se construye con
   `ProceduralMesh` (`import QtQuick3D.Helpers`): posiciones `(R·sin φ, t, R·cos φ)`
@@ -469,6 +470,14 @@ propio SceneEffect al ver otro componente. Verificado en la fuente de KWin
 (`QuickSceneEffect`: los SceneViews se recrean cuando cambia el delegate) y con
 `make check` (qmllint); **confirmación manual en el anidado pendiente** (pasar
 de 2 a 4 escritorios con el efecto cargado).
+
+> **SUPERSEDED por ADR-024 (2026-11-25)**: el gate `desktopCount < 3 ?
+> placeholder : cube` ya no existe — `PlaceholderView.qml` se retiró y el
+delegate de `main.qml` es **único** (`ScreenView`), porque `Cube` cambia solo a
+> hoja con <3 escritorios. La lección sigue viva (el delegate se evalúa una vez
+> por SceneEffect: si mañana volviera a haber dos componentes, el binding sobre
+> un `count` reactivo sigue siendo obligatorio), pero el código que describía
+> este apartado ya no está en el repo.
 
 ### ⚠️ OJO: `Number(null) === 0` (el vacío no es el suelo)
 

@@ -243,6 +243,79 @@ function faceFadeDuration(value) {
     return Math.min(1000, Math.max(0, ms));
 }
 
+// Sheet geometry (ADR-024): with 1-2 desktops the solid is a sheet of
+// coplanar quads, not a polygon. One desktop has no real back side (with
+// Material.NoCulling the reverse shows MIRRORED content), so its azimuth is
+// clamped to +/- this many degrees. Fixed on purpose: no config key until the
+// user asks for one.
+const SHEET_AZIMUTH_LIMIT_DEG = 80;
+
+// Azimuth limit for the sheet: 1 desktop -> +/-80 deg (the mirrored back must
+// never face the camera); anything else -> 360, which means "no limit": with 2
+// desktops both sides are real desktops, and >=3 is the polygon (free wrap).
+// 360 (not Infinity) so every caller compares against the same unit.
+function sheetAzimuthLimit(count) {
+    return count === 1 ? SHEET_AZIMUTH_LIMIT_DEG : 360;
+}
+
+// Sheet yaw in (-180, 180]: unlike the polygon there is no wrap to keep, so
+// callers normalize BEFORE clamping. Non-finite input is 0 (front view).
+function normalizeSheetAzimuth(azimuth) {
+    const angle = Number(azimuth);
+    if (!isFinite(angle)) {
+        return 0;
+    }
+    let norm = angle % 360;
+    if (norm > 180) {
+        norm -= 360;
+    } else if (norm <= -180) {
+        norm += 360;
+    }
+    return norm;
+}
+
+// The azimuth clamp for the paths that SET a target angle (arrows, states).
+// Limit >= 360 (or garbage) returns the angle verbatim: sheet-2 and the polygon
+// turn freely, and verbatim is exactly what the pre-sheet code did — normalizing
+// here would flip e.g. 288 to -72, an equivalent orientation but opposite-sign
+// quaternions whose Behavior slerp could take the long way. A real limit first
+// normalizes to (-180,180] (no wrap exists on the limited sheet) and then caps
+// at +/-min(limit, 180). Non-finite azimuth is the front view (0). The drag path
+// in CubeCameraController does NOT use this helper: it clamps the raw delta sum
+// without normalizing, so a hard pull cannot cross +/-180 and teleport the view
+// from +80 to -80.
+function clampSheetAzimuth(azimuth, limit) {
+    const angle = Number(azimuth);
+    if (!isFinite(angle)) {
+        return 0;
+    }
+    const cap = Number(limit);
+    if (!isFinite(cap) || cap >= 360) {
+        return angle;
+    }
+    const bound = Math.min(180, Math.max(0, cap));
+    const norm = normalizeSheetAzimuth(angle);
+    return Math.min(bound, Math.max(-bound, norm));
+}
+
+// Which face of the sheet looks at the camera for a given azimuth: 0 = front,
+// 1 = back (only with 2 desktops; past +/-90 deg the back quad faces the
+// viewer). -1 = no sheet (>=3 desktops, 0 mid-sync) or a non-finite azimuth —
+// callers map -1 to a null desktop instead of guessing a face.
+function sheetDesktopAt(azimuth, count) {
+    if (count !== 1 && count !== 2) {
+        return -1;
+    }
+    const angle = Number(azimuth);
+    if (!isFinite(angle)) {
+        return -1;
+    }
+    if (count === 1) {
+        return 0;
+    }
+    return Math.abs(normalizeSheetAzimuth(angle)) <= 90 ? 0 : 1;
+}
+
 // KConfig hands a Url entry as a url value (not a string), and the entry can
 // be undefined/null before the KCM saves anything. Only local resources are
 // accepted: the compositor must not fetch remote content when the effect

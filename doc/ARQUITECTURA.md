@@ -55,10 +55,40 @@ Qt 6.6+):
 - `#Cylinder` primitivo NO sirve para un arco parcial con UV isométrica; es un
   cilindro completo con UV propias.
 
-### 2.3 Hoja 2D (2 escritorios)
+### 2.3 Hoja 2D (1-2 escritorios)
 
-- Un quad plano doble cara: un escritorio por delante, otro por detrás.
-- Sin interior.
+Implementada dentro de `Cube.qml` (ADR-024): `isSheet = count < 3`, y el
+delegate coloca los quads en el centro en vez de sobre el perímetro.
+
+- **2 escritorios**: un quad por escritorio (`CubeFace`, `#Rectangle` con
+  `Material.NoCulling`) en `position.z = ±sheetGap` (**separación proporcional
+  (≥2 unidades)**: `sheetGap = max(1, viewRadius · 0.005)`; 1 px fijo serían
+  1-2 pasos del depth buffer a radios 4K) con `eulerRotation.y = 0° / 180°` —
+  cada cara mira a un lado. `angleTick = 180`: las flechas y `desktopAt()`
+  saltan de cara a cara y el giro es completo (ambos lados son reales).
+- **1 escritorio**: solo el frente (z = +`sheetGap`, `eulerRotation.y = 0`,
+  `angleTick = 360`). Como `NoCulling` muestra el dorso **espejado**, el azimut
+  se clampa a ±80° (`SHEET_AZIMUTH_LIMIT_DEG` en `constants.js`, fijo, sin
+  clave). El **arrastre** con límite real clampa la suma cruda
+  (`euler.y + delta`, sin `%360` ni normalizar: un tirón que cruzara ±180 no
+  debe teletransportar de +80 a −80); las **flechas y los estados** usan
+  `clampSheetAzimuth`, que normaliza a (-180,180] solo con límite < 360 y
+  devuelve el ángulo tal cual si no (paridad literal con el código pre-hoja).
+- **Radios**: `viewRadius = 0.5·anchoCara` (en hoja; leer `faceDistance` sería
+  ciclo: el gap deriva del radius), `faceDistance = sheetGap` (close llena la
+  pantalla igual que el cubo: `sheetGap + 0.5·h/tan(fov/2)`), y distant/zoom se
+  miden contra `safeViewRadius = max(1, viewRadius)` — con ≥3 escritorios
+  `viewRadius === faceDistance`, pero el apotema del polígono puede ser
+  **negativa** (displacement −500) y sin el pincho la rueda metía la cámara
+  dentro del sólido.
+- **Cambio de nº de escritorios con el efecto abierto**: los bindings de los
+  estados mueren al primer arrastre/flecha/rueda, así que un `Connections`
+  sobre `cube.faceCount` llama `cameraController.resyncToState()` (re-clampa el
+  azimut a la forma nueva, re-alinea al escritorio actual y fuerza el radius
+  del estado vigente).
+- `CubeFaceDisplacement` **no aplica a la hoja** (su `faceDistance` es el gap).
+- Con <3 escritorios la forma es hoja **siempre** (pre-cilindro): la futura
+  clave `Shape` no aplica. `PlaceholderView.qml` quedó retirado.
 
 ## 2.4 Capas de ventana (z-index / separación) — cómo se aplicó
 
@@ -241,7 +271,8 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
   2D (quads con imagen/HUD) o vídeo (`Video` sobre un quad).
 - Animados por defecto; un objeto **estático** no debe heredar el giro del sólido
   (anclar al mundo, no al nodo que gira).
-- Deshabilitado con 2 escritorios (hoja 2D) y en el placeholder (1).
+- Deshabilitado con 1-2 escritorios (no hay volumen: en la hoja de 1 y de 2,
+  ADR-024).
 
 ## 6. Configuración
 

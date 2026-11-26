@@ -8,7 +8,9 @@ el **cubo virgen** de KDE (caras planas en polígono) y crece feature a feature.
 ## Qué es (estado actual)
 
 N escritorios alrededor de un polígono (el cubo virgen de KDE), con giro por
-ratón y teclado. Sobre el virgen: **casco configurable** (Color / Imagen / Degradado
+ratón y teclado. Con 1-2 escritorios la forma es **hoja 2D** (ADR-024): doble
+cara con 2 (giro completo), simple con 1 (giro limitado a ±80°; el dorso se vería
+espejado). Sobre el virgen: **casco configurable** (Color / Imagen / Degradado
 / **Vídeo**, con sus claves en `package/contents/config/main.xml`) y un
 **KCM genérico con UI dinámica** (combo de modo + páginas apiladas vía
 `<connections>`, sin C++). El arnés de test anidado apaga el resto de efectos.

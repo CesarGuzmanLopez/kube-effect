@@ -447,3 +447,89 @@ clave apagada (default) el overlay no se pinta ni paga descomposiciones.
 `kcfg_DebugOverlay`; check-ui: la checkbox se crea con QUiLoader; qmllint) y
 prueba visual en el anidado (`scripts/kwin-nested-test.sh`) con el overlay
 encendido y apagado.
+
+---
+
+## ADR-024 — Hoja 2D: la forma vive en Cube, no en otra vista.
+
+**Contexto**: el spec viejo (§1) exigía 3+ escritorios y debajo de ese mínimo
+`main.qml` montaba un `PlaceholderView` que pedía añadir escritorios. Con 1-2
+el efecto era inútil, y con 1 escritorio el placeholder además chocaba contra
+la realidad: KWin siempre tiene al menos un escritorio virtual.
+
+**Decisión**:
+
+1. **Hoja dentro de `Cube`, no una vista nueva.** Con `faceRepeater.count < 3`
+   la forma es hoja: los quads se colocan en el centro del espacio con
+   `eulerRotation.y = index * 180` y `position.z = ±sheetGap`, **separación
+   proporcional** (`sheetGap = max(1, viewRadius · 0.005)`, ≥2 unidades entre
+   caras): un hueco fijo de 1 px es 1-2 pasos del depth buffer (24-bit,
+   `clipNear` 10) a radios de 4K y puede Z-fightear. Con 1 escritorio solo
+   existe el frente (z = +`sheetGap`), el lado que mira la cámara en reposo.
+   `ScreenView`, el casco, las capturas de `DesktopView`, la dim, el debug y la
+   cámara **no se duplican**: el bug del placeholder se cierra retirando la
+   rama, no añadiendo una tercera vista.
+2. **Giro limitado con 1 escritorio.** `Material.NoCulling` muestra el dorso
+   espejado (ya documentado en §2.0: las caras se ven por las dos partes). Con
+   un solo quad no hay «otro lado» que sea un escritorio real, así que el
+   azimut se clampa a **±80°** (`SHEET_AZIMUTH_LIMIT_DEG` en `constants.js`).
+   Límite fijo, sin clave de configuración: si el usuario la pide, se expone
+   entonces. Con 2 escritorios el giro es completo (cada lado es un escritorio).
+3. **Regla permanente pre-cilindro**: con 1-2 escritorios la forma es hoja
+   siempre, ignore la futura clave `Shape`. Los caminos que producen azimut
+   clampean distinto, cada uno a propósito:
+   - **Arrastre** (`CubeCameraController.processInput`): con límite real
+     (<360) clampa la suma cruda `euler.y + delta` a ±límite, **sin `%360` ni
+     normalizar** — un tirón fuerte que cruzara ±180 se teletransportaría de
+     +80 a −80 al envolver. Sin límite (hoja-2, polígono) se conserva el
+     `% 360` histórico.
+   - **Flechas y estados close/distant**: `Constants.clampSheetAzimuth
+     (azimuth, limit)` normaliza a (-180,180] solo cuando el límite es real;
+     con limit ≥ 360 (o basura) devuelve el ángulo **tal cual**, paridad
+     exacta con el código pre-hoja (cuaterniones de signo opuesto harían
+     slerpear el Behavior por el lado largo).
+4. **Radios de cámara**: `viewRadius` en hoja es `0.5·anchoCara` (no puede leer
+   `faceDistance`: el gap deriva del radius, ciclo), `faceDistance` en hoja es
+   `sheetGap` y el estado close sigue llenando la pantalla
+   (`faceDistance + 0.5·h/tan(fov/2)`); distant y los límites de zoom usan
+   `safeViewRadius = max(1, viewRadius)`: `CubeFaceDisplacement` negativo puede
+   volver **negativo** el apotema del polígono (pre-existente ADR-022), y con
+   él minRadius/maxRadius y el distant metían la cámara dentro del sólido.
+5. **Re-sincronización con el efecto abierto** (`ScreenView`): los
+   `PropertyChanges` de los estados son bindings vivos solo hasta la primera
+   interacción (arrastre/flechas/rueda escriben `rotation`/`radius` y los
+   matan). Si cambia el nº de escritorios sin cerrar (2→1 con yaw 170) no se
+   re-clampa y se ve el dorso espejado; 2→3 deja yaw 180 → Enter/click elige el
+   escritorio equivocado; y el `radius` queda el de la forma vieja. Un
+   `Connections` sobre `cube.faceCount` llama `resyncToState()`: reescribe
+   `rotation` (elevation actual + target de la forma nueva) y `radius` con las
+   fórmulas del estado vigente. Es idempotente con los bindings vivos, y los
+   bindings se reinstalan solos en cada deactivate/activate (el estado vuelve
+   a entrar).
+6. **Retirada de `PlaceholderView.qml`** (git rm). `main.qml` deja el gate por
+   `desktopCount` y deja un único `Component` inline con `ScreenView` (el
+   delegate del SceneEffect se evalúa una vez, ADR-022 punto 1, pero ya no hay
+   dos componentes entre los que cambiar).
+7. **Helpers puros en `constants.js`**, testeables sin KWin
+   (`scripts/check-constants.qml`): `sheetAzimuthLimit(count)` (1 → 80,
+   2/3+/basura → 360 = sin límite), `sheetDesktopAt(azimuth, count)` (qué
+   escritorio mira la cámara; −1 = no aplica o azimut no numérico) y
+   `clampSheetAzimuth(azimuth, limit)` (verbatim con limit ≥ 360; si no,
+   normaliza a (-180,180] y clampa). `CubeFaceDisplacement` no toca la hoja.
+
+**Porqué**: reutilizar el camino existente mantiene una sola fuente de
+geometría/estados/cámara — otra vista nueva duplicaría el casco, el vídeo 360,
+la dim y el overlay de debug (todo lo caro de ADR-022/023) y volvería a quedar
+fuera de los checks del anidado. El límite ±80° es más estrecho que ±90° para
+que en el recorrido extremo el quad nunca se vea de canto con el dorso asomando
+por perspectiva.
+
+**Verificación**: `make check` (check-constants con los helpers
+nuevos y los bordes de `clampSheetAzimuth`; check-video-dome renderiza
+`ScreenView` con el stub de 3 escritorios → camino poligonal intacto, más una
+segunda pasada con el stub de 2 → `debugInfo` dice `sheet=1 tick=180.0`; el
+stub ya no devuelve `currentDesktop` nulo — el camino poligonal la necesitaba
+— y el harness falla ante TypeError/ReferenceError/«is not defined»). Prueba
+visual en el anidado con 1 escritorio (no pasar de ±80° arrastrando ni con
+flechas; crear/eliminar el 2º escritorio con el cubo abierto y ver la
+re-sincronización) y con 2 (vuelta completa, cada cara con su escritorio).

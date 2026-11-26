@@ -34,11 +34,16 @@ por fases, pero el spec es entero).
 
 ## 1. Formas y reglas por número de escritorios
 
-| Escritorios | Forma                                                                            | Interior                                              |
-| ----------- | -------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| 1           | Placeholder: pide añadir hasta tener 3 (no hay sólido)                           | —                                                     |
-| 2           | **Hoja 2D doble cara**: un escritorio por delante y otro por detrás; sin volumen | **No permitido** (no hay volumen donde poner objetos) |
-| 3+          | **Polígono** (default) o **Cilindro** (elegible)                                 | Sí                                                    |
+| Escritorios | Forma                                                                                                                                      | Interior                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| 1           | **Hoja simple**: un solo quad; giro limitado a ±80° de azimut (el dorso se vería espejado, no debe verse)                                 | **No permitido** (no hay volumen)                     |
+| 2           | **Hoja 2D doble cara**: un quad por escritorio, separación proporcional en z (`sheetGap`, ≥2 unidades); giro completo (cada lado es un escritorio real)         | **No permitido** (no hay volumen donde poner objetos) |
+| 3+          | **Polígono** (default) o **Cilindro** (elegible)                                                                                           | Sí                                                    |
+
+**Regla permanente (pre-cilindro)**: con 1-2 escritorios la forma es SIEMPRE
+hoja, ignore lo que diga la futura clave `Shape`. El polígono/cilindro empieza
+en 3. No hay placeholder: KWin siempre tiene al menos 1 escritorio y la hoja
+simple ya es útil (ADR-024).
 
 ### 1.1 Polígono (default)
 
@@ -58,10 +63,49 @@ por fases, pero el spec es entero).
 - Relación arco↔textura: `arco = R·θ` debe igualar el ancho de la cara; si no, la
   textura se estira o comprime.
 
-### 1.3 Hoja 2D (2 escritorios)
+### 1.3 Hoja 2D (1-2 escritorios)
 
-- Una sola hoja plana, **doble cara**: un escritorio por delante, otro por detrás.
+La hoja vive dentro de `Cube` (ADR-024): con menos de 3 escritorios el sólido no
+es un polígono, son quads pegados en el centro. `ScreenView`, el casco, las
+capturas, la dim, el debug y la cámara son los mismos que con cubo.
+
+**2 escritorios — hoja doble cara:**
+
+- Un quad por escritorio, ambos en el centro del espacio, girados 0° y 180°
+  (cada uno mira a un lado). **Separación proporcional (≥2 unidades)**
+  (`sheetGap` = 0.5 % del `viewRadius`, suelo 1, las dos caras quedan a ±gap):
+  un hueco fijo de 1 px se come con la cuantización del depth buffer (24-bit,
+  `clipNear` 10) y puede Z-fightear en 4K lejos; proporcional, no.
+- `Material.NoCulling` (como las caras del cubo): cada lado se ve desde fuera.
+- Giro **completo**: cualquier azimut muestra un escritorio real; al pasar de
+  ±90° se ve el otro. El tick es de 180° (las flechas saltan de cara a cara).
+
+**1 escritorio — hoja simple:**
+
+- Un solo quad (frente, z = +`sheetGap`, el lado que mira la cámara en reposo;
+  ver ADR-024).
+- Con `NoCulling` el dorso muestra el contenido **espejado**, así que el giro se
+  **limita a ±80° de azimut** (160° de recorrido): el revés nunca queda frente a
+  la cámara. El límite es fijo en `constants.js` (`SHEET_AZIMUTH_LIMIT_DEG`);
+  no hay clave de configuración (futuro si el usuario la pide).
+- Las flechas y la activación respetan el mismo límite (clamp único en
+  `clampSheetAzimuth`).
+- El arrastre que cruza ±180 **no teletransporta**: el drag clampa la suma
+  directa (sin `%360` ni normalizar); solo las flechas y los estados usan
+  `clampSheetAzimuth`.
+
+Común:
+
 - Sin interior (no hay volumen). El casco se sigue viendo alrededor.
+- `Shape` (futura) **no aplica con <3 escritorios**: la forma es hoja siempre.
+- **`CubeFaceDisplacement` no aplica a la hoja**: su `faceDistance` es el
+  `sheetGap` de las caras, no el radio de un polígono. La separación entre
+  caras solo significa algo con 3+ escritorios (ver §4).
+- Cambiar el nº de escritorios **con el efecto abierto** re-sincroniza la cámara
+  (`Connections` sobre `cube.faceCount`): re-clampa el azimut al límite de la
+  forma nueva, re-alinea al escritorio actual y recalcula el `radius` con el
+  `viewRadius` nuevo (los `PropertyChanges` de los estados mueren al primer
+  arrastre/flecha/rueda; el handler reescribe rotation/radius explícitamente).
 
 ## 2. Sólido: caras
 
@@ -278,7 +322,8 @@ Implementación (QML puro, sin C++):
 ## 6. Configuración (referencia)
 
 Enum `Shape`: `Polygon` (default) / `Cylinder`. El número de escritorios manda:
-1 → placeholder; 2 → hoja 2D; 3+ → forma elegida.
+1 → hoja simple con giro limitado a ±80°; 2 → hoja doble cara con giro
+completo (ADR-024; el placeholder quedó retirado); 3+ → forma elegida.
 
 Enum `Background`: `Color` (0, default) / `Image` (1) / `Gradient` (2) / `Video` (3,
 añadido al final para no reinterpretar los valores guardados). El índice 1 se
