@@ -39,7 +39,8 @@ Each helpers case ALSO checks the radius CHAIN the camera measures against
 viewRadius === safeViewRadius === cylinderRadius === faceDistance === R at
 ANY count (3, 2 or 1) — reading viewRadius through the sheet chain
 (faceDistance -> sheetGap -> viewRadius) froze it at max(1, 0.005*R) ~ 4
-when the arc Loader mounted mid-evaluation, and the wheel cap 8*4 = 32
+when the drum activated mid-evaluation (measured trigger: a hot Shape flip;
+the arc Loader is synchronous by default), and the wheel cap 8*4 = 32
 trapped the camera INSIDE the drum. An explicit "viewRadius is not the
 sheetGap" assert pins the structural cause (>100 px away from the gap),
 and close/distant (mirroring ScreenView's formulas with the schema's
@@ -173,7 +174,9 @@ def run_scenario(application, import_root, desktop_count):
         # the drum in effect viewRadius must BE faceDistance must BE R at ANY
         # count (3, 2 or 1) — reading it through the sheet chain (faceDistance
         # -> sheetGap -> viewRadius) froze it at max(1, 0.005*R) ~ 4 when the
-        # Loader mounted mid-evaluation, so the wheel cap became 8*4 = 32 and
+        # drum activated mid-evaluation (the Loader is synchronous; the
+        # measured trigger is the Shape/status flip), so the wheel cap became
+        # 8*4 = 32 and
         # distant 4*1.75 + faceFit: the camera inside the drum (r=32, r=28).
         expected_distance_all = 3 * (width + 100.0) / (2 * math.pi)
         view_radius = float(harness.property("viewRadius"))
@@ -197,7 +200,7 @@ def run_scenario(application, import_root, desktop_count):
             )
         # Structural guard (the brief's literal assert): with cylinderActive,
         # viewRadius may NEVER equal the sheet gap max(1, 0.005*R); with this
-        # harness's R ~ 1272 the two differ by ~1266 px, so the frozen-gap
+        # harness's R ~ 1270 the two differ by ~1264 px, so the frozen-gap
         # regression (viewRadius stuck at sheetGap ~ 4, R printed 776 beside
         # v=4 in the user's overlay) cannot pass by coincidence (>100 px rule).
         if abs(view_radius - sheet_gap) <= 100.0:
@@ -348,8 +351,11 @@ def flip_child(import_root: Path) -> int:
     View3D never needs to render for the object tree and its numbers to
     exist) with 2 desktops and Shape = Polygon, then flip Shape to Cylinder.
 
-    The isSheet flip lands mid-evaluation (the arc Loader mounts and the
-    drum chain activates in the same propagation): on the old Cube.qml the
+    The isSheet flip lands mid-evaluation (a hot Shape change activates the
+    drum chain during the same propagation — the arc Loader itself is
+    SYNCHRONOUS by default, it was never a delayed mount: measured; any
+    mesh/status flip that re-enters the sheet branch at count < 3 does the
+    same). On the old Cube.qml the
     chain viewRadius -> faceDistance -> sheetGap -> viewRadius made Qt cut a
     BINDING LOOP and leave viewRadius frozen at sheetGap (~4) while
     faceDistance recovered to R — the engine logged 'Binding loop detected
@@ -358,8 +364,14 @@ def flip_child(import_root: Path) -> int:
     inside the drum). Reproduced offscreen exactly before the fix.
 
     With the fix the drum branch answers cylinderRadius first: the overlay
-    must show v == d == R, sheet=0, lim=none, slots=2/3 — and NO binding-loop
+    must show v == d == R, sheet=0, lim=none, slots=2/3, and r must be the
+    distant radius of the NEW solid (the state binding if it survived, or
+    resyncToState via onCylinderActiveChanged if the polygon pass had
+    already killed it), and NO binding-loop
     warning may appear (collected here, not part of the dome signatures).
+    A system without QtQuick3D.Helpers degrades to the documented sheet
+    fallback by design (overlay 'cyl(fallback)'): the flip SKIPS with a
+    notice and exit 0 — the fallback path belongs to the Cube scenarios.
     Runs in its own process: a fresh event loop per render-style scenario is
     the established pattern (check-video-dome), and the type cache is warmed
     BEFORE any message handler exists (the loader-thread/GIL deadlock).
@@ -460,6 +472,23 @@ def flip_child(import_root: Path) -> int:
     pump(900)
     info = str(root.property("debugInfo") or "")
     numbers = dict(re.findall(r"([A-Za-z_]+)=(-?\d+)", info))
+    # A system WITHOUT QtQuick3D.Helpers is a supported configuration: the
+    # drum degrades to the flat sheet/polygon on purpose (documented
+    # fallback, the overlay marks it 'cyl(fallback)') and the v == d == R
+    # contract belongs to the mesh path only — the Cube scenarios above
+    # already assert the fallback flags. Skipping with a notice matches the
+    # other module-dependent checks; failing here would turn make check red
+    # on a machine that behaves exactly as designed.
+    if "(fallback)" in info:
+        # Skipped, but a real QML error in the fallback still fails the gate
+        # (silence here would hide a broken degraded path).
+        if captured:
+            print("check-cylinder-wiring [flip]: FAIL")
+            for message in captured:
+                print(f" - flip qml: {message.strip()}")
+            return 1
+        print("check-cylinder-wiring [flip]: skipped (no QtQuick3D.Helpers)")
+        return 0
     if numbers.get("sheet") != "0":
         problems.append(f"flip: the drum did not reach sheet=0 (overlay: {info!r})")
     if "lim=none" not in info:
@@ -479,6 +508,24 @@ def flip_child(import_root: Path) -> int:
             problems.append(
                 f"flip: viewRadius {v_value} != faceDistance {d_value} != R {r_value} (the v=4 freeze: camera trapped inside the drum)"
             )
+    # The live camera radius too (review MINOR 2): effect.activated=True puts
+    # the controller in the "distant" STATE, so beyond the geometry contract
+    # the flip must re-aim the CAMERA — the state's live binding if it is
+    # still alive, or resyncToState through onCylinderActiveChanged if the
+    # polygon pass had already killed it. Mirror of ScreenView's
+    # distantRadius(): safeViewRadius * DistanceFactor (1.75, the schema
+    # default inserted above) + faceFit (0.5*height/tan(fov/2); fov 60 is the
+    # measured PerspectiveCamera default). The poly sheet the flip starts
+    # from answers 808*1.75 + faceFit, so a dead resync (radius stuck on the
+    # old solid) and the v=4 freeze (4*1.75 + faceFit) both miss the target.
+    drum_radius = 3 * (1616.0 + 10.0) / (2 * math.pi)
+    expected_distant = drum_radius * 1.75 + 0.5 * 900.0 / math.tan(math.pi / 6.0)
+    if numbers.get("r") is None:
+        problems.append("flip: overlay field r= missing")
+    elif abs(float(numbers["r"]) - expected_distant) > 2.0:
+        problems.append(
+            f"flip: camera radius {numbers['r']} != distantRadius {expected_distant:.0f} (state bindings AND resyncToState/onCylinderActiveChanged must follow the flip)"
+        )
     if captured:
         problems.extend(f"flip: qml: {message.strip()}" for message in captured)
 
@@ -491,7 +538,8 @@ def flip_child(import_root: Path) -> int:
         return 1
     print(
         "check-cylinder-wiring [flip]: OK (real ScreenView, hot Polygon->Cylinder "
-        "flip at 2 desktops: v == d == R, sheet=0, lim=none, no binding-loop warning)"
+        "flip at 2 desktops: v == d == R, r == distant of the new solid, sheet=0, "
+        "lim=none, no binding-loop warning)"
     )
     return 0
 
@@ -559,7 +607,7 @@ def main():
         "freeze guard, close/distant outside the drum, slot-grid tick 120, open "
         "turn ranges, NoCulling parity after the revert, the mesh vertices carry "
         "the radius the holder was bound, and the hot Polygon->Cylinder flip keeps "
-        "v == d == R on the real ScreenView)"
+        "v == d == R and the distant camera radius on the real ScreenView)"
     )
     return 0
 

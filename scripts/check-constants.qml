@@ -379,6 +379,15 @@ Item {
         // congruent with a real face azimuth.
         check("cyl1 RIGHT 0 no-op", Constants.arrowAzimuth(0, 1, 120, null, null, [0]), 0);
         check("cyl1 LEFT 0 no-op", Constants.arrowAzimuth(0, -1, 120, null, null, [0]), 0);
+        // Threshold convention pinned (same strict < as the limited branch
+        // and the verbatim grid path): EXACTLY 0.05*tick away (6.0 deg at
+        // tick 120) counts as NOT standing -> the arrow snaps to the face;
+        // one hair inside, the n=1 drum holds (no other stop exists).
+        checkClose("cyl1 RIGHT 6 snaps (strict <)", Constants.arrowAzimuth(6, 1, 120, null, null, [0]), 0, 1e-6);
+        checkClose("cyl1 LEFT 6 snaps (strict <)", Constants.arrowAzimuth(6, -1, 120, null, null, [0]), 0, 1e-6);
+        checkClose("cyl1 RIGHT -6 snaps (strict <)", Constants.arrowAzimuth(-6, 1, 120, null, null, [0]), 0, 1e-6);
+        check("cyl1 RIGHT 5.9 holds", Constants.arrowAzimuth(5.9, 1, 120, null, null, [0]), 5.9);
+        check("cyl1 LEFT 5.9 holds", Constants.arrowAzimuth(5.9, -1, 120, null, null, [0]), 5.9);
         checkClose("cyl1 RIGHT 45 lands on face 0", Constants.arrowAzimuth(45, 1, 120, null, null, [0]), 0, 1e-6);
         checkClose("cyl1 LEFT -45 lands on face 0", Constants.arrowAzimuth(-45, -1, 120, null, null, [0]), 0, 1e-6);
         check("cyl arrow RIGHT 240 (n=1, short way to 0)", Constants.arrowAzimuth(240, 1, 120, null, null, [0]), 360);

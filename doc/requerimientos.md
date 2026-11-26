@@ -132,8 +132,12 @@ y la hoja simple ya es útil (ADR-024).
     dedicado; `cylinderSegmentDesktopAt`, `cylinderSegmentAzimuth`,
     `cylinderArcRadius` y `cylinderAzimuthRange` murieron con la banda).
   - Cámara: `faceDistance = viewRadius = R` (la del tambor con N = 3) para
-    **cualquier** count — 3, 2 o 1 (ADR-026b: con 1-2 el `viewRadius` no
-    puede tomar la rama de la hoja; **close/distant nunca quedan dentro del
+    **cualquier** count — 3, 2 o 1 — **con la malla activa
+    (`QtQuick3D.Helpers`)**; en el fallback sin módulo — igual que en el
+    transitorio de mount — la rama hoja/poligonal es la representación
+    legítima y close/distant miden contra ella (ADR-026b: con 1-2 y
+    tambor en efecto el `viewRadius` no puede tomar la rama de la hoja;
+    **close/distant nunca quedan dentro del
     tambor** y los topes de rueda valen `[0.6·R, 8·R]`, con R≈776 nada de
     radios 32/28 dentro del sólido). Honestidad del close: llena la pantalla
     en **vertical** (la generatriz no se deforma); en horizontal la cuerda

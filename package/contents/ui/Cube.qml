@@ -75,9 +75,11 @@ Node {
     // polygon behaviour is untouched. THE BRANCH ORDER IS THE FIX of the
     // v=4 regression (ADR-026b): reading faceDistance while cylinderActive
     // made the chain viewRadius -> faceDistance -> sheetGap -> viewRadius
-    // cyclic for a mid-evaluation isSheet flip (the arc Loader mounting
-    // asynchronously below 3 desktops, or a hot Shape change with the cube
-    // open): Qt cut the loop and left viewRadius frozen at sheetGap (~4)
+    // cyclic for a mid-evaluation isSheet flip (measured trigger: a hot Shape
+    // change with the cube open below 3 desktops — the arc Loader is
+    // synchronous by default, so it was never a delayed mount; any mesh or
+    // status flip that re-enters the sheet branch does the same): Qt cut the
+    // loop and left viewRadius frozen at sheetGap (~4)
     // while faceDistance recovered to R — the engine even logged 'Binding
     // loop detected for property "viewRadius"' at this line (measured
     // offscreen with the real ScreenView: d=776 v=4, distant 786, wheel

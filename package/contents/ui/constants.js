@@ -704,14 +704,17 @@ function arrowAzimuth(currentAzimuth, direction, tick, azimuthMin, azimuthMax, f
     // Open range with holes in the tick grid (ADR-026b, the three-slot drum
     // at 1-2 desktops: tick 120, faces [0] or [0, 120], slot 2 empty): walk
     // the REAL faces circularly instead of the raw grid, so no arrow stop
-    // ever lands the camera on an empty slot. The standing face (within the
-    // same 0.05 tick threshold) is skipped; ahead in the requested direction
+    // ever lands the camera on an empty slot. The standing face is skipped
+    // with the STRICT < against the 0.05 tick threshold — the same
+    // convention as the limited branch and the verbatim grid path below
+    // (exactly 0.05*tick away counts as NOT standing: the arrow snaps to
+    // the face; tested at the boundary). Ahead in the requested direction
     // wins, otherwise the sweep wraps the circle (the face that is furthest
-    // BEHIND is the first one past +-180). A single real face has no other
-    // stop: return the current verbatim, the arrow holds (n=1 drum). The
-    // answer is the chosen face's representative nearest to the current
-    // angle, so the quaternion Behavior always slerps the short way (same
-    // verbatim-sign rule as the grid path below).
+    // BEHIND is the first one past +-180). A single real face already stood
+    // on: no other stop, return the current verbatim, the arrow holds (n=1
+    // drum). The answer is the chosen face's representative nearest to the
+    // current angle, so the quaternion Behavior always slerps the short way
+    // (same verbatim-sign rule as the grid path below).
     const slots = Math.round(360 / t);
     if (slots > 1 && faces.length > 0 && faces.length < slots) {
         const threshold = t * 0.05;
@@ -724,7 +727,7 @@ function arrowAzimuth(currentAzimuth, direction, tick, azimuthMin, azimuthMax, f
                 continue;
             }
             const offset = normalizeSheetAzimuth(face - centre);
-            if (Math.abs(offset) <= threshold) {
+            if (Math.abs(offset) < threshold) {
                 continue;
             }
             if (step > 0 ? offset > 0 : offset < 0) {

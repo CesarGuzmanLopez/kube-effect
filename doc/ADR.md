@@ -994,10 +994,12 @@ escritorios que ningún check del gate detectó:
    espejado, «no se puede pasar» al zoom). Causa raíz: ciclo de dependencias en
    `Cube.qml` — `viewRadius` (línea 76, `isSheet ? 0.5·W : faceDistance`) →
    `faceDistance` (rama hoja: `sheetGap`) → `sheetGap` (`0.005·viewRadius`) →
-   `viewRadius`. Con `count < 3` la fase inicial es de hoja (`isSheet` true:
-   el Loader de la malla monta asíncrono la primera vez que se compila
-   `CylinderArcMesh`, o al cambiar `Shape` en caliente); cuando la malla
-   aparece a mitad de un pase de reevaluaciones, Qt corta el ciclo y deja
+   `viewRadius`. Con `count < 3` existe una fase de hoja (`isSheet` true)
+   mientras la cadena del tambor no manda; el disparador medido es un flip
+   de `Shape`/status a mitad de pase (el Loader de la malla es **síncrono
+   por defecto** — no hizo falta ningún montaje diferido para activar el
+   ciclo); cuando la malla entra en juego dentro de ese pase, Qt corta el
+   ciclo y deja
    `viewRadius` **congelado en `sheetGap` ≈ max(1, 0.005·R) ≈ 4`** mientras
    `faceDistance` se recupera solo a R (de ahí `d=776 v=4` simultáneos). El
    log del motor lo confesaba: `QML Cube: Binding loop detected for property
@@ -1036,11 +1038,15 @@ escritorios que ningún check del gate detectó:
 (n=1 no-op, n=2 0↔120 ambos lados, n=3 grid intacta, polígono 4 caras
 verbatim); `check-cylinder-wiring.py` exige en los tres counts
 `viewRadius === faceDistance === R` + assert estructural «`viewRadius` no es
-`sheetGap`» (>100 px de diferencia con R=1272) + close/distant > R, y añade
+`sheetGap`» (>100 px de diferencia con R=1270) + close/distant > R, y añade
 el escenario **flip** — `ScreenView.qml` real offscreen, hoja de 2
 escritorios y `Shape` a Cylinder en caliente, la secuencia que congelaba
-`v=4` — parseando el DebugOverlay y exigiendo `v == d == R` y `sheet=0`
-(con el código viejo este escenario falla: `v=4`, medido);
+`v=4` — parseando el DebugOverlay y exigiendo `v == d == R`, `r` == la
+distancia `distant` del tambor nuevo (vive el binding de estado o
+`resyncToState` por `onCylinderActiveChanged`) y `sheet=0`
+(con el código viejo este escenario falla: `v=4`, medido; sin
+`QtQuick3D.Helpers` el flip **se salta con aviso** — el fallback hoja es
+configuración soportada y lo cubren los escenarios de `Cube`);
 `check-cylinder-overlap.py` gana el escenario **two-slot** (2 escritorios,
 yaw 0: la fila central es el rojo de la cara del slot 0 — la cara de frente
 también con huecos).

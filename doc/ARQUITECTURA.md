@@ -101,8 +101,9 @@ Cómo está implementado:
   `DefaultMaterial` con `diffuseMap ← Texture.sourceItem` entraba SIEMPRE en la
   pasada transparente (el grab del item tiene canal alfa: el motor marca
   transparencia por la textura, no por el `opacity` — por eso el overlap se veía
-  con op=1.00). `NoCulling` se mantiene SIEMPRE — polígono, hoja, tambor y
-  segmento: por los huecos y cantos se ven los dorso de las caras lejanas
+  con op=1.00). `NoCulling` se mantiene SIEMPRE — polígono, hoja y tambor (con
+  1-2 escritorios, el tambor de 3 slots): por los huecos y cantos se ven los
+  dorso de las caras lejanas
   (paridad con el cubo virgen, ADR-003/ADR-023). El helper `cylinderCullMode`
   sigue testeado como semilla de la alternativa descartada (tokens 1/0; los
   ints del enum NO se hardcodean: Qt 6.12.1 Back=1, Front=2, None=3). El
@@ -113,8 +114,8 @@ Cómo está implementado:
   ADR-022/024 sin fórmula nueva.
 - **Contenido**: el `DesktopView` compuesto (wallpaper + ventanas) se aplica como
   `baseColorMap` sobre la malla curva con el MISMO material que el plano —
-  polígono, hoja, tambor y segmento comparten `CubeFace.qml` (ADR-021 heredada;
-  ADR-026 solo hizo explícita la pasada).
+  polígono, hoja y tambor (de 3 slots con 1-2) comparten `CubeFace.qml`
+  (ADR-021 heredada; ADR-026 solo hizo explícita la pasada).
 - Segmentos: **64 fijos** (`CYLINDER_SEGMENTS`) — ADR-002 admitía 32–64; 64 por
   arcos grandes/cerca (130 vértices por malla, no por cara).
 - `#Cylinder` primitivo NO sirve para un arco parcial con UV isométrica; es un
