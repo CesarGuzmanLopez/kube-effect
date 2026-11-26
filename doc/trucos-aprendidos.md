@@ -212,7 +212,7 @@ directamente.
 En este KWin NO llegan al journal (ni `journalctl -b` ni `--user`). Inútil para
 depurar en caliente.
 
-### ✅ VERDADERO: exponer propiedades y leerlas por D-Bus
+### ❌ FALSO: `supportInformation` expone propiedades QML
 
 Añadir `readonly property string dbgX: ...` al `SceneEffect` (main.qml) y leer:
 
@@ -220,8 +220,19 @@ Añadir `readonly property string dbgX: ...` al `SceneEffect` (main.qml) y leer:
 qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.supportInformation kube-effect
 ```
 
-Muestra el valor vivo (incluye `activated`, `visible`). Sirve para confirmar qué
-versión está cargada (`animationDuration`) y qué config resuelve.
+Devuelve **cadena vacía** (medido 2026-11-25, KWin 6.8.3): ni las propiedades
+declaradas en el QML del efecto ni su valor vivo llegan ahí.
+`supportInformation` es un hook C++ de los datos de soporte del efecto
+(`Effect::supportInformation()`), sin puente con el grafo de objetos QML. No
+hay forma, desde QML puro, de leer estado del efecto por D-Bus.
+
+### ✅ VERDADERO: pintar el estado en pantalla (`DebugOverlay`)
+
+Como ni el journal ni el D-Bus son un canal de lectura, el único sitio fiable
+es la pantalla: un `Text` anclado a la esquina del `ScreenView` que ensambla
+el estado vivo (cámara, fondo, vídeo, geometría, op por cara). Eso es la clave
+`DebugOverlay` (pestaña Advanced, default false, ADR-023), y así se
+diagnosticó el bug del LOD de caras.
 
 ## E. Geometría y culling (QtQuick3D)
 

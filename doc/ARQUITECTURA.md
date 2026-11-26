@@ -111,17 +111,35 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
 - Sin shaders: es una textura estándar sobre el quad/cilindro.
 - Encima van las ventanas de ese escritorio (composite o capas 3D).
 - Multi-monitor: una captura por pantalla (`WindowFilterModel { screenName }`).
-- **LOD de captura** (ADR-022): la cara es un `Texture.sourceItem`, o sea una
-  capa offscreen a resolución completa que se renderiza por frame. Con el
-  sólido opaco (`faceOpacity >= 0.99`) las caras que dan la espalda a la cámara
-  quedan totalmente ocluidas: se marcan `visible: false` y cuestan cero
-  capturas. Con caras semitransparentes (ADR-021) no se puede: hay que ver las
-  lejanas a través y se mantienen todas. El ángulo de cámara (`cameraYaw`) llega
-  a `Cube` desde el binding de `cameraController` en `ScreenView`.
+- **Todas las caras se pintan siempre** (ADR-023): el LOD de orientación de
+  ADR-022 quedó retirado — con `Material.NoCulling` y caras separadas los
+  interiores de las traseras se ven por los huecos (look del cubo virgen), y
+  ocultarlas abría agujeros al casco en reposo. El `Texture.sourceItem` de
+  cada cara captura por frame sin excepciones; el ahorro llegará con el LOD
+  **por distancia** de WindowLayering (fase posterior).
 - **Sin scope dinámico** (ADR-022): `DesktopView` no resuelve `targetScreen`
   subiendo el grafo de objetos; `ScreenView` → `Cube` → `CubeFace` →
   `DesktopView` pasan `screenName` y `screenGeometry` explícitos, y un modelo
   nulo deja `wId = 0` (nullWId) para liberar la captura.
+
+### Modo debug (`DebugOverlay`)
+
+- Clave Bool de Advanced, default `false` (ADR-023). Con `true`, un `Text`
+  rojo monoespaciado anclado arriba-izquierda en cada `ScreenView` (z: 100)
+  muestra dos líneas con el estado vivo: fondo (modo, equirect, skybox),
+  vídeo (wanted/ready/painted + `mediaStatus`), atenuación (`cubeMoving`,
+  exposición), pantalla (`sceneScreenName`, `cursorScreenName`,
+  `drawOnThisScreen`), cámara (yaw, pitch, radio), opacidad de caras, tick
+  angular, geometría (`faceRepeater.count` vs `geometryCount`,
+  `faceDistance`) y el `cos` por cara (informativo: sin LOD ninguna cara se
+  oculta).
+- Por qué en pantalla y no por consola/D-Bus: `console.log/warn` no llega al
+  journal de este KWin y `org.kde.kwin.Effects.supportInformation` devuelve
+  cadena vacía en KWin 6.8.3 (medido 2026-11-25; trucos §D). Pintar es el
+  único canal que se comprobó visible — así se diagnosticó el bug del LOD.
+- Coste controlado: el ensamblado del string y la descomposición
+  `toEulerAngles()` del yaw/pitch solo corren con el overlay activo (mismo
+  gateo que el yaw del degradado, ADR-022).
 
 ## 4. Casco: espacio alrededor
 

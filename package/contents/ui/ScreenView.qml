@@ -152,6 +152,39 @@ Item {
     // See the veil below: the cube "moves" while dragging or while the camera
     // rotation animation runs.
     readonly property bool cubeMoving: cameraController.busy || rotationAnimation.running
+    // DebugOverlay (ADR-023): live state painted on screen while the Advanced
+    // key is on. console.log never reaches this KWin's journal and
+    // org.kde.kwin.Effects.supportInformation returns an empty string for QML
+    // properties (KWin 6.8.3, measured 2026-11-25; doc/trucos-aprendidos.md
+    // section D), so the overlay is the only visible diagnostic channel.
+    // debugEuler follows the gradient-yaw gating pattern (ADR-022): the
+    // quaternion is decomposed ONCE per change and only while the overlay is
+    // on (Cube receives cube.cameraYaw from it, the text below reads .x).
+    readonly property vector3d debugEuler: effect.configuration.DebugOverlay === true ? cameraController.rotation.toEulerAngles() : Qt.vector3d(0, 0, 0)
+    readonly property string debugInfo: {
+        // Two lines max; composed only while the overlay is on.
+        if (effect.configuration.DebugOverlay !== true) {
+            return "";
+        }
+        // Names come from constants.js (mirrors config/main.xml, ADR-023).
+        let line1 = "bg=" + Constants.backgroundName(root.backgroundMode) + " eq=" + (root.equirectMapping ? 1 : 0) + " sky=" + (root.skyBoxImageReady ? 1 : 0) + " vid " + (root.videoWanted ? 1 : 0) + "/" + (root.videoReady ? 1 : 0) + "/" + (root.videoPainted ? 1 : 0);
+        if (root.videoReady) {
+            // Loader.Ready survives a transient null item (same guard as
+            // videoPainted above); "?" then beats dereferencing nothing.
+            const videoItem = videoLoader.item;
+            line1 += " ms=" + (videoItem === null || videoItem === undefined ? "?" : videoItem.mediaStatus);
+        }
+        line1 += " dim=" + (root.cubeMoving ? 1 : 0) + " exp=" + root.skyBoxExposure.toFixed(2) + " scr=" + root.sceneScreenName + " cur=" + effect.cursorScreenName + " draw=" + (root.drawOnThisScreen ? 1 : 0);
+        // The per-face cos kept the information that diagnosed the LOD bug
+        // (yaw, pitch, op, tick, cos per face); with the LOD retired it is
+        // purely informative: no face is ever hidden by orientation.
+        let line2 = "yaw=" + cube.cameraYaw.toFixed(1) + " pitch=" + root.debugEuler.x.toFixed(1) + " r=" + cameraController.radius.toFixed(0) + " op=" + root.faceOpacity.toFixed(2) + " tick=" + cube.angleTick.toFixed(1) + " n=" + cube.faceCount + "/" + cube.geometryCount + " d=" + cube.faceDistance.toFixed(0);
+        for (let i = 0; i < cube.faceCount; ++i) {
+            const cos = Math.cos((cube.angleTick * i - cube.cameraYaw) * Math.PI / 180);
+            line2 += " f" + i + ":" + cos.toFixed(2);
+        }
+        return line1 + "\n" + line2;
+    }
     // Face transparency (ADR-021): rest opacity, or the rotation opacity while
     // the cube moves (same signal as the hull dim; wheel zoom is not a turn).
     // The Behavior fades between both so a paused drag does not strobe. This
@@ -378,6 +411,27 @@ Item {
         }
     }
 
+    // DebugOverlay (ADR-023): the two state lines from debugInfo, painted over
+    // everything (z: 100) while the Advanced key is on. Nothing is composed
+    // when it is off (see debugInfo), so the default stays free.
+    Text {
+        id: debugOverlay
+        visible: effect.configuration.DebugOverlay === true
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.margins: 6
+        z: 100
+        color: "red"
+        // Outline: the overlay is the ONLY visible diagnostic channel, so it
+        // must stay readable over a light wallpaper (and line 2 stays one
+        // line: no wrap, the text runs off a small screen instead).
+        style: Text.Outline
+        styleColor: "black"
+        font.pixelSize: 14
+        font.family: "monospace"
+        text: root.debugInfo
+    }
+
     View3D {
         id: view
         anchors.fill: parent
@@ -467,10 +521,10 @@ Item {
             faceDisplacement: effect.configuration.CubeFaceDisplacement
             faceOpacity: root.faceOpacity
             faceSize: Qt.size(root.width, root.height)
-            // One yaw binding feeds the face LOD (ADR-022): the camera azimuth
-            // is what decides which faces see the camera, so hide the captures
-            // of the back-facing ones while the solid is opaque.
-            cameraYaw: cameraController.rotation.toEulerAngles().y
+            // The yaw feeds only the debug overlay now that the face LOD is
+            // retired (ADR-023): debugEuler decomposes the quaternion once,
+            // gated on DebugOverlay (the gradient-yaw pattern, ADR-022).
+            cameraYaw: root.debugEuler.y
             // Screen identity for DesktopView, explicit (ADR-022): no dynamic
             // scope through Cube/Repeater3D into this root.
             screenName: root.targetScreen !== null && root.targetScreen !== undefined ? root.targetScreen.name : ""

@@ -42,6 +42,17 @@ Item {
         check("mode(null)", Constants.backgroundMode(null), Constants.Background.Color);
         check("mode(string)", Constants.backgroundMode("2"), Constants.Background.Color);
 
+        // Debug overlay name (ADR-023): every enum value maps to its main.xml
+        // choice name; anything else says so instead of printing "undefined".
+        check("name(Color)", Constants.backgroundName(Constants.Background.Color), "Color");
+        check("name(Image)", Constants.backgroundName(Constants.Background.Image), "Image");
+        check("name(Gradient)", Constants.backgroundName(Constants.Background.Gradient), "Gradient");
+        check("name(Video)", Constants.backgroundName(Constants.Background.Video), "Video");
+        check("name(unknown int)", Constants.backgroundName(9), "Unknown");
+        check("name(undefined)", Constants.backgroundName(undefined), "Unknown");
+        check("name(null)", Constants.backgroundName(null), "Unknown");
+        check("name(string)", Constants.backgroundName("Video"), "Unknown");
+
         // Image layout: Equirect is the default, only an explicit Flat turns it
         // off. Unknown values (hand-edited BackgroundImageLayout) must resolve
         // to equirect instead of silently flattening a panorama; values under

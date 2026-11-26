@@ -59,6 +59,26 @@ function backgroundMode(value) {
     return Background.Color;
 }
 
+// Human-readable Background name for the debug overlay (ADR-023). The chain
+// mirrors the enum above instead of trusting object key order; an unknown
+// value says "Unknown" — a diagnostic line must never print "undefined"
+// where a mode name belongs.
+function backgroundName(value) {
+    if (value === Background.Image) {
+        return "Image";
+    }
+    if (value === Background.Gradient) {
+        return "Gradient";
+    }
+    if (value === Background.Video) {
+        return "Video";
+    }
+    if (value === Background.Color) {
+        return "Color";
+    }
+    return "Unknown";
+}
+
 // Equirect is the default and the safe fallback: only an explicit Flat turns
 // it off. A hand-edited kwinrc value or a missing entry resolves to equirect;
 // stretching a real panorama as a flat photo is worse than wrapping a photo

@@ -94,17 +94,16 @@ Reglas:
 - La opacidad multiplica el alfa del material de la cara (`DefaultMaterial.opacity`);
   el casco NO se atenúa por esto (eso es `DimWhileRotating`, §5.1, y sigue siendo
   independiente).
-- Orden de pintado: con alfa < 1 el material entra en el pase transparente de
-  QtQuick3D, que ordena las caras de atrás hacia delante (equivalente a las dos
-  pasadas de Wayfire); no se reordena el modelo a mano.
-- **LOD con caras opacas** (ADR-022): cada cara es una capa offscreen que se
-  captura por frame, así que con `FaceOpacity >= 0.99` las caras que dan la
-  espalda a la cámara (ocluidas por el sólido) **no capturan** (`visible:
-  false`); con caras semitransparentes se capturan todas, porque hay que ver
-  las lejanas a través. El criterio es angular (`cos(azimut de cara − yaw de
-  cámara) >= 0`: hasta 90° la cara sigue siendo visible desde dentro, así que
-  no se oculta con margen positivo para no perder el sliver frontal ni dejar
-  asomar el casco por el canto); no cambia ninguna clave.
+- **Todas las caras se pintan siempre** (ADR-023, sustituye el LOD de
+  ADR-022 punto 3): no hay ocultado por orientación. Con `CubeFaceDisplacement
+  > 0` los interiores de las caras traseras se ven a través de los huecos
+  entre caras (el cubo usa materiales sin culling); es **intencionado** — es
+  el look del cubo virgen de KDE, y ocultar esas caras abría agujeros por los
+  que asomaba el casco en reposo (medido en el anidado 2026-11-25). El coste
+  de capturas se atacará con LOD real por distancia cuando llegue
+  WindowLayering (§2.1), no por orientación. Con alfa < 1 el material entra en
+  el pase transparente de QtQuick3D, que ya ordena de atrás hacia delante; no
+  se reordena el modelo a mano.
 
 ## 2.1 Capas de ventana (z-index / separación de ventanas)
 
@@ -221,6 +220,7 @@ Estas claves viven SOLO aquí; no se reparten por otras pestañas. **Advanced es
 | `DimWhileRotating`       | Bool | —     | false   | Oscurece el fondo SOLO mientras el cubo gira; vuelve al soltar             |
 | `DimWhileRotatingAmount` | Int  | 0–100 | 40      | Cuánto se oscurece el fondo al girar (solo con `DimWhileRotating`)        |
 | `CursorScreenOnly`       | Bool | —     | false   | Cubo solo en el monitor del cursor al lanzarse; default `false` = todas las pantallas |
+| `DebugOverlay`           | Bool | —     | false   | Muestra estado interno del efecto en pantalla (diagnóstico)                            |
 
 Implementación (QML puro, sin C++):
 
@@ -251,8 +251,19 @@ Implementación (QML puro, sin C++):
   compilada viven en **Preferencias del sistema → Gestión de ventanas → «Kube Effect
   Plus»** (`kcm_kube_effect_plus`), que solo aparece si se compiló `native/`. El
   engranaje del efecto sigue abriendo el menú QML de siempre: compilar **no** cambia
-  ese botón. La pestaña Advanced del menú QML agrupa las tres claves avanzadas y una
+  ese botón. La pestaña Advanced del menú QML agrupa las claves avanzadas y una
   sección plegable que remite a Plus; no duplica las opciones del nativo.
+
+- **Overlay de diagnóstico** (`DebugOverlay`, ADR-023): ni `console.log/warn`
+  llega al journal en este KWin ni `supportInformation` por D-Bus devuelve las
+  propiedades QML (cadena vacía medida en KWin 6.8.3, 2026-11-25; ver trucos
+  §D). El único canal visible es pintar: con la clave activada, un texto rojo
+  monoespaciado sobre el cubo muestra el estado vivo — fondo (modo, equirect,
+  skybox listo), vídeo (wanted/ready/painted + `mediaStatus`), atenuación
+  (`cubeMoving`, exposición), cámara (yaw/pitch/radio), geometría (caras,
+  tick, distancia, cos por cara) y pantalla (nombre de la escena, del cursor,
+  si pinta aquí). Máximo 2 líneas. El yaw y el pitch solo se descomponen del
+  cuaternión con el overlay activo (mismo gateo que el yaw del degradado).
 
 - **Pantalla del cursor**: al activar se captura la pantalla bajo el puntero con
   `KWinComponents.Workspace.screenAt(KWinComponents.Workspace.cursorPos)` (API

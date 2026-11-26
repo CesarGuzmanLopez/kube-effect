@@ -19,8 +19,10 @@ Node {
     // lookup of ScreenView.targetScreen from inside the face delegates.
     required property string screenName
     required property rect screenGeometry
-    // Camera yaw in degrees, bound once by ScreenView from cameraController.
-    // Only the face-visibility test (isFacingCamera) reads it.
+    // Camera yaw in degrees, bound by ScreenView. The face LOD was retired
+    // (ADR-023), so only the debug overlay reads it; ScreenView feeds it from
+    // a single DebugOverlay-gated toEulerAngles() (the gradient-yaw pattern,
+    // ADR-022), so no decomposition is paid while the overlay is off.
     property real cameraYaw: 0
     // The repeater count can transiently be 0, 1 or 2 (desktops are being
     // added/removed while the model syncs). angleTick = 360/count then yields
@@ -29,24 +31,12 @@ Node {
     // sides is degenerate anyway: clamp the geometry to a triangle so every
     // derived value stays finite and positive (ADR-022).
     readonly property int geometryCount: Math.max(3, faceRepeater.count)
+    // Raw delegate count, for the debug overlay only (ADR-023): it can briefly
+    // be 0..2 mid-sync and then differs from geometryCount. Faces themselves
+    // never branch on it — the LOD is retired, every face renders always.
+    readonly property int faceCount: faceRepeater.count
     readonly property real angleTick: 360 / geometryCount
     readonly property real faceDistance: 0.5 * faceSize.width / Math.tan(angleTick * Math.PI / 360) + faceDisplacement
-
-    // True when the face at index points towards the camera half-space. Each
-    // face holds a Texture.sourceItem, i.e. a full-resolution offscreen capture
-    // that renders EVERY frame it is visible; an invisible Model costs zero
-    // captures. Faces with a negative projection (cos < 0) turn their back and
-    // are fully occluded by the opaque solid, so hiding them is free
-    // (ADR-022 LOD). The threshold is 0, NOT a positive margin: a face at 89°
-    // is still front-facing (its inner sliver is visible and a > 0 threshold
-    // hid it, leaving a hole with the hull peeking through the edge), while a
-    // truly back-facing face only reaches cos < 0 past 90°. With translucent
-    // faces (ADR-021) ScreenView keeps every face visible: the far ones must
-    // be seen through the near ones.
-    function isFacingCamera(index) {
-        const faceAzimuth = cube.angleTick * index;
-        return Math.cos((faceAzimuth - cube.cameraYaw) * Math.PI / 180) >= 0;
-    }
 
     function desktopAt(azimuth) {
         let index = Math.round(azimuth / angleTick) % geometryCount;
@@ -74,11 +64,9 @@ Node {
             faceOpacity: cube.faceOpacity
             screenName: cube.screenName
             screenGeometry: cube.screenGeometry
-            // LOD (ADR-022): opaque solid -> hide the faces turned away from
-            // the camera (one less full-res capture each); translucent faces
-            // (ADR-021) must all stay visible because the far ones show
-            // through the near ones.
-            visible: cube.faceOpacity < 0.99 || cube.isFacingCamera(index)
+            // Every face renders always (ADR-023): the back-facing ones show
+            // their inner side through the gaps between faces, which IS the
+            // look of the virgin KDE cube; hiding them opened hull holes.
             scale: Qt.vector3d(faceSize.width / 100, faceSize.height / 100, 1)
             eulerRotation.y: cube.angleTick * index
             position: {

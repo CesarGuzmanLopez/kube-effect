@@ -138,5 +138,11 @@
         <entry name="CursorScreenOnly" type="Bool">
             <default>false</default>
         </entry>
+        <!-- DebugOverlay (ADR-023): on-screen diagnostic text. console.log and
+             supportInformation never reach a visible place in this KWin
+             (doc/trucos-aprendidos.md section D), so the state is painted. -->
+        <entry name="DebugOverlay" type="Bool">
+            <default>false</default>
+        </entry>
     </group>
 </kcfg>

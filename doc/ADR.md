@@ -408,3 +408,42 @@ forma cilíndrica (ADR-002), que multiplica delegates, caras y cargas.
 default, check-scene-environment, check-video-dome, check-features) y
 `make native` (ctest: quoting del bloque de comandos). Prueba visual solo en
 el anidado (`scripts/kwin-nested-test.sh`).
+
+## ADR-023 — Sin LOD de caras; modo DebugOverlay permanente.
+
+**Decisión**:
+
+1. **Se retira el LOD de caras de ADR-022 punto 3**: todas las caras se
+   renderizan siempre (el delegate pierde el `visible:` y `isFacingCamera`
+   desaparece). Medido en el anidado (2026-11-25): en reposo (`op=1.00`,
+   yaw=0.2) el criterio de orientación ocultaba caras con `f1:-0.50` y
+   `f2:-0.50` y esas caras abrían un agujero por el que asomaba el casco; al
+   girar (`op=0.70`) el LOD ya no actuaba y todo se veía bien. Es un bug de
+   diseño, no de umbral: con `Material.NoCulling` (las caras se ven por las
+   dos partes, necesario para la hoja 2D y el sliver frontal) y
+   `CubeFaceDisplacement > 0`, los **interiores** de las caras traseras se ven
+   a través de los huecos entre caras — eso ES el aspecto del cubo virgen de
+   KDE, y ocultar las traseras lo cambia. El ahorro de capturas no vale ese
+   cambio de apariencia. El coste se atacará con LOD real **por distancia**
+   cuando exista WindowLayering (fase posterior, `WindowLayerLodFaces`), no
+   por orientación.
+2. **El debug temporal pasa a ser `DebugOverlay`** (Bool, default false,
+   pestaña Advanced): un texto rojo monoespaciado en pantalla con el estado
+   vivo del efecto (modo de fondo, equirect/skybox, vídeo con `mediaStatus`,
+   dim/exposición, pantalla y dibujado, yaw/pitch/radio, opacidad/tick/cos por
+   cara, geometría). El yaw y el pitch solo se descomponen del cuaternión
+   mientras el overlay está activo — el mismo gateo del yaw del degradado
+   (ADR-022 punto 9).
+
+**Porqué**: el diagnóstico necesita un canal **visible**, y ninguno de los
+dos estándar lo es en este KWin: `console.log`/`console.warn` no llega al
+journal (trucos §D) y `org.kde.kwin.Effects.supportInformation` devuelve
+cadena vacía en KWin 6.8.3 (medido 2026-11-25; invalida el patrón que esta
+doc daba por bueno — corregido en trucos §D). Pintar en pantalla es lo único
+comprobado que funciona: así se diagnosticó el propio bug del LOD. Con la
+clave apagada (default) el overlay no se pinta ni paga descomposiciones.
+
+**Verificación**: `make check` (check-schema: entry `DebugOverlay` ↔ widget
+`kcfg_DebugOverlay`; check-ui: la checkbox se crea con QUiLoader; qmllint) y
+prueba visual en el anidado (`scripts/kwin-nested-test.sh`) con el overlay
+encendido y apagado.

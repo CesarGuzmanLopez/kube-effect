@@ -7,8 +7,9 @@ Formulario del KCM genérico (kcm_kwin4_genericscripted) para kube-effect.
 Pestañas fijas (Shape & center, Background, Windows 3D, Appearance, Input,
 Presets, Advanced); las que aún no tienen claves quedan vacías con un aviso,
 hasta que la fase correspondiente del ROADMAP las rellene. Las opciones
-avanzadas viven SOLO en Advanced (ADR-014), en grupos de lenguaje llano y con
-una sección plegable de Kube Effect Plus (ADR-018). Cada widget = kcfg_<Entry>.
+avanzadas viven SOLO en Advanced (ADR-014), en grupos de lenguaje llano, con
+un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
+(ADR-018). Cada widget = kcfg_<Entry>.
 -->
 <ui version="4.0">
     <class>KubeEffectConfigForm</class>
@@ -745,6 +746,44 @@ una sección plegable de Kube Effect Plus (ADR-018). Cada widget = kcfg_<Entry>.
                             </item>
                             <item>
                                 <widget class="QFrame" name="advancedSeparator3">
+                                    <property name="frameShape">
+                                        <enum>QFrame::HLine</enum>
+                                    </property>
+                                    <property name="frameShadow">
+                                        <enum>QFrame::Sunken</enum>
+                                    </property>
+                                </widget>
+                            </item>
+                            <item>
+                                <!-- DebugOverlay (ADR-023): the on-screen diagnostic
+                                     switch; console and D-Bus reach nowhere visible. -->
+                                <widget class="QGroupBox" name="advancedDiagGroup">
+                                    <property name="title">
+                                        <string>Diagnóstico</string>
+                                    </property>
+                                    <layout class="QVBoxLayout" name="advancedDiagLayout">
+                                        <item>
+                                            <widget class="QCheckBox" name="kcfg_DebugOverlay">
+                                                <property name="text">
+                                                    <string>Mostrar el estado interno en pantalla</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item>
+                                            <widget class="QLabel" name="advancedDiagHint">
+                                                <property name="text">
+                                                    <string>Muestra en pantalla el estado interno del efecto (ángulos, fondo, vídeo) para diagnosticar problemas</string>
+                                                </property>
+                                                <property name="wordWrap">
+                                                    <bool>true</bool>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                    </layout>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QFrame" name="advancedSeparator4">
                                     <property name="frameShape">
                                         <enum>QFrame::HLine</enum>
                                     </property>
