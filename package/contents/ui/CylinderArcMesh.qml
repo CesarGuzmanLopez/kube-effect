@@ -26,8 +26,10 @@
 //
 // ONE instance is shared by all faces: every CubeFace (Model) references
 // mesh through Model.geometry, exactly like the shared built-in primitives.
-// The arc is generated centred on +Z, so a face differs only by its
-// eulerRotation.y = angleTick * index.
+// The arc is generated around the node (mid-point at the origin, drum axis
+// at (0, 0, -R)), so a face differs from the next only by the polygon's own
+// placement: position = rotate(azimuth) * (0, 0, R) plus eulerRotation.y —
+// distinct sort centroids per face, ADR-026.
 
 import QtQuick
 import QtQuick3D.Helpers

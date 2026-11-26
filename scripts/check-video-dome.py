@@ -117,17 +117,55 @@ ListModel {
 ListModel {
 }
 """,
+    # One fake window per desktop so every DesktopView face carries a FLAT
+    # COLOUR the render tests can identify (check-cylinder-overlap.py samples
+    # pixels per face). internalId carries the desktop number: the stub maps
+    # it to red/green/blue. The thumbnail fills the face by default; with the
+    # stubFaceCoverage context property below 1 it leaves an alpha-0 border
+    # (keeps the "wallpaper shows through the face texture" case visible in
+    # the grabs: a blending material reveals it, an opaque one paints black).
     "WindowFilterModel.qml": """import QtQuick
 ListModel {
+    id: wfm
     property var activity
     property var desktop
     property string screenName
     property var windowModel
+    Component.onCompleted: {
+        if (desktop === null || desktop === undefined) {
+            return;
+        }
+        const number = desktop.x11DesktopNumber;
+        // createQmlObject: a ListModel parses any nested element as a ListElement.
+        const win = Qt.createQmlObject("import QtQuick; QtObject { property string internalId; property real x; property real y; property int stackingOrder; property bool minimized }", wfm);
+        win.internalId = "stub-" + number;
+        win.x = 0;
+        win.y = 0;
+        win.stackingOrder = 0;
+        win.minimized = false;
+        append({ "window": win });
+    }
 }
 """,
     "WindowThumbnail.qml": """import QtQuick
 Item {
+    id: thumb
     property var wId
+    // Size to the DesktopView (the Repeater's parent): a plain delegate Item
+    // has no implicit size, and the render tests need the colour to cover the
+    // face. 72 % leaves an alpha-0 border around the colour block.
+    // stubFaceCoverage (context property): 1 fills the whole face (ordering
+    // tests, no holes); <1 leaves an alpha border (transparency tests).
+    readonly property real cover: (typeof stubFaceCoverage === "number" && stubFaceCoverage > 0) ? stubFaceCoverage : 1
+    width: parent !== null ? parent.width * cover : 0
+    height: parent !== null ? parent.height * cover : 0
+    Rectangle {
+        anchors.fill: parent
+        color: String(thumb.wId).endsWith("-1") ? "#ff0000"
+            : String(thumb.wId).endsWith("-2") ? "#00ff00"
+            : String(thumb.wId).endsWith("-3") ? "#0000ff"
+            : "#ffa500"
+    }
 }
 """,
 }

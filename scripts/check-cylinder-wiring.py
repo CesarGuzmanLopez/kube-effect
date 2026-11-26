@@ -1,29 +1,38 @@
 #!/usr/bin/env python3
-"""Wiring gate for the cylinder branches (ADR-025): the REAL Cube.qml.
+"""Wiring gate for the cylinder branches (ADR-025/ADR-026): the REAL Cube.qml.
 
 check-cylinder.py validates the arc's vertex data through CylinderArcMesh;
 this script proves the cable above it — Cube.qml itself, instantiated with
 the stub org.kde.kwin module (the same VirtualDesktopModel stub as
 check-video-dome.py, reused so the two never drift) and Shape = Cylinder:
 
-  * 3 desktops  -> isCylinder + cylinderActive, NOT cylinderSegments,
-    Loader.Ready produced a real Geometry (cylinderMesh non-null) or — on a
-    system without QtQuick3D.Helpers — the documented fallback: both flags
-    false, no crash (the script prints which path ran);
+  * 3 desktops  -> isCylinder + cylinderActive, Loader.Ready produced a
+    real Geometry (cylinderMesh non-null) or — on a system without
+    QtQuick3D.Helpers — the documented fallback: flags false, no crash
+    (the script prints which path ran);
   * angleTick stays the polygon tick (360/3); faceDistance is R = N(W+g)/2pi;
+  * the turn range (Constants.azimuthRangeFor via the harness, ADR-026) is
+    OPEN [null, null] at EVERY cylinder count with the mesh;
   * culling parity (ADR-025 point 12, reverted): faceCullMode stays
     Material.NoCulling for inside, margin and OUTSIDE camera radii — the
     mirrored inner wall must stay visible through the gaps exactly like in
     the polygon (ADR-023); the numbers compared come from the QML side
     because PySide cannot convert the enum itself;
-  * 2 desktops  -> cylinderSegments (the curved segment of ADR-025 point 11)
-    with angleTick exactly 120 and faceDistance = 3W/2pi (no g);
-  * 1 desktop   -> the single-face segment: cylinderSegments, faceDistance
-    3W/2pi and the arrow range [-60, 60] (cylinderAzimuthRange(1)), one
-    face at azimuth 0.
+  * 2 desktops  -> the THREE-SLOT drum (ADR-025 point 11, re-rectified: the
+    capped [-60, 180] band made jumps and felt choppy): cylinderActive,
+    angleTick exactly 120, faceDistance = 3(W + g)/2pi — the user gap
+    APPLIES now (the harness sets faceDisplacement = 100) — two faces in
+    slots 0 and 1, slot 2 has no delegate;
+  * 1 desktop   -> the same three-slot drum: cylinderActive, angleTick 120,
+    faceDistance = 3(W + g)/2pi, one face at azimuth 0 (slot 0: ALWAYS
+    front-facing when the effect opens — targetAzimuth is verbatim on the
+    open range) and two empty slots showing the hull.
 Each helpers case also checks the first vertex of the produced geometry
-against the expected radius (hypot(x, z)) — that closes the Loader->holder
-binding wiring: the mesh actually received the R the formula computed.
+against the expected radius AROUND THE NODE-LOCAL AXIS (ADR-026): the arc
+wraps (0, 0, -R) in its own frame now (the Model carries the radius as its
+position, so every face gets a distinct transparent-pass sort centroid),
+so hypot(x, z + R) must equal R — that closes the Loader->holder binding
+wiring: the mesh actually received the R the formula computed.
 
 Nothing is rendered: no View3D, no window — only the object tree and the
 bindings, so QT_QPA_PLATFORM=offscreen is enough (unlike check-video-dome,
@@ -78,7 +87,7 @@ def run_scenario(application, import_root, desktop_count):
     """
     problems: list[str] = []
     # The handler is module-level: drop the previous scenario's messages so an
-    # error found in the drum run is not re-reported under segment 2 and 1.
+    # error found in the drum run is not re-reported under drum 2 and 1.
     messages.clear()
     engine = QQmlEngine()
     engine.addImportPath(str(import_root))
@@ -100,7 +109,6 @@ def run_scenario(application, import_root, desktop_count):
     width = float(harness.property("faceSizeWidth"))
     is_cylinder = bool(harness.property("isCylinder"))
     active = bool(harness.property("cylinderActive"))
-    segments = bool(harness.property("cylinderSegments"))
     mesh = harness.property("cylinderMesh")
     faces = int(harness.property("faceCount"))
     tick = float(harness.property("angleTick"))
@@ -111,6 +119,7 @@ def run_scenario(application, import_root, desktop_count):
     # equal it anywhere — read and assert it (a regressed cull pin would
     # otherwise pass the != none_value checks by coincidence of value).
     back_value = int(harness.property("backCullValue"))
+    range_json = str(harness.property("cylRangeJson"))
 
     # faceCullMode is pinned to Material.NoCulling in the runtime (ADR-025
     # point 12 reverted): check the initial value before the sweeps.
@@ -136,18 +145,11 @@ def run_scenario(application, import_root, desktop_count):
             problems.append(
                 "cylinderMesh exists but has no positions (Loader half-ready?)"
             )
-    else:
-        # (The fallback branch asserts below only need the flags; the earlier
-        # problems list already carries anything found here — no duplicated
-        # extend, review nit #1.)
-        pass
 
     if desktop_count == 3:
         if helpers:
-            if not active or segments:
-                problems.append(
-                    "3 desktops: expected cylinderActive, not cylinderSegments"
-                )
+            if not active:
+                problems.append("3 desktops: cylinderActive must be true with the mesh")
             if not close(tick, 360.0 / 3):
                 problems.append(f"3 desktops: angleTick {tick} != 120 (polygon parity)")
             if faces != 3:
@@ -157,13 +159,14 @@ def run_scenario(application, import_root, desktop_count):
                 problems.append(
                     f"3 desktops: faceDistance {distance} != R=N(W+g)/2pi {expected_distance}"
                 )
+            if range_json != "[null,null]":
+                problems.append("3 desktops: the drum turn range must be OPEN")
             # Culling parity (ADR-025 point 12, reverted): NoCulling is
             # pinned for inside, the 1.05 margin AND outside — the inner
             # wall seen through the gaps is polygon parity (ADR-023), the
-            # overlap over the front faces is a paint-order problem, not a
-            # culling one (the faceCullMode TODO + cylinderCullMode seed
-            # stay ready for the real fix).
-            expected_distance_and_radius = expected_distance
+            # overlap over the front faces is a paint-order problem (fixed
+            # by ADR-026; the faceCullMode note and the cylinderCullMode
+            # seed stay as the documented alternative).
             for factor in (0.5, 1.02, 2.0):
                 harness.setProperty("cameraRadius", distance * factor)
                 application.processEvents()
@@ -173,82 +176,89 @@ def run_scenario(application, import_root, desktop_count):
                         "Material.NoCulling (culling reverted, ADR-025 pt.12)"
                     )
             # The holder binding actually delivered R to the vertices:
-            # hypot(x, z) of the first vertex equals the drum radius.
+            # hypot(x, z + R) of the first vertex (measured from the
+            # node-local axis at (0, 0, -R), ADR-026) equals the drum radius.
             first = geometry[0]
-            r_v = math.hypot(float(first.x()), float(first.z()))
-            if not close(r_v, expected_distance_and_radius, 1e-3):
+            r_v = math.hypot(float(first.x()), float(first.z()) + expected_distance)
+            if not close(r_v, expected_distance, 1e-3):
                 problems.append(
-                    f"drum mesh vertex radius {r_v} != R {expected_distance_and_radius}"
+                    f"drum mesh vertex radius {r_v} != R {expected_distance}"
                 )
             info = "drum (3): helpers path, NoCulling parity + mesh R verified"
         else:
-            if active or segments:
-                problems.append(
-                    "fallback (no Helpers): both cylinder flags must be false"
-                )
+            if active:
+                problems.append("fallback (no Helpers): cylinderActive must be false")
             info = "drum (3): fallback path (QtQuick3D.Helpers missing) — no crash, flat faces"
-    elif desktop_count == 2:
+    elif desktop_count in (2, 1):
+        # The three-slot drum (ADR-025 pt.11 re-rectified, ADR-026): 1-2
+        # desktops keep the drum's formulas at N = 3 — the user gap g in R,
+        # the slot grid tick 120, empty slots without delegates and the
+        # OPEN turn range (no band caps, no asymmetric clamps: those made
+        # jumps and felt choppy).
+        label = f"three-slot drum ({desktop_count})"
         if helpers:
-            if not segments or active:
+            if not active:
                 problems.append(
-                    "2 desktops: expected cylinderSegments, not cylinderActive"
+                    f"{desktop_count} desktops: the three-slot drum must be cylinderActive (the band branch is retired)"
                 )
             if not close(tick, 120.0):
-                problems.append(f"2 desktops: segment angleTick {tick} != 120")
-            if faces != 2:
-                problems.append(f"2 desktops: faceCount {faces} != 2")
-            expected_distance = 3 * width / (2 * math.pi)
+                problems.append(
+                    f"{desktop_count} desktops: slot-grid angleTick {tick} != 120"
+                )
+            if faces != desktop_count:
+                problems.append(
+                    f"{desktop_count} desktops: faceCount {faces} != {desktop_count}"
+                )
+            expected_distance = 3 * (width + 100.0) / (2 * math.pi)
             if not close(distance, expected_distance, 1e-3):
                 problems.append(
-                    f"2 desktops: faceDistance {distance} != 3W/2pi {expected_distance}"
+                    f"{desktop_count} desktops: faceDistance {distance} != 3(W+g)/2pi {expected_distance}"
+                )
+            if range_json != "[null,null]":
+                problems.append(
+                    f"{desktop_count} desktops: the three-slot drum turn range must be OPEN (the band caps are retired)"
                 )
             for factor in (0.5, 1.02, 2.0):
                 harness.setProperty("cameraRadius", distance * factor)
                 application.processEvents()
                 if int(harness.property("faceCullMode")) != none_value:
                     problems.append(
-                        f"segment cameraRadius {factor}R: faceCullMode is not "
+                        f"{label} cameraRadius {factor}R: faceCullMode is not "
                         "Material.NoCulling (culling reverted, ADR-025 pt.12)"
                     )
+            # The holder binding delivered the slot-drum R to the vertices.
             first = geometry[0]
-            r_v = math.hypot(float(first.x()), float(first.z()))
+            r_v = math.hypot(float(first.x()), float(first.z()) + expected_distance)
             if not close(r_v, expected_distance, 1e-3):
                 problems.append(
-                    f"segment mesh vertex radius {r_v} != 3W/2pi {expected_distance}"
+                    f"{label}: mesh vertex radius {r_v} != 3(W+g)/2pi {expected_distance}"
                 )
-            info = "segment (2): helpers path, cylinderSegments + angleTick 120 + NoCulling verified"
-        else:
-            if segments:
-                problems.append("fallback (no Helpers): cylinderSegments must be false")
-            info = "segment (2): fallback path (QtQuick3D.Helpers missing) — flat sheet"
-    elif desktop_count == 1:
-        if helpers:
-            if not segments or active:
-                problems.append(
-                    "1 desktop: expected cylinderSegments, not cylinderActive"
-                )
-            if faces != 1:
-                problems.append(f"1 desktop: faceCount {faces} != 1")
-            expected_distance = 3 * width / (2 * math.pi)
-            if not close(distance, expected_distance, 1e-3):
-                problems.append(
-                    f"1 desktop: faceDistance {distance} != 3W/2pi {expected_distance}"
-                )
-            if not close(tick, 360.0):
-                problems.append(f"1 desktop: angleTick {tick} != 360 (one face)")
-            first = geometry[0]
-            r_v = math.hypot(float(first.x()), float(first.z()))
-            if not close(r_v, expected_distance, 1e-3):
-                problems.append(
-                    f"1 desktop: mesh vertex radius {r_v} != 3W/2pi {expected_distance}"
-                )
+            if desktop_count == 1:
+                # Slot 0 rule (the user's "face behind" guard, ADR-026): the
+                # single face sits at faceAzimuth(0) = angleTick * 0 = 0 —
+                # front-facing — and the open range leaves the state target
+                # verbatim there; the empty slot 1 lives on the same grid at
+                # 120 (arrows may park facing it, selection is the guarded
+                # no-op). Both read from the live Cube.
+                if not close(float(harness.property("slotZeroAzimuth")), 0.0):
+                    problems.append(
+                        "1 desktop: slot 0 must carry azimuth 0 (face always front)"
+                    )
+                if not close(float(harness.property("slotOneAzimuth")), 120.0):
+                    problems.append(
+                        "1 desktop: slot 1 of the grid must be at 120 (empty slot reachable)"
+                    )
             info = (
-                "segment (1): helpers path, one arc at azimuth 0, range seed [-60,60]"
+                f"{label}: helpers path, active + angleTick 120 + R=3(W+g)/2pi "
+                "+ open range + NoCulling verified"
             )
         else:
-            if segments:
-                problems.append("fallback (no Helpers): cylinderSegments must be false")
-            info = "segment (1): fallback path (QtQuick3D.Helpers missing) — flat sheet"
+            if active:
+                problems.append("fallback (no Helpers): cylinderActive must be false")
+            info = (
+                f"{label}: fallback path (QtQuick3D.Helpers missing) — flat sheet "
+                f"({'[-80,80]' if desktop_count == 1 else 'open'})"
+            )
     else:
         problems.append(f"unsupported scenario count {desktop_count}")
 
@@ -280,9 +290,10 @@ def main():
             print(f" - {problem}")
         return 1
     print(
-        "check-cylinder-wiring: OK (real Cube.qml: drum + segment flags, Loader mesh, "
-        "R faceDistance, polygon-parity tick, NoCulling parity after the revert, and "
-        "the mesh vertices carry the radius the holder was bound)"
+        "check-cylinder-wiring: OK (real Cube.qml: closed drum + three-slot drums, "
+        "Loader mesh, R=3(W+g)/2pi faceDistance, slot-grid tick 120, open turn "
+        "ranges, NoCulling parity after the revert, and the mesh vertices carry "
+        "the radius the holder was bound)"
     )
     return 0
 

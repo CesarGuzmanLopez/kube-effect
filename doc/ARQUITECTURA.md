@@ -33,15 +33,16 @@ El cilindro es una superficie **desarrollable** (curvatura gaussiana K=0): un pl
 se envuelve sobre él **sin distorsión**. Por eso el contenido del escritorio se
 curva sobre un cilindro sin estirarlo → **sin vertex shader**, QML puro.
 
-Geometría real (arco de cilindro, eje Y, radio R, ancho de cara W, alto H; la
-cara se centra en el azimut 0 = +Z y la rotación por cara hace el resto):
+Geometría real (arco de cilindro, radio R, ancho de cara W, alto H; desde
+ADR-026 el arco vive **alrededor de su nodo** — punto medio en el origen del
+Model, eje local en (0, 0, −R) — y la posición del nodo aporta el radio):
 
 ```
 g      = max(0, CubeFaceDisplacement)   → hueco LINEAL entre arcos (negativos = 0)
 R      = N·(W + g) / (2π)               → cylinderRadius(N, W, g)   (constants.js)
 θ      = W / R                          → cylinderArcAngle(W, R)    (arco = R·θ = W)
-φ(s)   = (s − W/2) / R                  → arco centrado en +Z, s ∈ [0, W]
-P(s,t) = ( R·sin φ, t − H/2, R·cos φ )  → t ∈ [0, H]
+φ(s)   = (s − W/2) / R                  → arco simétrico, medio en el nodo
+P(s,t) = ( R·sin φ, t − H/2, R·cos φ − R ) → t ∈ [0, H]; eje en (0, 0, −R)
 normal = ( sin φ, 0, cos φ )            → radial saliente
 UV:    u = s / W,  v = t/H              → misma convención que #Rectangle (v=0 abajo)
 ```
@@ -74,62 +75,85 @@ Cómo está implementado:
   dos Models sobre la misma geometría. Si el anidado mostrara un problema de
   referenciación múltiple, el plan B es una instancia por cara (la fórmula no
   cambia; solo dónde vive el objeto).
-- **Colocación**: `eulerRotation.y = angleTick * index` (idéntico al polígono
-  con 3+; el segmento de 1-2 fija sus propios azimuts — punto segmento
-  abajo) y
-  `position = (0,0,0)`; el radio vive en los **vértices** de la malla, no en la
-  traslación. Winding **CCW hacia fuera**, verificado por `check-cylinder.py`;
-  el `DefaultMaterial` mantiene `NoCulling` SIEMPRE — polígono, hoja, tambor
-  y segmento: por los huecos y cantos se ven los dorso de las caras lejanas
-  (paridad con el cubo virgen, ADR-003/ADR-023; en el tambor con g=0 los
-  arcos se tocan y no hay huecos). El culling dinámico que se probó aquí
-  (fuera de 1.05·R `BackFaceCulling`) **se retiró del runtime**: eliminaba
-  también la visión de la pared interior que el usuario quiere conservar;
-  el problema real —que esa pared se DIBUJE ENCIMA de las frontales al
-  girar— es de orden de pintado/profundidad, no de culling (ADR-025 pt.12).
-  El helper `cylinderCullMode` queda testeado como semilla del fix:
-  devuelve tokens 1/0 y los ints del enum NO se hardcodean (Qt 6.12.1:
-  Back=1, Front=2, None=3; un 2 fijo habría dado FrontFaceCulling, el
-  efecto opuesto). El overlay distingue los dos fixes posibles con
-  `blend=0|1` (1 = caras en pasada transparente → orden por centroide;
-  0 con overlap = bug de profundidad entre geometría compartida).
+- **Colocación (ADR-026)**: la del polígono exacta —
+  `position = rotar(azimut)·(0, 0, faceDistance=R)` más
+  `eulerRotation.y = angleTick * index` (idéntico al polígono con 3+; el
+  tambor de 1-2 usa la MISMA grid con tres slots — punto tambor abajo, la
+  banda especial está retirada). El radio
+  vive en la **posición del nodo**, no en los vértices de la malla: cada cara
+  queda a distancia R del eje con centroide de sort dos a dos distinto, que
+  es la clave con la que QtQuick3D ordena la pasada transparente (centro del
+  bbox en mundo proyectado sobre el eje de visión; medido en
+  qssglayerrenderdata.cpp) y la que el polígono siempre usó. La vieja malla
+  centrada en +Z con todos los nodos en (0,0,0) empataba esa clave — causa
+  del overlap que reportó el usuario (ADR-025 pt.12, resuelto en ADR-026).
+  Winding **CCW hacia fuera**, verificado por `check-cylinder.py` (ahora
+  alrededor del eje local (0, 0, −R)).
+- **Material de cara (ADR-026)**: `PrincipledMaterial` con
+  `lighting: NoLighting`, `baseColorMap: Texture { sourceItem: DesktopView }` y
+  `alphaMode` por umbral de `faceOpacity`: `≥ 0.99 → Mask` (en reposo los
+  fragmentes sobre el corte se pintan opacos y **escriben profundidad** —
+  imposible que una cara lejana quede encima de una cercana—; los bajo el
+  corte se descartan, así que el wallpaper sigue viéndose a través de los
+  huecos de la textura; `Opaque` se descartó porque pintaba esos huecos de
+  negro, medido), `< 0.99 → Blend` (giro: la semitransparencia de ADR-021,
+  ordenada atrás-adelante por los centroides del punto anterior). Antes el
+  `DefaultMaterial` con `diffuseMap ← Texture.sourceItem` entraba SIEMPRE en la
+  pasada transparente (el grab del item tiene canal alfa: el motor marca
+  transparencia por la textura, no por el `opacity` — por eso el overlap se veía
+  con op=1.00). `NoCulling` se mantiene SIEMPRE — polígono, hoja, tambor y
+  segmento: por los huecos y cantos se ven los dorso de las caras lejanas
+  (paridad con el cubo virgen, ADR-003/ADR-023). El helper `cylinderCullMode`
+  sigue testeado como semilla de la alternativa descartada (tokens 1/0; los
+  ints del enum NO se hardcodean: Qt 6.12.1 Back=1, Front=2, None=3). El
+  overlay imprime `blend=0|1` (1 = op < 0.99, caras en pasada transparente
+  ordenada por centroide; 0 = reposo, profundidad por píxel con Mask).
 - **Cámara**: `viewRadius`/`faceDistance` valen `R` en cilindro; close/distant,
   min/maxRadius y `safeViewRadius` reutilizan la infraestructura de
   ADR-022/024 sin fórmula nueva.
 - **Contenido**: el `DesktopView` compuesto (wallpaper + ventanas) se aplica como
-  `diffuseMap` sobre la malla curva con el mismo material que el plano (ADR-021
-  heredado sin cambios).
+  `baseColorMap` sobre la malla curva con el MISMO material que el plano —
+  polígono, hoja, tambor y segmento comparten `CubeFace.qml` (ADR-021 heredada;
+  ADR-026 solo hizo explícita la pasada).
 - Segmentos: **64 fijos** (`CYLINDER_SEGMENTS`) — ADR-002 admitía 32–64; 64 por
   arcos grandes/cerca (130 vértices por malla, no por cara).
 - `#Cylinder` primitivo NO sirve para un arco parcial con UV isométrica; es un
   cilindro completo con UV propias.
-- **Segmento curvo (1-2 escritorios, ADR-025)**: el tambor no cierra con menos
-  de 3 arcos, así que Cylinder debajo de 3 se representa con arcos de **120°
-  fijos**: `cylinderSegments = isCylinder && count < 3 && mesh`, radio fijo
-  `segmentRadius = cylinderArcRadius(W) = 3W/2π` (el hueco `g` no aplica:
-  R depende solo de W), azimuts `cylinderSegmentAzimuth(index, count)`
-  (1→0; 2→0 y 120 — banda continua de 240° con el hueco de 120° detrás),
-  tick de selección 120° y topes de azimut `cylinderAzimuthRange(count)`
-  ([-60,60] con uno, [-60,180] con dos — los bordes de la banda de superficie
-  frontal; los ±80/±120 simétricos iniciales fueron rectificados por geometría:
-  ±80 dejaba 20° de dorso con un arco y ±120 aparcaba en el centro del hueco
-  trasero). La selección normaliza y espeja: |a| ≤ 60 cara 0, más abierto cara
-  1 (`cylinderSegmentDesktopAt`). La malla es la MISMA generadora (θ = W/R
-  da 120° con R = 3W/2π por construcción) y el mismo `Loader`: su binding de
-  radius elige `segmentRadius` o `cylinderRadius` según la rama. `faceDistance
-  = viewRadius = 3W/2π`; close llena la pantalla en vertical — en horizontal
-  la cuerda del arco mide ≈ 0.826·W (los bordes curvos dejan ~8-9 % de casco
-  a cada lado; es la proyección, no un bug). Con
-  `Polygon`, 1-2 sigue siendo §2.3 sin tocar.
+- **Tambor de tres slots (1-2 escritorios, ADR-025 pt.11 re-rectificado +
+  ADR-026)**: con `Shape = Cylinder` y 1-2 escritorios NO hay rama especial:
+  `cylinderActive = isCylinder && mesh` a cualquier count y el tambor corre
+  con su fórmula fijando el suelo de slots en 3 (`geometryCount =
+  max(3, faces)`): `R = 3(W + g)/2π` — **el hueco g del usuario aplica**
+  (el 3W/2π fijo del segmento murió con él) —, tick 120° por la grid
+  estándar `angleTick·index`, caras en los slots 0..count-1 y slots vacíos
+  **sin delegate** (se ve el casco: «como si hubiera 3 escritorios, con las
+  que faltan vacías»). El rango de giro es **abierto** a todos los counts
+  con malla (`azimuthRangeFor` → `[null, null]`): la banda con topes
+  ([-60,60]/[-60,180], y antes ±80/±120) se retiró tras probarla en el
+  anidado — «hacía saltos raros y se sentía poco fluida». Flechas/estados/
+  `desktopAt`: la aritmética de grid del tambor verbatim; aparcar en slot
+  vacío es válido y seleccionar ahí es el `null`-guard ya existente. Con 1
+  escritorio el target del estado es azimut 0 verbatim → la cara queda
+  **siempre de frente al activar** (guard del addendum, verificado por
+  `check-cylinder-wiring.py` —`slotZeroAzimuth`/`slotOneAzimuth`— y por el
+  escenario `single` de `check-cylinder-overlap.py`). Los helpers de la
+  banda (`cylinderArcRadius`, `cylinderSegmentAzimuth`,
+  `cylinderAzimuthRange`, `cylinderSegmentDesktopAt`,
+  `CYLINDER_SEGMENT_DEG`) fueron RETIRADOS de `constants.js`. `faceDistance
+  = viewRadius = R`; close llena la pantalla en vertical — en horizontal
+  la cuerda del arco mide ≈ 0.826·W con g = 0 (los bordes curvos dejan
+  ~8-9 % de casco a cada lado; es la proyección, no un bug). Con `Polygon`,
+  1-2 sigue siendo §2.3 sin tocar.
 
 ### 2.3 Hoja 2D plana (1-2 escritorios, Shape = Polygon)
 
 Implementada dentro de `Cube.qml` (ADR-024): `isSheet = count < 3 &&
-!cylinderSegments` — la hoja PLANA es la representación cuando `Shape` es
+!cylinderActive` — la hoja PLANA es la representación cuando `Shape` es
 `Polygon` (o cuando `Cylinder` no pudo conseguir malla: la caída degrada
 aquí, ADR-025), y el delegate coloca los quads en el centro en vez de sobre
 el perímetro. Con `Shape = Cylinder` y 1-2 escritorios la representación
-es el **segmento curvo** (§2.2, punto segmento).
+es el **tambor de tres slots** (§2.2) — la hoja queda solo para `Polygon`
+y para el fallback sin `QtQuick3D.Helpers`.
 
 - **2 escritorios**: un quad por escritorio (`CubeFace`, `#Rectangle` con
   `Material.NoCulling`) en `position.z = ±sheetGap` (**separación proporcional
@@ -158,17 +182,21 @@ es el **segmento curvo** (§2.2, punto segmento).
   estados mueren al primer arrastre/flecha/rueda, así que un `Connections`
   sobre `cube.faceCount` llama `cameraController.resyncToState()` (re-clampa el
   azimut a la forma nueva, re-alinea al escritorio actual y fuerza el radius
-  del estado vigente).
-- `CubeFaceDisplacement` **no aplica a la hoja** (su `faceDistance` es el gap).
-- Con <3 escritorios no existe el tambor: la representación la fija `Shape`
-  — hoja plana con `Polygon` (esta sección, ADR-024 intacto) o **segmento
-  curvo de 120°** con `Cylinder` (§2.2, ADR-025). `PlaceholderView.qml`
+  del estado vigente). El mismo bloque escucha también `cube.cylinderActive`
+  (antes, mientras vivió la banda, también `cube.cylinderSegments`; el tambor
+  de tres slots unificó la rama, ADR-026).
+- `CubeFaceDisplacement` **no aplica a la hoja** (su `faceDistance` es el gap);
+  en Cylinder aplica a TODOS los counts (tambor y tambor de tres slots,
+  ADR-026).
+- Con `Polygon` y <3 escritorios la forma es la hoja plana (esta sección,
+  ADR-024 intacto); con `Cylinder` existe el tambor de tres slots (§2.2) y
+  la hoja solo vuelve si falta `QtQuick3D.Helpers`. `PlaceholderView.qml`
   quedó retirado.
-- El re-sincronizado del punto anterior escucha también
-  `cube.cylinderActive`/`cube.cylinderSegments` y — con tambor activo —
-  `cube.cylinderRadius`/`cube.faceSize`: cambiar `Shape` o la separación con
-  el efecto abierto re-clampa (±80↔[-60,60]↔[-60,180]↔sin límite), re-alinea
-  (tick 120) y fuerza el radius nuevo (`3W/2π` o R), mismo mecanismo ADR-024.
+- El re-sincronizado del punto anterior escucha también `cube.cylinderActive`
+  y — con tambor activo — `cube.cylinderRadius`/`cube.faceSize`: cambiar
+  `Shape` o la separación con el efecto abierto re-clampa (±80 ↔ sin límite),
+  re-alinea (slot 0) y fuerza el radius nuevo (R del tambor), mismo
+  mecanismo ADR-024.
 
 ## 2.4 Capas de ventana (z-index / separación) — cómo se aplicó
 

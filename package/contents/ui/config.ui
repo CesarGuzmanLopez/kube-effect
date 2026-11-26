@@ -63,7 +63,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                     <item row="0" column="1">
                                         <widget class="QComboBox" name="kcfg_Shape">
                                             <property name="toolTip">
-                                                <string>Polígono: N caras planas en un N-gono (el cubo virgen). Cilindro: las mismas caras curvadas sobre arcos isométricos — sin distorsión del contenido (ADR-002/ADR-025). Con 1-2 escritorios elige cómo se representa la hoja: plana con Polígono, segmento curvo de 120° con Cilindro (ADR-024/ADR-025).</string>
+                                                <string>Polígono: N caras planas en un N-gono (el cubo virgen). Cilindro: las mismas caras curvadas sobre arcos isométricos — sin distorsión del contenido (ADR-002/ADR-025). Con 1-2 escritorios: Polígono usa la hoja plana (ADR-024) y Cilindro un tambor de 3 posiciones con las que faltan vacías — se ve el fondo por ahí (ADR-025/ADR-026).</string>
                                             </property>
                                             <item>
                                                 <property name="text">
@@ -82,7 +82,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                             <item>
                                 <widget class="QLabel" name="tabShapeHint">
                                     <property name="text">
-                                        <string>Con 1-2 escritorios no hay tambor (no cierra con menos de 3 arcos): la forma es hoja — plana con Polígono (doble cara con 2, simple con giro limitado a ±80° con 1; ADR-024) o segmento curvo de 120° con Cilindro (giro limitado a la banda: [-60°, 60°] con 1 y [-60°, 180°] con 2; ADR-025). En el tambor (3+) la separación entre caras es el hueco ENTRE ARCOS, medido sobre la superficie: los valores negativos de «Separación entre caras» se tratan como 0; el segmento lo ignora (radio fijo). En el cilindro la pared interior de las caras traseras se ve por los huecos, como en el polígono (sin culling); el solapamiento sobre las frontales al girar se persigue aparte. El interior decorativo sigue pendiente (ver doc/requerimientos.md).</string>
+                                        <string>Con 1-2 escritorios: Polígono usa la hoja (doble cara con 2, simple con giro limitado a ±80° con 1; ADR-024); Cilindro muestra el tambor tal cual con 3 posiciones y las caras que faltan VACÍAS (por ahí se ve el fondo), con giro completo sin topes — la banda limitada [-60°, 60°]/[-60°, 180°] se probó y retiró por los saltos (ADR-025 pt.11, ADR-026). En el cilindro la separación entre caras es el hueco ENTRE ARCOS, medido sobre la superficie, también con 1-2 escritorios: los valores negativos de «Separación entre caras» se tratan como 0. En el cilindro la pared interior de las caras traseras se ve por los huecos, como en el polígono (sin culling), y nunca se pinta encima de las frontales: cada cara ordena por su propio centroide y en reposo el material escribe profundidad (ADR-026). El interior decorativo sigue pendiente (ver doc/requerimientos.md).</string>
                                     </property>
                                     <property name="wordWrap">
                                         <bool>true</bool>
@@ -444,7 +444,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                         <item row="0" column="1">
                                             <widget class="QDoubleSpinBox" name="kcfg_CubeFaceDisplacement">
                                                 <property name="toolTip">
-                                                    <string>Solo con 3+ escritorios: separa las caras del polígono (negativo = se solapan). En cilindro es el hueco entre arcos medido sobre la superficie, y los valores negativos se tratan como 0 (ADR-025). Con 1-2 la forma es hoja (ADR-024) y esta clave no aplica.</string>
+                                                    <string>En Polígono (3+): separa las caras (negativo = se solapan); con 1-2 es la hoja y no aplica (ADR-024). En Cilindro es el hueco entre arcos medido sobre la superficie, SIEMPRE (tambor y tambor de 1-2 con 3 posiciones; negativo = 0, ADR-025/ADR-026).</string>
                                                 </property>
                                                 <property name="minimum">
                                                     <double>-500.0</double>

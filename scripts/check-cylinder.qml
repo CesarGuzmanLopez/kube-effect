@@ -52,16 +52,17 @@ Item {
         radius: root.radiusNegative
     }
 
-    // The curved segment (1-2 desktops, ADR-025): a fixed 120-degree arc,
-    // R = 3W/2pi. Same generator, different radius — isometry must hold
-    // there too (arc length = W, |position| = R exactly).
-    readonly property real radiusSegment: Constants.cylinderArcRadius(faceWidth)
+    // The three-slot drum (1-2 desktops, ADR-025 pt.11 re-rectified): the
+    // drum formula with N = 3 and g = 0 answers R = 3W/2pi — the same
+    // generator, different radius; isometry must hold there too (arc
+    // length = W, node-local |P-(0,0,-R)| = R exactly, ADR-026).
+    readonly property real radiusSlots: Constants.cylinderRadius(3, faceWidth, 0)
 
     CylinderArcMesh {
-        id: segmentArc
+        id: slotsArc
         faceWidth: root.faceWidth
         faceHeight: root.faceHeight
-        radius: root.radiusSegment
+        radius: root.radiusSlots
     }
 
     // The sharing pattern of Cube/CubeFace: TWO models referencing the SAME
@@ -90,7 +91,7 @@ Item {
     readonly property QtObject closedMesh: closedArc.mesh
     readonly property QtObject openMesh: openArc.mesh
     readonly property QtObject negativeMesh: negativeArc.mesh
-    readonly property QtObject segmentMesh: segmentArc.mesh
+    readonly property QtObject slotsMesh: slotsArc.mesh
     readonly property bool meshesAreGeometry: closedArc.mesh !== null && closedArc.mesh !== undefined
     readonly property bool modelsShareMesh: modelA.geometry === openArc.mesh && modelB.geometry === openArc.mesh
     // url properties compare as QUrl objects: an empty source is one whose
@@ -114,17 +115,15 @@ Item {
     readonly property string closedIndexes: indexCopy(closedArc.mesh)
     readonly property string openIndexes: indexCopy(openArc.mesh)
     readonly property string negativeIndexes: indexCopy(negativeArc.mesh)
-    readonly property string segmentIndexes: indexCopy(segmentArc.mesh)
+    readonly property string slotsIndexes: indexCopy(slotsArc.mesh)
 
     // The enum value arrives as an unconvertible Proxy in PySide6; compare
     // it where it is a plain number.
-    readonly property bool meshesUseTriangles: closedArc.mesh.primitiveMode === ProceduralMesh.Triangles
-        && openArc.mesh.primitiveMode === ProceduralMesh.Triangles
-        && negativeArc.mesh.primitiveMode === ProceduralMesh.Triangles
-        && segmentArc.mesh.primitiveMode === ProceduralMesh.Triangles
+    readonly property bool meshesUseTriangles: closedArc.mesh.primitiveMode === ProceduralMesh.Triangles && openArc.mesh.primitiveMode === ProceduralMesh.Triangles && negativeArc.mesh.primitiveMode === ProceduralMesh.Triangles && slotsArc.mesh.primitiveMode === ProceduralMesh.Triangles
 
-    // The segment must measure exactly 120 degrees (theta = W/R = 2pi/3):
-    // the QML engine compares it where the number is plain.
-    readonly property real segmentTheta: Constants.cylinderArcAngle(faceWidth, radiusSegment)
-    readonly property real segmentThetaExpected: 2 * Math.PI / 3
+    // The three-slot drum arc (g = 0) must measure exactly 120 degrees
+    // (theta = W/R = 2pi/3): the QML engine compares it where the number
+    // is plain.
+    readonly property real slotsTheta: Constants.cylinderArcAngle(faceWidth, radiusSlots)
+    readonly property real slotsThetaExpected: 2 * Math.PI / 3
 }

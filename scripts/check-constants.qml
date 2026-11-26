@@ -263,48 +263,24 @@ Item {
         check("arc degenerate W", Constants.cylinderArcGeometry(0, 1440, 100, 64).indexes.length, 0);
         check("arc degenerate H", Constants.cylinderArcGeometry(2560, 0, 100, 64).normals.length, 0);
 
-        // Curved segment (ADR-025, 1-2 desktops): fixed 120-degree arcs.
-        // R = 3W/2pi (W only — the linear gap does NOT apply), azimuths
-        // 0 / 120 (and the polygon tick above 3, so the helper covers the
-        // whole shape), turn caps 80 / 120 / 360.
-        check("segments deg", Constants.CYLINDER_SEGMENT_DEG, 120);
-        checkClose("Rseg(2560)", Constants.cylinderArcRadius(2560), 3 * 2560 / (2 * Math.PI));
-        checkClose("Rseg(1920)", Constants.cylinderArcRadius(1920), 3 * 1920 / (2 * Math.PI));
-        check("Rseg zero", Constants.cylinderArcRadius(0), 0);
-        check("Rseg negative", Constants.cylinderArcRadius(-100), 0);
-        check("Rseg NaN", Constants.cylinderArcRadius(NaN), 0);
-        check("Rseg undefined", Constants.cylinderArcRadius(undefined), 0);
-        check("Rseg string", Constants.cylinderArcRadius("2560"), Constants.cylinderArcRadius(2560));
-        // theta of the segment arc must be 2pi/3: the generator closes the
-        // 120-degree arc from R = 3W/2pi by construction.
-        checkClose("theta segment", Constants.cylinderArcAngle(2560, Constants.cylinderArcRadius(2560)), 2 * Math.PI / 3);
-        check("azim(0,1)", Constants.cylinderSegmentAzimuth(0, 1), 0);
-        check("azim(1,1) clamped to one face", Constants.cylinderSegmentAzimuth(1, 1), 0);
-        check("azim(0,2)", Constants.cylinderSegmentAzimuth(0, 2), 0);
-        check("azim(1,2)", Constants.cylinderSegmentAzimuth(1, 2), 120);
-        check("azim(1,3)", Constants.cylinderSegmentAzimuth(1, 3), 120);
-        check("azim(3,4)", Constants.cylinderSegmentAzimuth(3, 4), 270);
-        check("azim(1,4)", Constants.cylinderSegmentAzimuth(1, 4), 90);
-        check("azim(NaN index)", Constants.cylinderSegmentAzimuth(NaN, 2), 0);
-        check("azim(NaN count)", Constants.cylinderSegmentAzimuth(1, NaN), 0);
-        check("azim(count 0)", Constants.cylinderSegmentAzimuth(1, 0), 0);
-        check("azim(count 1, high index)", Constants.cylinderSegmentAzimuth(5, 1), 0);
-        check("azim(count string 4)", Constants.cylinderSegmentAzimuth(2, "4"), 180);
-        // Turn RANGES (ADR-025 pt.11, rectified): the band edges are the
-        // last front-facing degrees. The symmetric ±80/±120 first chosen
-        // left 20 degrees of mirrored back with one arc and parked the
-        // camera at -120 — the centre of the gap — with two. null bound =
-        // no limit. Strict count: a string "2" is garbage.
-        check("range(1)[0]", Constants.cylinderAzimuthRange(1)[0], -60);
-        check("range(1)[1]", Constants.cylinderAzimuthRange(1)[1], 60);
-        check("range(2)[0]", Constants.cylinderAzimuthRange(2)[0], -60);
-        check("range(2)[1]", Constants.cylinderAzimuthRange(2)[1], 180);
-        check("range(3)[0]", Constants.cylinderAzimuthRange(3)[0], null);
-        check("range(3)[1]", Constants.cylinderAzimuthRange(3)[1], null);
-        check("range(4)", Constants.cylinderAzimuthRange(4)[0], null);
-        check("range(0)", Constants.cylinderAzimuthRange(0)[1], null);
-        check("range(NaN)", Constants.cylinderAzimuthRange(NaN)[0], null);
-        check("range(string)", Constants.cylinderAzimuthRange("2")[0], null);
+        // Three-slot drum (ADR-025 pt.11 re-rectified, ADR-026): with 1-2
+        // desktops and Shape = Cylinder the drum formula runs with N = 3 —
+        // R = 3(W + g)/2pi WITH the user's linear gap (the fixed 3W/2pi is
+        // gone), the azimuths are the bare tick grid (slot i at 120·i), the
+        // empty slots have no delegate (hull shows through) and the turn
+        // range stays OPEN. cylinderArcRadius / cylinderSegmentAzimuth /
+        // cylinderAzimuthRange / cylinderSegmentDesktopAt (the capped band
+        // design) are retired helpers; the wiring check exercises the grid
+        // through the real Cube instead.
+        checkClose("R slots(2560,0)", Constants.cylinderRadius(3, 2560, 0), 3 * 2560 / (2 * Math.PI));
+        checkClose("R slots(2560,100)", Constants.cylinderRadius(3, 2560, 100), 3 * 2660 / (2 * Math.PI));
+        checkClose("R slots neg g clamps", Constants.cylinderRadius(3, 2560, -500), Constants.cylinderRadius(3, 2560, 0));
+        // theta of the 3-slot arc with g = 0 is exactly 120 degrees: the
+        // generator closes the circle from R = 3W/2pi by construction.
+        checkClose("theta slots closes N=3", Constants.cylinderArcAngle(2560, Constants.cylinderRadius(3, 2560, 0)), 2 * Math.PI / 3);
+        // (The band-era azim()/range() checks died with
+        // cylinderSegmentAzimuth/cylinderAzimuthRange — see the routing
+        // checks below, which are what the camera actually consults.)
         // The flat sheet's symmetric caps as the same [min,max] shape
         // (ADR-024 behaviour, one mechanism): [-80,80] with one desktop,
         // open with two/three or garbage.
@@ -314,6 +290,28 @@ Item {
         check("flat(3)", Constants.flatAzimuthRange(3)[1], null);
         check("flat(0)", Constants.flatAzimuthRange(0)[0], null);
         check("flat(NaN)", Constants.flatAzimuthRange(NaN)[0], null);
+        // Routing (ADR-026, three-slot recast): which range ScreenView
+        // actually gets, by shape + mesh. The inline ternary it replaced
+        // was untested and swapping the branches kept the gate green.
+        // Polygon keeps the flat sheet caps ([-80,80] with one desktop,
+        // open otherwise); EVERY Cylinder with the arc mesh — drum at 3+
+        // and the three-slot drum at 1-2 — turns OPEN (the capped segment
+        // band was retired by the user: jumps, choppy feel); a Cylinder
+        // WITHOUT the mesh (QtQuick3D.Helpers missing) behaves exactly
+        // like the polygon, sheet included.
+        check("route(poly,1)", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Polygon, 1, false)), "[-80,80]");
+        check("route(poly,1,mesh-ignored)", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Polygon, 1, true)), "[-80,80]");
+        check("route(poly,2)", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Polygon, 2, false)), "[null,null]");
+        check("route(poly,3)", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Polygon, 3, false)), "[null,null]");
+        check("route(cyl,1,mesh) open", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Cylinder, 1, true)), "[null,null]");
+        check("route(cyl,2,mesh) open", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Cylinder, 2, true)), "[null,null]");
+        check("route(cyl,3,mesh)", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Cylinder, 3, true)), "[null,null]");
+        check("route(cyl,1,no mesh)", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Cylinder, 1, false)), "[-80,80]");
+        check("route(cyl,2,no mesh)", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Cylinder, 2, false)), "[null,null]");
+        check("route(cyl,0,mesh) mid-sync", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Cylinder, 0, true)), "[null,null]");
+        check("route(unknown shape)", JSON.stringify(Constants.azimuthRangeFor(7, 1, true)), "[-80,80]");
+        check("route(undefined mesh)", JSON.stringify(Constants.azimuthRangeFor(Constants.Shape.Cylinder, 2, undefined)), "[null,null]");
+        check("route(cyl,2,open feeds clamp verbatim)", Constants.clampAzimuthRange(200, ...Constants.azimuthRangeFor(Constants.Shape.Cylinder, 2, true)), 200);
         // Dynamic culling tokens (ADR-025 pt.12; Cube maps 1/0 to the
         // Material enums symbolically — Qt 6.12.1 ints are Back=1,
         // Front=2, None=3, so raw ints must never travel from here).
@@ -328,10 +326,12 @@ Item {
         check("cull zero camera (unbound)", Constants.cylinderCullMode(0, 1000), 0);
         check("cull undefined", Constants.cylinderCullMode(undefined, undefined), 0);
 
-        // Arrows (ADR-025 pt.13): the trace the reviewer measured. Segment
-        // band [-60,180], faces [0,120], tick 120: the arrow lands on the
-        // NEXT FACE in the requested direction, wrapping inside the band —
-        // never a raw tick multiple clamped to the edge.
+        // Arrows (ADR-025 pt.13) on a LIMITED asymmetric range — the
+        // generic math the helper still guarantees even though no shape
+        // asks for an asymmetric band today (the segment band was retired
+        // with the three-slot drum; sheet-1's range is symmetric). The
+        // arrow lands on the NEXT FACE in the requested direction,
+        // wrapping inside the range — never a raw tick clamped to an edge.
         const band = [-60, 180];
         const segFaces = [0, 120];
         check("arrow RIGHT 0", Constants.arrowAzimuth(0, 1, 120, band[0], band[1], segFaces), 120);
@@ -345,14 +345,15 @@ Item {
         // at the right edge wraps to the lowest. No clamped no-ops.
         check("arrow LEFT -60", Constants.arrowAzimuth(-60, -1, 120, band[0], band[1], segFaces), 120);
         check("arrow RIGHT 180", Constants.arrowAzimuth(180, 1, 120, band[0], band[1], segFaces), 0);
-        // One-face bands (flat sheet-1 [-80,80] and segment-1 [-60,60], tick
-        // 360): the only face wraps to itself — delta 0, the arrow holds.
-        // Parity with the old clamp (360 -> normalized -> 0 -> clamped 0).
+        // One-face band (flat sheet-1 [-80,80], tick 360): the only face
+        // wraps to itself — delta 0, the arrow holds. Parity with the old
+        // clamp (360 -> normalized -> 0 -> clamped 0). (segment-1's
+        // [-60,60] band is retired; the three-slot drum takes the open
+        // grid checks above.)
         check("sheet1 RIGHT 0", Constants.arrowAzimuth(0, 1, 360, -80, 80, [0]), 0);
         check("sheet1 LEFT 0", Constants.arrowAzimuth(0, -1, 360, -80, 80, [0]), 0);
         check("sheet1 RIGHT 40", Constants.arrowAzimuth(40, 1, 360, -80, 80, [0]), 0);
         check("sheet1 LEFT -50", Constants.arrowAzimuth(-50, -1, 360, -80, 80, [0]), 0);
-        check("seg1 LEFT -30", Constants.arrowAzimuth(-30, -1, 360, -60, 60, [0]), 0);
         // Open range: the pre-cylinder arithmetic VERBATIM (no normalize —
         // 450 stays 450; quaternion signs and slerp paths unchanged).
         check("open RIGHT 0", Constants.arrowAzimuth(0, 1, 90, null, null, [0, 90, 180, 270]), 90);
@@ -367,30 +368,21 @@ Item {
         check("arrow limited empty faces", Constants.arrowAzimuth(60, 1, 120, band[0], band[1], []), 60);
         check("arrow non-array faces", Constants.arrowAzimuth(60, 1, 120, band[0], band[1], undefined), 60);
         check("arrow open NaN tick", Constants.arrowAzimuth(70, 1, NaN, null, null, []), 70);
-        // Selection, normalized with mirror: |a| <= 60 -> face 0, wider ->
-        // face 1 (the band is 0..120 forward with the 120 gap behind); -1
-        // when this is not a segment (drum counts, mid-sync 0) or garbage.
-        check("segAt(0,1)", Constants.cylinderSegmentDesktopAt(0, 1), 0);
-        check("segAt(80,1)", Constants.cylinderSegmentDesktopAt(80, 1), 0);
-        check("segAt(0,2)", Constants.cylinderSegmentDesktopAt(0, 2), 0);
-        check("segAt(59,2)", Constants.cylinderSegmentDesktopAt(59, 2), 0);
-        check("segAt(60,2)", Constants.cylinderSegmentDesktopAt(60, 2), 0);
-        check("segAt(61,2)", Constants.cylinderSegmentDesktopAt(61, 2), 1);
-        check("segAt(120,2)", Constants.cylinderSegmentDesktopAt(120, 2), 1);
-        check("segAt(180,2)", Constants.cylinderSegmentDesktopAt(180, 2), 1);
-        check("segAt(-60,2)", Constants.cylinderSegmentDesktopAt(-60, 2), 0);
-        check("segAt(-61,2) mirror", Constants.cylinderSegmentDesktopAt(-61, 2), 1);
-        check("segAt(-120,2) mirror", Constants.cylinderSegmentDesktopAt(-120, 2), 1);
-        check("segAt(181,2) wraps to -179", Constants.cylinderSegmentDesktopAt(181, 2), 1);
-        check("segAt(300,2) wraps to -60", Constants.cylinderSegmentDesktopAt(300, 2), 0);
-        check("segAt(480,2) wraps to 120", Constants.cylinderSegmentDesktopAt(480, 2), 1);
-        check("segAt(NaN,2)", Constants.cylinderSegmentDesktopAt(NaN, 2), -1);
-        check("segAt(undefined,1)", Constants.cylinderSegmentDesktopAt(undefined, 1), -1);
-        check("segAt(null,1) reads 0", Constants.cylinderSegmentDesktopAt(null, 1), 0);
-        check("segAt('abc',2)", Constants.cylinderSegmentDesktopAt("abc", 2), -1);
-        check("segAt(0,0) mid-sync", Constants.cylinderSegmentDesktopAt(0, 0), -1);
-        check("segAt(0,3) drum", Constants.cylinderSegmentDesktopAt(0, 3), -1);
-        check("segAt(0,undefined)", Constants.cylinderSegmentDesktopAt(0, undefined), -1);
+        // Cylinder arrows with 1-2 desktops (three-slot drum, OPEN range):
+        // the plain tick arithmetic verbatim — RIGHT from 0 lands on slot 1
+        // (120), RIGHT again on slot 2 (240: empty, the camera parks facing
+        // the hull; Enter there is the guarded no-op inside Cube.desktopAt),
+        // LEFT from 0 wraps negative. No band or wrap special case survives
+        // (cylinderSegmentDesktopAt is retired; the wiring check runs the
+        // real Cube.desktopAt grid).
+        check("cyl arrow RIGHT 0", Constants.arrowAzimuth(0, 1, 120, null, null, [0]), 120);
+        check("cyl arrow RIGHT 120 (empty slot ok)", Constants.arrowAzimuth(120, 1, 120, null, null, [0, 120]), 240);
+        check("cyl arrow LEFT 0", Constants.arrowAzimuth(0, -1, 120, null, null, [0, 120]), -120);
+        check("cyl arrow RIGHT 240", Constants.arrowAzimuth(240, 1, 120, null, null, [0]), 360);
+        // desktopAzimuth for the states: slot number * tick (slot 0 with one
+        // desktop -> the face is ALWAYS front-facing when the effect opens).
+        checkClose("slot0 target verbatim", Constants.clampAzimuthRange(120 * 0, null, null), 0);
+        checkClose("slot1 target verbatim", Constants.clampAzimuthRange(120 * 1, null, null), 120);
 
         // Sheet azimuth limit (ADR-024): 1 desktop caps at ±80, everything
         // else answers 360 ("no limit": 2 faces both real, >=3 is the polygon).
@@ -446,11 +438,13 @@ Item {
         checkClose("clamp(270, null, 361) verbatim", Constants.clampAzimuthRange(270, null, 361), 270);
         checkClose("clamp(90, NaN, NaN) verbatim", Constants.clampAzimuthRange(90, NaN, NaN), 90);
         checkClose("clamp(90, undefined, undefined) verbatim", Constants.clampAzimuthRange(90, undefined, undefined), 90);
-        // The asymmetric segment band [-60, 180]: the arc centres 0 and 120
-        // pass through; anything past an edge clamps to that EDGE in
-        // normalized space (200 -> -160 -> -60, the left edge — no teleport
-        // across the gap; the drag path clamps raw and sits at 180 instead,
-        // which is CubeCameraController's own business, not this helper's).
+        // Generic ASYMMETRIC bounds (math kept for the helper contract;
+        // the segment band [-60, 180] these were written for is retired —
+        // every shape-with-mesh cylinder turns open now): centres pass
+        // through, anything past an edge clamps to that EDGE in normalized
+        // space (200 -> -160 -> -60; the drag path clamps raw and sits at
+        // 180 instead, CubeCameraController's own business, not this
+        // helper's).
         checkClose("clamp(0, -60, 180)", Constants.clampAzimuthRange(0, -60, 180), 0);
         checkClose("clamp(120, -60, 180)", Constants.clampAzimuthRange(120, -60, 180), 120);
         checkClose("clamp(179, -60, 180)", Constants.clampAzimuthRange(179, -60, 180), 179);

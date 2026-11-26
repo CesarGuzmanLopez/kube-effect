@@ -57,7 +57,8 @@ lint-ci: check
 # comprueba que una propiedad inexistente sí falla.
 # check-cylinder.py instancia la malla cilíndrica REAL (CylinderArcMesh.qml
 # -> ProceduralMesh de QtQuick3D.Helpers, ADR-025) en un motor QML offscreen y
-# exige: vértices finitos sobre el radio (cilindricidad), UVs en [0,1] con u
+# exige: vértices finitos sobre el radio medido desde el eje LOCAL del nodo
+# (0,0,−R) — malla centrada en la cara, ADR-026 — (cilindricidad), UVs en [0,1] con u
 # lineal en s (isometría), longitud de arco total = W (integral de R·dphi),
 # normales radiales unitarias, índices en rango, winding CCW uniforme hacia
 # fuera y el clamp del desplazamiento negativo (malla idéntica a g=0). Además
@@ -69,11 +70,29 @@ lint-ci: check
 # el stub org.kde.kwin de check-video-dome con Shape=Cylinder: 3 escritorios
 # (tambor: flags, Loader→Ready con Geometry no-nula o fallback documentado sin
 # Helpers, angleTick=360/N, faceDistance=R y paridad NoCulling dentro/margen/
-# fuera — el culling dinámico se retiró, ADR-025 pt.12), 2 (segmento:
-# cylinderSegments, angleTick 120, faceDistance 3W/2π, NoCulling) y 1 (una cara
-# en 0°, 3W/2π). Cada caso helpers comprueba además que hypot(x,z) del primer
-# vértice == el R esperado (el binding del Holder llegó a la malla).
+# fuera — el culling dinámico se retiró, ADR-025 pt.12) y 2/1 (tambor de TRES
+# SLOTS, ADR-025 pt.11 re-rectificado: cylinderActive, angleTick 120 —grid de
+# slots—, faceDistance 3(W+g)/2π CON el hueco del usuario, rango abierto sin
+# topes de banda, slot 0 en azimut 0 —la cara siempre de frente al activar—
+# y slot 1 vacío alcanzable a 120°, NoCulling). Cada caso helpers comprueba
+# además que hypot(x, z+R) del primer vértice == el R esperado, desde el eje
+# local (0,0,−R) (el binding del Holder llegó a la malla).
 # No renderiza nada: basta el motor offscreen. Se salta sin PySide6.
+# check-cylinder-overlap.py RENDERIZA el Cube.qml REAL (Shape=Cylinder,
+# colores planos por cara vía los stubs de check-video-dome; tambor de 3
+# escritorios y tambor de 3 slots con 1) y
+# fija el fix de ADR-026 en dos planos: píxeles — la cara frontal gana en toda
+# su huella en reposo (op=1, yaw 0) y a medio giro (yaw 60, op=0.7: el color
+# dominante sigue siendo la cara cercana; la pared interior sólo aparece por
+# el hueco) y los huecos del textura de cara siguen dejando ver el fondo en
+# reposo (Mask descarta, NO pinta negro — Opaque pintaría negro: medido);
+# estructura — los centroides de las N caras son dos a dos distintos (la
+# malla envuelve el nodo; el radius vive en la position, paridad con el
+# polígono) y alphaMode sale del umbral de faceOpacity (≥0.99 Mask, <0.99
+# Blend); escenario «single» — 1 escritorio: el tambor de 3 slots mantiene
+# la cara de frente (slot 0 centro de pantalla, R = 3(W+g)/2π) — el guard
+# del «detrás» que pidió el usuario. Necesita pantalla real (QtQuick3D no
+# renderiza offscreen) y PySide6; sin ellos se salta (exit 0).
 # check-video.py instancia HullVideo.qml (el único fichero que importa
 # QtMultimedia) con un motor QML real y comprueba los dos caminos del Loader de
 # ScreenView: módulo presente -> item y VideoOutput creados; módulo ausente y
@@ -115,6 +134,7 @@ check:
 	@python3 scripts/check-cylinder.py
 	@python3 scripts/check-cylinder.py --selftest
 	@python3 scripts/check-cylinder-wiring.py
+	@python3 scripts/check-cylinder-overlap.py
 	@python3 scripts/check-video.py
 	@python3 scripts/check-video-dome.py
 	@python3 scripts/check-features.py

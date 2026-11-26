@@ -36,16 +36,19 @@ por fases, pero el spec es entero).
 
 | Escritorios | Forma                                                                                                                                      | Interior                                              |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| 1           | Con `Polygon` (default): **hoja simple**, un solo quad; giro limitado a ±80° (el dorso se vería espejado, no debe verse). Con `Cylinder`: **segmento curvo** — un arco de 120° centrado en 0°, giro limitado a [-60°, 60°] (la banda del arco: pasado ±60 no hay superficie frontal) (§1.2) | **No permitido** (no hay volumen)                     |
-| 2           | Con `Polygon`: **hoja 2D doble cara**, un quad por escritorio, separación proporcional en z (`sheetGap`, ≥2 unidades); giro completo (cada lado es un escritorio real). Con `Cylinder`: **dos arcos de 120° adyacentes** (centrados en 0° y 120°: banda de 240°, hueco de 120° detrás por donde se ve el casco), giro limitado a [-60°, 180°] (la banda entera; un tope simétrico ±120 aparcaba la cámara en el centro del hueco), tick de selección 120° (§1.2) | **No permitido** (no hay volumen donde poner objetos) |
+| 1           | Con `Polygon` (default): **hoja simple**, un solo quad; giro limitado a ±80° (el dorso se vería espejado, no debe verse). Con `Cylinder`: **tambor de 3 slots con 2 vacíos** — un arco de W en el slot 0 (azimut 0), los slots 1/2 sin cara: por ahí se ve el casco; giro **libre**, sin topes (§1.2) | **No permitido** (no hay volumen)                     |
+| 2           | Con `Polygon`: **hoja 2D doble cara**, un quad por escritorio, separación proporcional en z (`sheetGap`, ≥2 unidades); giro completo (cada lado es un escritorio real). Con `Cylinder`: **tambor de 3 slots con 1 vacío** — arcos en los slots 0 y 1 (azimuts 0° y 120°), el slot 2 sin cara (se ve el casco), giro **libre** sin topes, tick de selección 120° (§1.2) | **No permitido** (no hay volumen donde poner objetos) |
 | 3+          | **Polígono** (default) o **Cilindro** — tambor cerrado de N arcos (elegible)                                                               | Sí                                                    |
 
-**Regla permanente**: con 1-2 escritorios el **tambor** cilíndrico no
-existe (no cierra con menos de 3 arcos): la forma es hoja —en su representación
-plana de siempre con `Polygon` (ADR-024 intacto) o en **segmento curvo de
-120°** con `Cylinder` (ADR-025)—, y `CubeFaceDisplacement` no hace nada
-aquí. El polígono/tambor empieza en 3. No hay placeholder: KWin siempre
-tiene al menos 1 escritorio y la hoja simple ya es útil (ADR-024).
+**Regla permanente** (re-rectificada, ADR-026): con `Polygon` y 1-2
+escritorios la forma es la hoja plana de siempre (ADR-024 intacto; allí
+`CubeFaceDisplacement` solo fija el `sheetGap` proporcional). Con
+`Cylinder` y 1-2 escritorios la forma curva **sí existe**: tambor de TRES
+slots con las caras vacías enseñando el casco — R = 3(W+g)/2π con el hueco
+g del usuario, giro libre sin topes (la banda [-60,60]/[-60,180] que se
+probó primero hizo saltos y se retiró, ADR-025 pt.11). El polígono plano
+empieza en 3. No hay placeholder: KWin siempre tiene al menos 1 escritorio
+y la hoja simple ya es útil (ADR-024).
 
 ### 1.1 Polígono (default)
 
@@ -59,9 +62,9 @@ tiene al menos 1 escritorio y la hoja simple ya es útil (ADR-024).
   cilindro es una superficie **desarrollable** (curvatura gaussiana K=0), así que
   un plano se envuelve sobre él **sin distorsión** (una recta se vuelve arco de
   igual longitud; el contenido no se estira).
-- N ≥ 3 (el mínimo lo fija la forma; con 2 solo cabe la hoja 2D). Con 1-2 y
-  esta opción la representación es el **segmento curvo** de abajo, no un
-  tambor; con `Shape = Polygon` 1-2 es la hoja plana (ADR-024 intacto).
+- Con 3+ es el tambor cerrado de N arcos. Con 1-2 y esta opción el sólido es
+  un **tambor de tres slots** (abajo), no la hoja; con `Shape = Polygon`
+  1-2 es la hoja plana (ADR-024 intacto).
 - Fórmulas reales (todas en `constants.js`, con `W` = ancho de cara, `H` = alto,
   `N` = nº de escritorios):
   - `g = max(0, CubeFaceDisplacement)` — en cilindro la separación es **hueco
@@ -72,11 +75,16 @@ tiene al menos 1 escritorio y la hoja simple ya es útil (ADR-024).
     **siempre** (isometría: la textura ni se estira ni se comprime). El hueco
     angular entre arcos es `2π/N − θ`, que sobre la superficie mide exactamente
     `g` px.
-  - Malla del arco: `P(s,t) = (R·sin φ, t − H/2, R·cos φ)` con
-    `φ = (s − W/2)/R`, `s ∈ [0,W]`, `t ∈ [0,H]` — centrada en el azimut +Z; la
-    colocación por cara usa `eulerRotation.y = (360/N)·index`, igual que el
-    polígono (en el tambor los azimuts y `desktopAt()` no cambian de forma; en
-    el segmento de 1-2, abajo, son 0°/120° fijos).
+  - Malla del arco (ADR-026): `P(s,t) = (R·sin φ, t − H/2, R·cos φ − R)` con
+    `φ = (s − W/2)/R`, `s ∈ [0,W]`, `t ∈ [0,H]` — generada **alrededor del
+    nodo** (punto medio en el origen del Model, eje local en (0,0,−R)); la
+    colocación por cara es la regla del polígono exacta:
+    `position = rotar(azimut)·(0,0,R)` + `eulerRotation.y = azimut`, así cada
+    cara lleva su centroide de sort a distancia R (la clave con la que
+    QtQuick3D ordena la pasada transparente; antes el radio vivía en los
+    vértices y todos los nodos compartían (0,0,0) → empates → el overlap que
+    reportó el usuario). Los azimuts y `desktopAt()` no cambian de forma en
+    ningún count (slot i en `120·i` por la grid `angleTick·index`).
   - UVs: `u = s/W`, `v = t/H` (convención medida del `#Rectangle` nativo: la
     base de la cara lleva `v = 0`), con lo que el compuesto de la cara se ve
     igual de derecho que en el polígono.
@@ -91,41 +99,36 @@ tiene al menos 1 escritorio y la hoja simple ya es útil (ADR-024).
 - Cámara: `R` sustituye al apotema del polígono — `faceDistance = viewRadius =
   R`, y close/distant/límites de zoom usan la infraestructura existente
   (ADR-022/024) sin fórmulas nuevas.
-- **Segmento curvo (1-2 escritorios, ADR-025)**: un tambor no cierra con
-  menos de 3 arcos, así que con `Shape = Cylinder` y 1-2 escritorios cada
-  cara es un arco de **120° fijos** (un tercio de círculo) — la misma
-  generadora de malla con `θ = 2π/3`, es decir `R = W/θ = 3W/(2π)`
-  (`cylinderArcRadius()`; el hueco `g` **no aplica**: arcos adyacentes o
-  en posiciones fijas, R depende solo de W):
-  - 1 escritorio: un arco centrado en 0°; azimut limitado a **[-60°, 60°]**
-    (la banda del arco: su superficie frontal vive exactamente ahí; ±80° con
-    el borde en ±60° dejaba 20° de dorso/vacío. Topes rectificados por
-    geometría tras medirlos en el anidado — el ±80° inicial era herencia de
-    la hoja simple).
-  - 2 escritorios: arcos centrados en 0° y 120° — **banda continua de
-    240°** con un hueco de 120° detrás por donde se ve el casco (ADR-003);
-    azimut limitado a **[-60°, 180°]** — los extremos de la banda (un tope
-    simétrico ±120° aparcaba la cámara en -120°, centro exacto del hueco:
-    vista vacía y sin escritorio posible). Tick de selección **120°** (la
-    cara 1 vive en 120°, no en 180°). Rango puro:
-    `cylinderAzimuthRange(count)`; el clamp simétrico de la hoja
-    (`clampSheetAzimuth`) quedó retirado en favor de `clampAzimuthRange`
-    (normaliza a (-180,180] y clampa a [min,max]; null = verbatim), y el
-    arrastre sigue clampeando la suma cruda sin normalizar — 190° crudos se
-    quedan en 180°, no saltan al otro extremo.
-  - Flechas (`arrowAzimuth`, ADR-025 pt.13): con banda asimétrica el
-    múltiplo de tick ya NO es una cara — la flecha salta a la siguiente
-    cara real en la dirección pedida (0→120→0 en ambos sentidos; desde el
-    borde 180 RIGHT envuelve a 0; sin cara en la dirección, envolver dentro
-    de la banda). Con una sola cara la flecha no mueve nada. Rango abierto
-    (polígono/tambor/hoja-2): idéntico a siempre, current±tick verbatim.
-  - Selección normalizada con espejo: |a| ≤ 60° → cara 0; más abierto
-    (también en negativo) → cara 1 (`cylinderSegmentDesktopAt()`).
-  - Cámara: `faceDistance = viewRadius = R = 3W/2π` — la misma
-    sustitución que el tambor. Honestidad del close: llena la pantalla en
-    **vertical** (la generatriz no se deforma); en horizontal la cuerda del
-    arco de 120° mide ≈ 0.826·W → close deja ~8-9 % de casco a cada lado
-    (bordes curvos proyectados, no un bug).
+- **Tambor de tres slots (1-2 escritorios, ADR-025 pt.11 re-rectificado por
+  el usuario, ADR-026)**: la banda con topes (primero ±80/±120, después
+  [-60,60]/[-60,180]) se probó en el anidado y **se retiró**: los clamps
+  "hacían saltos raros y se sentían poco fluidos". Con `Shape = Cylinder` y
+  1-2 escritorios el sólido es el propio tambor corriendo con **N = 3**:
+  - Geometría fija de 3 slots: `R = 3·(W + g) / (2π)` — `cylinderRadius(3, W,
+    g)`, **el hueco lineal g del usuario aplica** (antes, con el segmento,
+    R era el fijo 3W/2π y g no pintaba). Con g = 0 el arco del slot mide
+    exactamente un tercio de círculo (θ = 120°).
+  - Las caras ocupan los slots 0..count-1 (azimuts 0° y 120° por la grid
+    `angleTick·index`, `angleTick = 360/max(3, count)`); los slots sin
+    escritorio **no se crean**: no hay panel, por ahí se ve el casco — se
+    ve "como si hubiera 3 escritorios" con huecos, la petición literal del
+    usuario.
+  - Giro **sin topes** (rango abierto igual que el tambor,
+    `azimuthRangeFor` → `[null, null]`): rotación completa, sin clamps ni
+    wraps asimétricos; el dorso espejado de los arcos lejanos se tolera por
+    los huecos y cantos igual que en el tambor de 3+ (ADR-023). Flechas y
+    estados: la aritmética estándar ±tick verbatim (con 1 cara en reposo el
+    target es azimut 0 → **la cara queda siempre de frente al activar**;
+    aparcar en un slot vacío enseña el casco — vista válida).
+  - Selección: `desktopAt` estándar sobre la grid — slot vacío → delegate
+    ausente → `null` → Enter/click no-op (guardas ya existentes, sin helper
+    dedicado; `cylinderSegmentDesktopAt`, `cylinderSegmentAzimuth`,
+    `cylinderArcRadius` y `cylinderAzimuthRange` murieron con la banda).
+  - Cámara: `faceDistance = viewRadius = R` (la del tambor con N = 3).
+    Honestidad del close: llena la pantalla en **vertical** (la generatriz
+    no se deforma); en horizontal la cuerda del arco ≈ 0.826·W con g = 0 →
+    close deja ~8-9 % de casco a cada lado (bordes curvos proyectados, no
+    un bug).
 - **Culling: NoCulling siempre, también en cilindro** (rectificación del
   usuario sobre ADR-025 pt.12): la pared interior espejada de las caras
   traseras **debe verse** por los huecos y cantos — paridad con el polígono
@@ -138,6 +141,12 @@ tiene al menos 1 escritorio y la hoja simple ya es útil (ADR-024).
   transparente por `FaceOpacity/FaceRotationOpacity < 0.99`) para que la
   captura del momento «encima» distinga el orden por centroide (blend=1) de
   un bug de profundidad (blend=0).
+  **Resuelto (ADR-026)**: el interior se ve por huecos y canto correcto — la
+  pared lejana **nunca** se pinta encima de una frontal; cada cara lleva su
+  centroide de sort a distancia R (colocación como el polígono) y el material
+  elige la pasada por umbral (`Mask` en reposo escribe profundidad, `Blend`
+  al girar ordena de atrás adelante), con los huecos de la textura siguiendo
+  translúcidos.
 - Con `Shape = Polygon` los casos 1-2 siguen siendo la hoja plana exacta de
   §1.3 (ADR-024 intacto).
 
@@ -146,8 +155,10 @@ tiene al menos 1 escritorio y la hoja simple ya es útil (ADR-024).
 La hoja vive dentro de `Cube` (ADR-024): con menos de 3 escritorios el sólido no
 es un polígono, son quads pegados en el centro. `ScreenView`, el casco, las
 capturas, la dim, el debug y la cámara son los mismos que con cubo. Con
-`Shape = Cylinder` estos dos casos se curvan como **segmento de 120°** (§1.2,
-ADR-025); lo de abajo es la representación plana, default e intacta.
+`Shape = Cylinder` estos dos casos son un **tambor de tres slots** (§1.2,
+ADR-025 pt.11 re-rectificado + ADR-026), no la hoja; lo de abajo es la
+representación plana, default e intacta — y el destino del fallback
+`Cylinder` sin `QtQuick3D.Helpers`.
 
 **2 escritorios — hoja doble cara:**
 
@@ -180,16 +191,16 @@ Común:
 
 - Sin interior (no hay volumen). El casco se sigue viendo alrededor.
 - Esta sección es la representación con `Shape = Polygon`; con `Cylinder`
-  1-2 escritorios se curvan como segmento de 120° (§1.2) — con sus propios
-  límites de giro ([-60, 60] / [-60, 180]) y su tick (120°).
-- **`CubeFaceDisplacement` no aplica a la hoja ni al segmento**: en la hoja
-  su `faceDistance` es el `sheetGap` de las caras, no el radio de un
-  polígono; el segmento vive a radio fijo `3W/2π` y sus arcos son adyacentes
-  por construcción. La separación entre caras solo significa algo con 3+
-  escritorios (ver §4).
+  1-2 escritorios el sólido es el tambor de tres slots (§1.2) — geometría
+  fija N = 3, slot 0 en 0°, giro **libre** sin topes y tick 120°.
+- **`CubeFaceDisplacement`**: en la hoja su `faceDistance` es el
+  `sheetGap` de las caras, no el radio de un polígono — el hueco g del KCM
+  no se lee aquí (la hoja vive del §1.3). En el cilindro, en cambio, g
+  **sí aplica a todos los counts** (tambor 3+ y tambor de tres slots 1-2:
+  R = 3(W+g)/2π; ADR-026), con los negativos clampeados a 0 (ver §4).
 - Cambiar el nº de escritorios **con el efecto abierto** re-sincroniza la
   cámara (`Connections` sobre `cube.faceCount`, y también sobre
-  `cylinderActive`/`cylinderSegments` cuando cambia la forma sin cambiar el
+  `cylinderActive` cuando cambia la forma sin cambiar el
   número): re-clampa el azimut al límite de la forma nueva, re-alinea al
   escritorio actual y recalcula el `radius` con el `viewRadius` nuevo (los
   `PropertyChanges` de los estados mueren al primer arrastre/flecha/rueda;
@@ -223,7 +234,10 @@ Reglas:
   activación, cambio de escritorio). El zoom con rueda NO cuenta.
 - Mínimo 0.1 (no 0): una cara invisible no se puede elegir ni clicar; el rango
   evita el sólido fantasma.
-- La opacidad multiplica el alfa del material de la cara (`DefaultMaterial.opacity`);
+- La opacidad multiplica el alfa del material de la cara (ADR-026: `PrincipledMaterial.opacity`
+  con `alphaMode` por umbral — `Mask` en reposo **solo en las caras
+  cilíndricas** (`alphaCutoff` explícito 0.5), `Blend` al girar; el polígono y
+  la hoja conservan `Blend` en reposo, paridad con el look virgen de ADR-023);
   el casco NO se atenúa por esto (eso es `DimWhileRotating`, §5.1, y sigue siendo
   independiente).
 - **Todas las caras se pintan siempre** (ADR-023, sustituye el LOD de
@@ -329,7 +343,7 @@ panorámica 360.
 | `MouseInvertedX`       | Bool   | —           | false   | Invertir eje X del arrastre                                                                                  |
 | `MouseInvertedY`       | Bool   | —           | false   | Invertir eje Y del arrastre                                                                                  |
 | `CursorScreenOnly`     | Bool   | —           | false   | Dibuja el cubo solo en el monitor donde está el cursor al lanzarse; el resto de pantallas quedan normales. Sustituye al antiguo «casco por pantalla»; default `false` = todas las pantallas |
-| `CubeFaceDisplacement` | Double | −500…500 px | 100     | Separación entre caras. 0 = caras pegadas; **negativo = se solapan** (el polígono encoge); positivo = huecos. **En el tambor cilíndro (3+) es el hueco lineal entre arcos: los valores negativos se tratan como 0** (ADR-025). El segmento curvo de 1-2 lo ignora (R fija 3W/2π) |
+| `CubeFaceDisplacement` | Double | −500…500 px | 100     | Separación entre caras. 0 = caras pegadas; **negativo = se solapan** (el polígono encoge); positivo = huecos. **En cilindro (todos los counts, tambor y tambor de tres slots) es el hueco lineal entre arcos: los valores negativos se tratan como 0** (ADR-025/ADR-026 — g también rige R = 3(W+g)/2π con 1-2). La hoja plana (Polygon 1-2) no lo usa (su separación es `sheetGap`) |
 | `DistanceFactor`       | Double | 0.5–5       | 1.75    | Distancia de la cámara al activar                                                                            |
 
 - Atajo por defecto: **Meta+K**. Se registra con `ShortcutHandler` → **KGlobalAccel**, y se
@@ -339,12 +353,13 @@ panorámica 360.
   en `main.xml` sería una segunda fuente que nunca manda. El KCM solo muestra un aviso.
 - Giro por arrastre del ratón y teclado; zoom por rueda **con límites**
   (ADR-022): el radio queda entre `0.6 · safeViewRadius` y `8 · safeViewRadius`
-  — el apotema del polígono, el **radio R del tambor** o el `3W/2π` del
-  segmento (ADR-025), pinned positivo—. Nota honesta: la rueda **sí puede**
-  meter la cámara dentro del sólido (hasta 0.6·R) — es posible a propósito:
-  el cilindro muestra su interior por los huecos igual que el polígono
-  (`NoCulling` siempre, ADR-023/ADR-025 pt.12; el único matiz es el overlap
-  pendiente, diagnosticado con `blend=`). Lo que los límites
+  — el apotema del polígono o el **radio R del tambor** (ADR-026: con 1-2
+  cilindros R es el del tambor de tres slots, 3(W+g)/2π), pinned positivo—.
+  Nota honesta: la rueda **sí puede** meter la cámara dentro del sólido
+  (hasta 0.6·R) — es posible a propósito: el cilindro muestra su interior
+  por los huecos igual que el polígono (`NoCulling` siempre,
+  ADR-023/ADR-025 pt.12; el overlap que eso dejaba ver ENCIMA de las
+  frontales quedó resuelto en ADR-026, diagnosticable con `blend=`). Lo que los límites
   evitan es el fallo real: por debajo de `clipNear` las caras desaparecían,
   y a distancia absurda se perdía el sólido de vista.
 
@@ -417,11 +432,11 @@ Implementación (QML puro, sin C++):
 
 Enum `Shape`: `Polygon` (0, default) / `Cylinder` (1) (ADR-025; tabla y
 helper `shape()` en `constants.js`). El número de escritorios manda:
-1 → hoja simple con giro limitado a ±80° (Polygon) o **segmento curvo** de un
-arco de 120° con giro [-60°, 60°] (Cylinder); 2 → hoja doble cara con giro
-completo (Polygon) o **dos arcos adyacentes de 120°** con giro [-60°, 180°]
-y tick 120° (Cylinder); 3+ → polígono o tambor cilíndro elegido
-(ADR-024/ADR-025; el placeholder quedó retirado).
+1 → hoja simple con giro limitado a ±80° (Polygon) o **tambor de tres slots
+con 2 huecos** — cara en 0°, giro libre (Cylinder); 2 → hoja doble cara con
+giro completo (Polygon) o **tambor de tres slots con 1 hueco** — caras en
+0° y 120°, giro libre, tick 120° (Cylinder); 3+ → polígono o tambor
+cilíndro elegido (ADR-024/ADR-025/ADR-026; el placeholder quedó retirado).
 
 Enum `Background`: `Color` (0, default) / `Image` (1) / `Gradient` (2) / `Video` (3,
 añadido al final para no reinterpretar los valores guardados). El índice 1 se

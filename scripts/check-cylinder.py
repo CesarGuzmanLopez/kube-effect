@@ -7,8 +7,12 @@ Cube.qml loads at runtime — in an offscreen QML engine (no window, no GPU,
 no KWin: only the vertex data is read back, never rendered) and validates
 what the renderer would consume:
 
-  * every vertex finite, and on the cylinder: sqrt(x^2 + z^2) == R (for all
-    arc-lengths s, both height rows at y = -H/2 and +H/2);
+  * every vertex finite, and on the node-centred cylinder (ADR-026): the arc
+    wraps the axis (0, 0, -R) of the mesh's OWN frame, so sqrt(x^2 + (z+R)^2)
+    == R for all arc-lengths s, both height rows at y = -H/2 and +H/2 — the
+    arc's mid-point sits at the node origin and every face gets its radius
+    from the Model's position (polygon placement), which is what gives each
+    face a distinct sort centroid for the transparent pass;
   * uvs in [0, 1] with u LINEAR in s (u = s/W: the isometry of ADR-002 — a
     non-linear u would stretch the wallpaper across the arc);
   * total arc length, integrated from the vertex angles (sum of R * dphi),
@@ -119,12 +123,12 @@ def validate(
         if not (finite(x) and finite(y) and finite(z)):
             problems.append(f"vertex {index} is not finite: {x}, {y}, {z}")
             continue
-        # Cylindricity: every vertex sits on the circle of radius R around
-        # the Y axis, for BOTH height rows.
-        drift = abs(math.hypot(x, z) - radius)
+        # Cylindricity (ADR-026): every vertex sits on the circle of radius
+        # R around the node-local axis (0, 0, -R), for BOTH height rows.
+        drift = abs(math.hypot(x, z + radius) - radius)
         if drift > radial_eps:
             problems.append(
-                f"vertex {index} off the cylinder: |xz|={math.hypot(x, z):.6f} != R={radius:.6f}"
+                f"vertex {index} off the cylinder: |x,(z+R)|={math.hypot(x, z + radius):.6f} != R={radius:.6f}"
             )
         # Two rows at the exact half-height (column i: bottom 2i, top 2i+1).
         expect_y = -height / 2 if index % 2 == 0 else height / 2
@@ -143,13 +147,16 @@ def validate(
         if abs(v - expect_v) > 1e-9:
             problems.append(f"uv {index} v={v} != {expect_v} (row)")
 
-    # Integrated arc length from the vertex angles: sum R*dphi over the
-    # bottom row must equal W exactly (theta = W/R is the whole point).
+    # Integrated arc length from the vertex angles AROUND THE NODE-LOCAL
+    # AXIS (0, 0, -R): sum R*dphi over the bottom row must equal W exactly
+    # (theta = W/R is the whole point).
     length = 0.0
     for column in range(1, segments + 1):
         x0, _, z0 = positions[2 * (column - 1)]
         x1, _, z1 = positions[2 * column]
-        length += radius * math.atan2(x1 * z0 - z1 * x0, x0 * x1 + z0 * z1)
+        u0 = z0 + radius
+        u1 = z1 + radius
+        length += radius * math.atan2(x1 * u0 - x0 * u1, x0 * x1 + u0 * u1)
     if abs(length - width) > 1e-6 * max(1.0, width):
         problems.append(f"arc length {length:.6f} != face width {width:.6f}")
 
@@ -162,7 +169,7 @@ def validate(
         dot = nx * nx + ny * ny + nz * nz
         if abs(dot - 1.0) > 1e-6:
             problems.append(f"normal {index} not unit: {math.sqrt(dot)}")
-        radial = (px * nx + pz * nz) / max(radius, 1e-12)
+        radial = (px * nx + (pz + radius) * nz) / max(radius, 1e-12)
         if radial < 1.0 - 1e-6:
             problems.append(
                 f"normal {index} not radial outward: dot with (x,0,z) = {radial}"
@@ -193,9 +200,10 @@ def validate(
             e1[0] * e2[1] - e1[1] * e2[0],
         ]
         # Outward test: the cross product must lean onto the radial
-        # direction of the triangle centroid (CCW seen from OUTSIDE).
+        # direction of the triangle centroid measured from the node-local
+        # axis (CCW seen from OUTSIDE).
         mid_x = (v0[0] + v1[0] + v2[0]) / 3.0
-        mid_z = (v0[2] + v1[2] + v2[2]) / 3.0
+        mid_z = (v0[2] + v1[2] + v2[2]) / 3.0 + radius
         if cross[0] * mid_x + cross[2] * mid_z <= 0.0:
             problems.append(f"triangle {triangle} wound inwards (flipped?)")
     if len(indexes) % 3 != 0:
@@ -212,8 +220,8 @@ def reference_mesh(width=2560.0, height=1440.0, radius=1000.0, segments=64):
     for column in range(segments + 1):
         phi = (width * column / segments - width / 2) / radius
         sine, cosine = math.sin(phi), math.cos(phi)
-        positions.append((radius * sine, -height / 2, radius * cosine))
-        positions.append((radius * sine, height / 2, radius * cosine))
+        positions.append((radius * sine, -height / 2, radius * cosine - radius))
+        positions.append((radius * sine, height / 2, radius * cosine - radius))
         normals.append((sine, 0.0, cosine))
         normals.append((sine, 0.0, cosine))
         uvs.append((column / segments, 0.0))
@@ -265,6 +273,7 @@ def selftest():
 
     def off_radius(m):
         x, y, z = m[0][0]
+        # x scaled away from the node-local axis at (0, 0, -R)
         m[0][0] = (x * 1.2, y, z)
 
     def bad_uv(m):
@@ -285,14 +294,15 @@ def selftest():
         m[2] = [(1.0 - (i // 2) / seg, v) for (i, (_, v)) in enumerate(m[2])]
 
     def wrong_theta(m):
-        # |P| stays exactly on R, but the arc spans 1.1x the isometric angle:
-        # only the integrated arc-length check (theta = W/R) can catch this.
+        # |P - (0,0,-R)| stays exactly on R, but the arc spans 1.1x the
+        # isometric angle: only the integrated arc-length check (theta = W/R)
+        # can catch this.
         stretched = []
         norms = []
         for (x, y, z), _ in zip(m[0], m[1]):
-            phi = math.atan2(x, z) * 1.1
-            r = math.hypot(x, z)
-            stretched.append((r * math.sin(phi), y, r * math.cos(phi)))
+            phi = math.atan2(x, z + radius) * 1.1
+            r = math.hypot(x, z + radius)
+            stretched.append((r * math.sin(phi), y, r * math.cos(phi) - radius))
             norms.append((math.sin(phi), 0.0, math.cos(phi)))
         m[0] = stretched
         m[1] = norms
@@ -378,13 +388,15 @@ def main():
             face_count * width / (2 * math.pi),
         ),
         (
-            # The curved segment of 1-2 desktops (ADR-025): a fixed 120-degree
-            # arc, R = 3W/2pi, W measured as before. The same validator must
-            # hold: cylindricity, linear u, arc length = W, winding.
-            "segment 120deg (2 faces)",
-            float(harness.property("radiusSegment")),
-            harness.property("segmentMesh"),
-            harness.property("segmentIndexes"),
+            # The three-slot drum of 1-2 desktops (ADR-025 pt.11, recast by
+            # ADR-026): N = 3 with g = 0 gives R = 3W/2pi, W measured as
+            # before. The same validator must hold: node-local cylindricity,
+            # linear u, arc length = W, winding. (g > 0 is the ordinary drum
+            # formula, covered by the open-drum case.)
+            "three-slot drum, g=0 (2 faces)",
+            float(harness.property("radiusSlots")),
+            harness.property("slotsMesh"),
+            harness.property("slotsIndexes"),
             3 * width / (2 * math.pi),
         ),
     ]
@@ -402,10 +414,10 @@ def main():
         for problem in found:
             problems.append(f"{label}: {problem}")
 
-    # theta = W/R of the segment arc must be exactly 2pi/3 (the generator is
-    # shared with the drum: 120 degrees comes from R = 3W/2pi, not from a
-    # second code path).
-    theta = float(harness.property("segmentTheta"))
+    # theta = W/R of the three-slot drum arc (g = 0) must be exactly 2pi/3
+    # (the generator is shared with the drum: 120 degrees comes from
+    # R = 3W/2pi, not from a second code path).
+    theta = float(harness.property("slotsTheta"))
     if abs(theta - 2 * math.pi / 3) > 1e-9:
         problems.append(f"segment theta {theta} != 2pi/3 = {2 * math.pi / 3}")
 
@@ -439,7 +451,7 @@ def main():
             print(f" - {problem}")
         return 1
     print(
-        "check-cylinder: OK (real ProceduralMesh: cylindricity, isometric UVs, "
+        "check-cylinder: OK (real ProceduralMesh: node-centred cylindricity, isometric UVs, "
         "arc length = W, gap clamp, radial normals, CCW winding, shared geometry)"
     )
     return 0

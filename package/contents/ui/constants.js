@@ -309,9 +309,11 @@ function normalizeSheetAzimuth(azimuth) {
 
 // The azimuth clamp for the paths that SET a target angle (arrows, states),
 // as an explicit [min, max] range (ADR-025; it replaces the symmetric
-// clampSheetAzimuth, which cannot express the segment band [-60, 180]). A
-// null/garbage bound returns the angle verbatim: sheet-2, the drum and the
-// polygon turn freely, and verbatim is exactly what the pre-sheet code did
+// clampSheetAzimuth and stays generic enough for asymmetric bounds even
+// though today's only real range, the sheet's, is symmetric — the segment
+// band it was built for is retired). A null/garbage bound returns the angle
+// verbatim: sheet-2, the drum, the three-slot drum and the polygon turn
+// freely, and verbatim is exactly what the pre-sheet code did
 // — normalizing here would flip e.g. 288 to -72, an equivalent orientation
 // but opposite-sign quaternions whose Behavior slerp could take the long
 // way. A real range first normalizes to (-180,180] (no wrap exists on a
@@ -410,77 +412,32 @@ function cylinderArcAngle(faceWidth, radius) {
     return width / r;
 }
 
-// One or two faces cannot CLOSE a drum (N >= 3 is the shape's minimum), so
-// with Shape == Cylinder and 1-2 desktops the solid becomes a CURVED SEGMENT
-// of a cylinder instead of the flat sheet (ADR-025, extends ADR-024 — the
-// sheet stays the representation when Shape == Polygon): every face is a
-// fixed 120-degree arc, one third of a circle. 1 desktop: one arc centred on
-// 0. 2 desktops: two adjacent arcs centred on 0 and 120 — a continuous 240
-// band with the 120 gap behind it (through which the hull shows, ADR-003).
-// The LINEAR gap g does NOT apply here: the arcs are adjacent or at fixed
-// positions by construction, so R depends on W alone. The turn ranges
-// (cylinderAzimuthRange) span exactly the band of front-facing surface:
-// [-60, 60] with one arc and [-60, 180] with two. The first symmetric caps
-// (+/-80 with one, +/-120 with two, the user's grill choice) were rectified
-// by geometry once measured with the DebugOverlay: +/-80 left 20 degrees
-// past the single arc's edge (no front surface there at all), and +/-120
-// parked the camera at -120 — the dead centre of the back gap, a hull view
-// with no desktop reachable and no selection to make.
-const CYLINDER_SEGMENT_DEG = 120;
+// One or two faces cannot CLOSE a drum on their own — but with Shape ==
+// Cylinder they no longer fall back to the flat sheet nor to a capped
+// "curved segment band": the solid is a THREE-SLOT drum (ADR-025 pt.11,
+// re-rectified by the user after testing the [-60,60]/[-60,180] band — it
+// "made jumps and felt choppy"). The drum formula simply runs with N = 3:
+//
+//   R    = 3 (W + g) / (2 PI)   (cylinderRadius(3, W, g) — the user's gap g
+//                               APPLIES at 1-2 faces too, no fixed 3W/2pi)
+//   tick = 360 / 3 = 120        (faces occupy slots 0..count-1, azimuths
+//                               0 and 120; the azimuth helper is gone:
+//                               Cube.angleTick * index answers it)
+//   slots without a desktop are NOT created: the hull shows through there,
+//   an "empty face" without a panel (ADR-003 parity).
+//
+// The turn range is OPEN at every cylinder count (like the drum): free
+// wrap, no band clamps, no asymmetric edges — and the mirrored back of the
+// far arcs seen through the gaps is tolerated exactly as the real drum
+// tolerates it (ADR-023). desktopAt/desktopAzimuth/arrows need no special
+// cases: Cube's standard tick-grid arithmetic modulo the slot count lands on
+// a missing delegate for empty slots, which Cube already maps to a null
+// desktop (a no-op selection, the camera parks facing the hull).
+// cylinderArcRadius / cylinderSegmentAzimuth / cylinderAzimuthRange /
+// cylinderSegmentDesktopAt (the band design) are retired; the flat sheet
+// (Shape == Polygon, 1-2) is untouched (ADR-024).
 
-// Radius of a fixed 120-degree arc that measures exactly W: R = W/theta =
-// 3W/(2*PI). Non-finite or non-positive width answers 0 (the mesh then
-// renders nothing; CylinderArcMesh.qml keeps that contract).
-function cylinderArcRadius(faceWidth) {
-    const width = Number(faceWidth);
-    if (!isFinite(width) || width <= 0) {
-        return 0;
-    }
-    return 3 * width / (2 * Math.PI);
-}
 
-// Azimuth a cylinder face is centred on (degrees): 1 desktop -> 0; 2 -> one
-// third of a circle apart (index * 120, a continuous 240 band); 3 and up ->
-// the polygon tick itself (index * 360/count), which is why the closed drum
-// needs no special placement. Garbage (count 0 mid-sync, NaN, strings)
-// answers 0: a harmless resting angle, never NaN into a rotation.
-function cylinderSegmentAzimuth(index, count) {
-    const i = Number(index);
-    const n = Number(count);
-    if (!isFinite(i)) {
-        return 0;
-    }
-    if (n === 1) {
-        return 0;
-    }
-    if (n === 2) {
-        return i * CYLINDER_SEGMENT_DEG;
-    }
-    if (isFinite(n) && n >= 3) {
-        return 360 * i / n;
-    }
-    return 0;
-}
-
-// Turn range for the curved-segment shape, as [min, max] degrees — the
-// band edges are the last azimuths that still show front surface, so the
-// camera can never park on the mirrored back nor in the 120-degree gap:
-//   1 desktop -> [-60, 60]   (the single arc spans exactly -60..+60)
-//   2 desktops -> [-60, 180] (the band: arc 0 at -60..60, arc 1 at 60..180)
-//   >= 3 (closed drum, the wrap is real), mid-sync 0 or garbage ->
-//   [null, null] = no limit: clampAzimuthRange returns angles verbatim and
-//   the drag keeps its historical %360 wrap (parity pre-segment).
-// Strict count comparison (no Number coercion): a string "2" is garbage
-// here, matching the sheetAzimuthLimit convention for kwinrc junk.
-function cylinderAzimuthRange(count) {
-    if (count === 1) {
-        return [-60, 60];
-    }
-    if (count === 2) {
-        return [-60, 180];
-    }
-    return [null, null];
-}
 
 // The FLAT sheet's symmetric caps expressed as the same [min, max] shape,
 // so the camera has ONE clamp mechanism for every limited form
@@ -494,36 +451,40 @@ function flatAzimuthRange(count) {
     return limit >= 360 ? [null, null] : [-limit, limit];
 }
 
-// Which face of the curved segment looks at the camera: normalize the
-// azimuth to (-180, 180], |a| <= 60 is face 0 (its arc spans -60..+60),
-// anything wider is face 1 — mirrored, so 61 AND -61 both answer 1 (the
-// resting band is asymmetric: 0..120 forward, the gap behind). -1 = not a
-// segment (0 mid-sync, >= 3) or a non-finite azimuth; callers map -1 to a
-// null desktop (the sheetDesktopAt contract).
-function cylinderSegmentDesktopAt(azimuth, count) {
-    if (count !== 1 && count !== 2) {
-        return -1;
+// The turn range the camera must obey, routed by shape (ADR-026, recast by
+// the three-slot drum decision): ScreenView used to branch on cube flags
+// inline, which no check could catch swapped. Inputs: the resolved Shape,
+// the raw delegate count and whether the arc mesh exists.
+//   cylinder + arc mesh (1, 2 or N — the three-slot drum wraps freely)
+//                                  -> [null, null] (open, like the drum)
+//   polygon / cylinder WITHOUT mesh (the flat-sheet fallback: a rectangle
+//   face must not show its mirrored back) -> flatAzimuthRange: [-80,80]
+//   with one desktop, open otherwise.
+// Strict shape comparison (constants.shape() only ever answers the enum
+// ints). The count argument only matters on the flat branch.
+function azimuthRangeFor(shape, count, hasArcMesh) {
+    if (shape === Shape.Cylinder && hasArcMesh === true) {
+        return [null, null];
     }
-    const angle = Number(azimuth);
-    if (!isFinite(angle)) {
-        return -1;
-    }
-    if (count === 1) {
-        return 0;
-    }
-    return Math.abs(normalizeSheetAzimuth(angle)) <= 60 ? 0 : 1;
+    return flatAzimuthRange(count);
 }
 
-// Vertex data of ONE face-arc, centred on +Z so per-face placement stays a
-// rotation (the arc's own azimuth is applied through the Model's
-// eulerRotation.y = angleTick * index — same as the polygon; phi0 is NOT
-// baked into the mesh, which is what lets all faces share one geometry).
+// Vertex data of ONE face-arc, generated around ITS OWN NODE: the arc's
+// mid-point sits at the origin and the drum axis at (0, 0, -R), so placing
+// the face is exactly the polygon rule — position = rotate(azimuth) *
+// (0, 0, faceDistance=R) plus eulerRotation.y = azimuth (ADR-026). The old
+// mesh lived centred on +Z with every node pinned to (0, 0, 0): all the
+// faces then shared one sort centroid and QtQuick3D's transparent-pass
+// ordering (world bounds centre -> view depth, qssglayerrenderdata.cpp)
+// lost a reliable key for the drum; the polygon never had that problem
+// because each Model already carries its own position. phi0 is NOT baked
+// into the mesh, which is what lets all faces still share one geometry.
 // Returns {positions, normals, uvs, indexes} in the shape ProceduralMesh
 // wants (lists of Qt.vector3d / Qt.vector2d / uint), for arc-length s in
 // [0, W] and height t in [0, H]:
 //
-//   phi(s)    = (s - W/2) / R            arc centred on +Z, symmetric
-//   P(s, t)   = (R sin phi, t - H/2, R cos phi)
+//   phi(s)    = (s - W/2) / R            arc symmetric about +Z, mid at 0
+//   P(s, t)   = (R sin phi, t - H/2, R cos phi - R)
 //   normal(s) = (sin phi, 0, cos phi)    radial, pointing OUT of the axis
 //   uv(s, t)  = (s / W, t / H)           v = 0 at the bottom row (y = -H/2)
 //
@@ -560,8 +521,8 @@ function cylinderArcGeometry(faceWidth, faceHeight, radius, segments) {
         const cosine = Math.cos(phi);
         // Two vertices per column: bottom (v = 0) then top (v = 1), so the
         // indexes of a column are (2i, 2i + 1).
-        positions.push(Qt.vector3d(r * sine, -height / 2, r * cosine));
-        positions.push(Qt.vector3d(r * sine, height / 2, r * cosine));
+        positions.push(Qt.vector3d(r * sine, -height / 2, r * cosine - r));
+        positions.push(Qt.vector3d(r * sine, height / 2, r * cosine - r));
         normals.push(Qt.vector3d(sine, 0, cosine));
         normals.push(Qt.vector3d(sine, 0, cosine));
         uvs.push(Qt.vector2d(i / segs, 0));
@@ -619,13 +580,17 @@ function cylinderCullMode(cameraRadius, radius) {
     return cam > r * 1.05 ? 1 : 0;
 }
 
-// The azimuth the ARROW buttons should rotate to (ADR-025 point 13): the
-// NEXT REAL FACE in the requested direction, not a raw tick multiple
-// clamped afterwards. On the asymmetric segment band [-60, 180] (faces at
-// 0 and 120) the raw multiples of tick 120 leave the band: LEFT from 0 hit
-// -120 -> clamped to the -60 edge (hull only), then delta 0 forever —
-// desktop 2 unreachable — and RIGHT from 120 hit 240 -> normalized -120 ->
-// clamped -60, a -180 turn backwards.
+// The azimuth the ARROW buttons should rotate to (ADR-025 point 13): on a
+// LIMITED range the next REAL FACE in the requested direction, not a raw
+// tick multiple clamped afterwards — the trace that motivated it ran on the
+// segment band [-60, 180] (faces at 0 and 120): LEFT from 0 hit -120 ->
+// clamped to the -60 edge (hull only), then delta 0 forever — desktop 2
+// unreachable — and RIGHT from 120 hit 240 -> normalized -120 -> clamped
+// -60, a -180 turn backwards. That band is RETIRED (three-slot drum design,
+// ADR-025 pt.11 re-rectified): today's only limited range is the symmetric
+// sheet-1 [-80, 80], and every cylinder turns freely on the slot grid (a
+// tick step may land on an empty slot by design). The helper keeps both
+// paths generic.
 //
 //   direction +1 = right (Keys.onRightPressed), -1 = left;
 //   tick         = cube.angleTick;
@@ -646,8 +611,9 @@ function cylinderCullMode(cameraRadius, radius) {
 // current for left / the lowest face above it for right; with no face in
 // that direction the band wraps — left goes to the highest face, right to
 // the lowest (a carousel of the faces that exist, never the empty edge of
-// the band). With one face (sheet-1 [-80, 80], segment-1 [-60, 60]) the
-// wrap answers the same face: delta 0, the arrow holds — the same
+// the range). With one face (sheet-1 [-80, 80] — today's only real limited
+// range since the segment band was retired) the wrap answers the same
+// face: delta 0, the arrow holds — the same
 // final position the old normalize+clamp produced for sheet-1 (360 -> 0),
 // now stated and tested instead of emergent.
 //

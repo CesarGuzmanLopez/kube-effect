@@ -153,12 +153,12 @@ Item {
     // rotation animation runs.
     readonly property bool cubeMoving: cameraController.busy || rotationAnimation.running
     // Turn range for the camera (ADR-024/ADR-025): [min, max] degrees or
-    // [null, null] = free wrap. The flat sheet is symmetric (±80 with one
-    // desktop, none with two), the curved segment is the asymmetric band
-    // [-60, 60] / [-60, 180], the drum and the polygon are open. Computed
-    // here so the controller bindings, the states and the debug overlay all
-    // read the SAME live value (one Cube.faceCount/cylinderSegments re-eval).
-    readonly property var azimuthRange: cube.cylinderSegments ? Constants.cylinderAzimuthRange(cube.faceCount) : Constants.flatAzimuthRange(cube.faceCount)
+    // [null, null] = free wrap. The routing itself lives in
+    // Constants.azimuthRangeFor (ADR-026) so check-constants can test it —
+    // an inline ternary between the two ranges could be swapped without any
+    // check noticing. Computed here so the controller bindings, the states
+    // and the debug overlay all read the SAME live value (one Cube re-eval).
+    readonly property var azimuthRange: Constants.azimuthRangeFor(cube.shape, cube.faceCount, cube.cylinderMesh !== null)
     // DebugOverlay (ADR-023): live state painted on screen while the Advanced
     // key is on. console.log never reaches this KWin's journal and
     // org.kde.kwin.Effects.supportInformation returns an empty string for QML
@@ -189,32 +189,35 @@ Item {
         // state (isSheet flips mid-sync) and a stuck clamp is invisible
         // without them.
         let line2 = "yaw=" + cube.cameraYaw.toFixed(1) + " pitch=" + root.debugEuler.x.toFixed(1) + " r=" + cameraController.radius.toFixed(0) + " op=" + root.faceOpacity.toFixed(2) + " tick=" + cube.angleTick.toFixed(1) + " n=" + cube.faceCount + "/" + cube.geometryCount + " d=" + cube.faceDistance.toFixed(0) + " v=" + cube.viewRadius.toFixed(0) + " sheet=" + (cube.isSheet ? 1 : 0) + " lim=" + (root.azimuthRange[0] === null ? "none" : root.azimuthRange[0] + ".." + root.azimuthRange[1]);
-        // Shape state (ADR-025): the resolved form, and — only while a
-        // cylinder branch is actually in effect — its radius: the drum's R
-        // plus the EFFECTIVE gap g_eff (what the mesh really used after the
-        // negative clamp; a mismatch with the KCM value is exactly what a
-        // hand-edited kwinrc would cause), the segment's fixed 3W/2pi with
-        // the "seg" tag (no g there). cyl(fallback) marks Shape=Cylinder
-        // without a mesh (QtQuick3D.Helpers missing): the solid degraded to
-        // the polygon formulas. The old cull= field is gone — faceCullMode
-        // is pinned to NoCulling (ADR-025 pt.12) — and replaced by the
-        // blend= diagnostic below.
+        // Shape state (ADR-025/ADR-026): the resolved form, and — while the
+        // drum is in effect — its radius R plus the EFFECTIVE gap g_eff
+        // (what the mesh really used after the negative clamp; a mismatch
+        // with the KCM value is exactly what a hand-edited kwinrc would
+        // cause). Below 3 desktops the drum keeps three slots and the field
+        // slots=N/3 marks the empty ones (the hull shows there, no panel).
+        // cyl(fallback) marks Shape=Cylinder without a mesh (QtQuick3D.Helpers
+        // missing): the solid degraded to the flat sheet/polygon formulas.
+        // The old cull= field is gone — faceCullMode is pinned to NoCulling
+        // (ADR-025 pt.12) — and replaced by the blend= diagnostic below.
         line2 += " shape=" + Constants.shapeName(cube.shape);
-        if (cube.cylinderSegments) {
-            line2 += " seg R=" + cube.segmentRadius.toFixed(0);
-        } else if (cube.cylinderActive) {
+        if (cube.cylinderActive) {
             line2 += " R=" + cube.cylinderRadius.toFixed(0) + " g_eff=" + cube.cylinderGap.toFixed(0);
+            if (cube.faceCount < cube.geometryCount) {
+                line2 += " slots=" + cube.faceCount + "/" + cube.geometryCount;
+            }
         } else if (cube.isCylinder) {
             line2 += "(fallback)";
         }
-        // Overlap diagnostic (ADR-025 pt.12, the problem the culling
-        // experiment did NOT solve): blend=1 means the faces sit in the
-        // transparent pass (rest/rotation face opacity < 0.99) and
-        // QtQuick3D orders them by object CENTROID — where a curved arc's
-        // centroid can lose against a front face; blend=0 (fully opaque)
-        // with an inner wall still "on top" would instead be a depth
-        // problem on the shared arc geometry. Capture the offending frame
-        // with op AND blend together: they pick which fix to write.
+        // Overlap diagnostic (ADR-025 pt.12, fixed by ADR-026 but kept
+        // because it reads the live pass): blend=1 means the faces rotate-
+        // blend (opacity < 0.99 -> alphaMode Blend, ordered back-to-front by
+        // the per-face sort centroid); blend=0 on the CYLINDER means rest,
+        // the Mask mode: far arcs cannot paint over near ones because the
+        // kept fragments write depth. On the polygon/sheet blend=0 only
+        // says "rest opacity" — those faces always Blend (the Mask branch
+        // is bounded to the curved mesh, ADR-026 re-review) and never had
+        // the overlap. If an inner wall ever shows "on top" again, shape +
+        // op + blend together say which mechanism regressed.
         if (cube.isCylinder) {
             line2 += " blend=" + (root.faceOpacity < 0.99 ? 1 : 0);
         }
@@ -561,14 +564,14 @@ Item {
             faceOpacity: root.faceOpacity
             // Shape (ADR-025): resolved here through Constants.shape() so a
             // hand-edited kwinrc value can only ever mean Polygon; below 3
-            // desktops it picks the representation (flat sheet vs curved
-            // segment), never the drum (ADR-024/ADR-025).
+            // desktops it picks the representation (flat sheet vs the
+            // three-slot drum, ADR-024/ADR-025 pt.11 re-rectified).
             shape: Constants.shape(effect.configuration.Shape)
             // Live camera distance for the culling seed kept ready
             // (ADR-025 point 12 reverted): the runtime ignores it
-            // (faceCullMode is pinned to NoCulling) but the TODO fix and
-            // scripts/check-cylinder-wiring.py drive it through
-            // cylinderCullMode(). cameraController is declared later in
+            // (faceCullMode is pinned to NoCulling) but the documented
+            // alternative and scripts/check-cylinder-wiring.py drive it
+            // through cylinderCullMode(). cameraController is declared later in
             // this same component — QML ids resolve component-wide, the
             // binding re-evaluates like the gradient-yaw one.
             cameraRadius: cameraController.radius
@@ -590,14 +593,15 @@ Item {
             camera: camera
             xInvert: effect.configuration.MouseInvertedX
             yInvert: effect.configuration.MouseInvertedY
-            // Turn range (ADR-024 / ADR-025), see root.azimuthRange:
+            // Turn range (ADR-024 / ADR-026 routing), see root.azimuthRange:
             // the flat sheet answers [-80, 80] with one desktop (mirrored
-            // back rule) and none with two; the curved segment answers the
-            // asymmetric band [-60, 60] / [-60, 180] (the first symmetric
-            // ±80/±120 were rectified by geometry: past an arc edge there is
-            // no front surface, and ±120 parked in the back gap); the drum
-            // and the polygon are open, i.e. free wrap. Same live count Cube
-            // branches on (faceCount, not geometryCount). The range alone is
+            // back rule) and none with two; EVERY cylinder with the arc mesh
+            // — drum at 3+, three-slot drum at 1-2 — is open, free wrap: the
+            // asymmetric band [-60, 60] / [-60, 180] the user tested at the
+            // grill was retired (it "made jumps and felt choppy"; the camera
+            // may park on an empty slot, where the hull shows — a valid
+            // resting view, selection there is the guarded no-op). Same live
+            // inputs Cube branches on. The range alone is
             // not enough when the count or the shape CHANGES mid-open —
             // interaction kills the state bindings — so the handlers below
             // rewrite rotation/radius from the current state's formulas.
@@ -646,9 +650,11 @@ Item {
             }
 
             // State target yaw: the desktop's own azimuth, put through the
-            // range clamp (ADR-024/ADR-025). desktopAzimuth already answers
+            // range clamp (ADR-024/ADR-026). desktopAzimuth already answers
             // inside the range for sheets (0 or 180 with the count's own
-            // tick) and for the segment band (0 or 120), and with an open
+            // tick), the cylinder is open so verbatim lands on the slot's
+            // grid azimuth (0/120/... — with 1 desktop slot 0, the face is
+            // ALWAYS front-facing when the effect opens), and with an open
             // range clampAzimuthRange returns the angle verbatim — exactly
             // the pre-sheet behaviour; only a real range normalizes.
             function targetAzimuth() {
@@ -694,8 +700,10 @@ Item {
             }
 
             // The live list of face azimuths, straight from Cube.faceAzimuth
-            // (the same function the delegate places the faces with — an
-            // arrow can never aim at an azimuth without a face).
+            // (the same function the delegate places the faces with). Used
+            // only on limited ranges — the sheet, where every stop must be
+            // real; the cylinder's open grid may deliberately aim at an
+            // empty slot (hull view, no-op selection).
             function faceAzimuthList() {
                 const out = [];
                 for (let i = 0; i < cube.faceCount; ++i) {
@@ -709,14 +717,14 @@ Item {
                     return;
                 }
                 const eulerAngles = rotation.toEulerAngles();
-                // ADR-025 point 13: the arrow picks the NEXT REAL FACE to
-                // the left — with an open range the old tick arithmetic
-                // (verbatim, wrap kept); with a band (the segment's
-                // [-60, 180] is asymmetric) it cycles the faces, wrapping
-                // inside the band instead of clamping a raw tick to the
-                // edge (that left desktop 2 unreachable and did -180
-                // backwards turns). The drag path still clamps raw bounds
-                // in CubeCameraController: edges, not faces.
+                // ADR-025 point 13: with a range (the one-desktop sheet)
+                // the arrow cycles the REAL faces instead of clamping a raw
+                // tick to an edge; with an open range — polygon, sheet-2 and
+                // every cylinder slot grid — the old tick arithmetic runs
+                // verbatim, so a 1-2 drum steps 120° at a time and may land
+                // on an empty slot (hull in view, Enter/click is the
+                // guarded no-op). The drag path clamps raw bounds in
+                // CubeCameraController: edges, not faces.
                 const next = Constants.arrowAzimuth(eulerAngles.y, -1, cube.angleTick, azimuthMin, azimuthMax, faceAzimuthList());
                 rotation = Quaternion.fromEulerAngles(0, next - eulerAngles.y, 0).times(rotation);
             }
@@ -726,8 +734,10 @@ Item {
                     return;
                 }
                 const eulerAngles = rotation.toEulerAngles();
-                // ADR-025 point 13, mirrored: RIGHT 0 -> 120, RIGHT 120 -> 0
-                // (no -180 backwards), open ranges verbatim as before.
+                // ADR-025 point 13, mirrored: limited ranges cycle the real
+                // faces (the one-desktop sheet holds); open ones — every
+                // cylinder grid included — step the raw tick verbatim, so a
+                // 1-2 drum goes 0 -> 120 -> 240 (empty slot, hull) -> 360.
                 const next = Constants.arrowAzimuth(eulerAngles.y, 1, cube.angleTick, azimuthMin, azimuthMax, faceAzimuthList());
                 rotation = Quaternion.fromEulerAngles(0, next - eulerAngles.y, 0).times(rotation);
             }
@@ -766,14 +776,12 @@ Item {
         // Shape switch with the cube open (KCM change, or the arc mesh
         // appearing/failing — ADR-025): same story as a desktop-count change,
         // the state bindings may be dead and R replaced the apothem (or the
-        // segment replaced the flat sheet, with its own radius and turn cap),
-        // so rewrite rotation/radius from the live shape. The two handlers
-        // cover both cylinder branches; every other flip goes through
+        // drum replaced the flat sheet, with its own radius and open range),
+        // so rewrite rotation/radius from the live shape. One handler covers
+        // every cylinder flip (the segment branch retired with ADR-025
+        // pt.11's three-slot design); everything else goes through
         // onFaceCountChanged.
         function onCylinderActiveChanged() {
-            cameraController.resyncToState();
-        }
-        function onCylinderSegmentsChanged() {
             cameraController.resyncToState();
         }
         // R changes WITH the drum in effect (ADR-025, review): the KCM can

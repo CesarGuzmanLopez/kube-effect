@@ -33,15 +33,18 @@ Item {
     property real minRadius: 100
     property real maxRadius: 20000
 
-    // Turn range (ADR-024/ADR-025): ScreenView links these to the live
-    // shape and count — null/null (no limit) for the two-sided sheet, the
-    // drum and the polygon; [-80, 80] for the flat sheet with one desktop
-    // (the mirrored back of the single quad must never face the camera);
-    // the asymmetric [-60, 180] band for the curved segment with two.
-    // The drag path below clamps the raw sum directly between min and max
-    // (no wrap, no normalization — a pull that crossed the band would
-    // otherwise teleport the view); arrows and states clamp through
-    // Constants.clampAzimuthRange where they build their target.
+    // Turn range (ADR-024/ADR-026): ScreenView links these to the live
+    // shape and count via Constants.azimuthRangeFor — null/null (no
+    // limit) for the two-sided sheet, the polygon and EVERY cylinder with
+    // the arc mesh (drum at 3+, three-slot drum at 1-2: free wrap, the
+    // capped band was retired by the user); [-80, 80] only for the flat
+    // sheet with one desktop (the mirrored back of the single quad must
+    // never face the camera) — which also covers the Cylinder-without-
+    // mesh fallback. The drag path below clamps the raw sum directly
+    // between min and max (no wrap, no normalization — a pull that
+    // crossed a bound would otherwise teleport the view); arrows and
+    // states clamp through Constants.clampAzimuthRange where they build
+    // their target.
     property var azimuthMin: null
     property var azimuthMax: null
 
@@ -142,8 +145,9 @@ Item {
                     // bound would otherwise reappear on the other side and
                     // teleport the view. No clampAzimuthRange here either:
                     // only arrows and states normalize through that helper
-                    // (and the range can be asymmetric: the segment band is
-                    // [-60, 180], so a symmetric +/-bound would be wrong).
+                    // (the helper handles asymmetric bounds generically even
+                    // though today's only limited range, the sheet's, is
+                    // symmetric).
                     const target = eulerRotation.y + azimuthDelta;
                     azimuth = Math.min(Number(root.azimuthMax), Math.max(Number(root.azimuthMin), target));
                 } else {

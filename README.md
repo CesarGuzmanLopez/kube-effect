@@ -10,11 +10,13 @@ el **cubo virgen** de KDE (caras planas en polígono) y crece feature a feature.
 N escritorios alrededor de un **polígono** (el cubo virgen de KDE) o de un
 **cilindro** — las mismas caras curvadas sobre arcos isométricos sin distorsión
 (`Shape = Cylinder`, ADR-025; 64 segmentos por cara, una sola malla compartida).
-Con 1-2 escritorios el tambor no cierra: con Polygon la forma es **hoja 2D**
-(ADR-024: doble cara con 2 (giro completo), simple con 1 (giro limitado a
-±80°; el dorso se vería espejado)) y con Cylinder es un **segmento curvo** de
-arcos de 120° (giro [-60°, 60°] con 1 y [-60°, 180°] con 2, tick 120°; la
-pared interior se ve como en el polígono — ADR-025). Sobre
+Con 1-2 escritorios y Polygon la forma es **hoja 2D** (ADR-024: doble cara con
+2 (giro completo), simple con 1 (giro limitado a ±80°; el dorso se vería
+espejado)); con Cylinder el sólido es un **tambor de tres posiciones con las
+que faltan vacías** — R = 3(W+g)/2π con el hueco g, caras en 0° y 120°, giro
+libre sin topes, la pared interior se ve como en el polígono (ADR-025 pt.11
+re-rectificado + ADR-026; los topes de banda [-60°,60°]/[-60°,180°] se
+probaron y retiraron). Sobre
 el virgen: **casco configurable** (Color / Imagen / Degradado / **Vídeo**, con sus
 claves en `package/contents/config/main.xml`) y un **KCM genérico con UI
 dinámica** (combo de modo + páginas apiladas vía `<connections>`, sin C++). El

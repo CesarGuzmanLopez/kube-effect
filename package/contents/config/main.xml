@@ -144,14 +144,18 @@
         <entry name="DebugOverlay" type="Bool">
             <default>false</default>
         </entry>
-        <!-- Shape (ADR-025): Polygon = flat faces on an N-gon; Cylinder = the
-             same faces as arcs on a cylinder (drum R = N(W+g)/2pi, theta =
-             W/R, 64 segments). With 1-2 desktops no drum can close: Polygon
-             keeps the flat sheet (ADR-024) and Cylinder bends it into fixed
-             120-degree arcs (R = 3W/2pi, turn ranges [-60,60] with one and
-             [-60,180] with two). Stored as the integer index in kwinrc.
-             Appended last: the convention for new entries, so the stored
-             indexes of existing keys never move. -->
+        <!-- Shape (ADR-025/ADR-026): Polygon = flat faces on an N-gon;
+             Cylinder = the same faces as arcs on a cylinder (drum
+             R = N(W+g)/2pi, theta = W/R, 64 segments). With 1-2 desktops
+             Polygon keeps the flat sheet (ADR-024); Cylinder shows the
+             drum with THREE slots — R = 3(W+g)/2pi with the user gap,
+             faces at azimuths 0 and 120, the slots without a desktop
+             empty (the hull shows through) and the turn range open,
+             exactly like the closed drum (the capped [-60,60]/[-60,180]
+             band was tried and retired by the user). Stored as the
+             integer index in kwinrc. Appended last: the convention for
+             new entries, so the stored indexes of existing keys never
+             move. -->
         <entry name="Shape" type="Enum">
             <default>Polygon</default>
             <choices>
