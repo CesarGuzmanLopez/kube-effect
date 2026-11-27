@@ -14,6 +14,13 @@ validate it in Python. What they had in common lives here, once:
     sink that keeps only the QML errors that break a run.
   * boot_qml(): offscreen engine start + QML load + component create, with
     the shared failure prints parameterised by the label.
+  * view_boot(): the RENDER boot the grab gates share (check-cylinder-overlap
+    and check-cap-overlap): warm-up load with no Python message handler (a
+    handler from the first load deadlocks the QML type-loader thread against
+    the GIL), then qInstallMessageHandler, then the real QQuickView; returns
+    (view, error-list) so the caller only adds its scenario logic.
+  * pump(): processEvents-until-deadline, the one wait helper every grab
+    gate needs after writing QML properties.
   * read_mesh() (+ to_xyz/to_xy): reading positions/normals/uv0s back from a
     ProceduralMesh; the indexes arrive as a JSON string (QList<uint> has no
     Python converter, see the check-*.qml harnesses).
@@ -31,6 +38,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Only these signatures fail a render scenario (the check-constants.py list,
+# mirrored by check-video-dome.py): other qWarnings are legitimate Qt chatter
+# (shader backend, vsync, ...) and must NOT break a gate.
+QML_ERROR_SIGNATURES = ("TypeError", "ReferenceError", "is not defined")
 
 messages: list[str] = []
 
@@ -115,6 +127,77 @@ def boot_qml(label, qml_file):
         print(f"{label}: FAIL could not create the harness")
         return application, engine, component, None, 1
     return application, engine, component, harness, None
+
+
+def view_boot(label, engine, qml_file, size, error_signatures=QML_ERROR_SIGNATURES):
+    """Render boot shared by the grab gates (QQuickView, real platform).
+
+    The warm-up load runs BEFORE any Python message handler is installed: a
+    handler from the first load deadlocks the QML type-loader thread against
+    the GIL (measured in check-video-dome.py: 12 s hang inside
+    QQmlTypeLoader::getType). With every type cached, the handler below only
+    ever runs on the main thread and collects the failing signatures.
+
+    Returns (view, errors) — view is None on a warm-up or engine failure
+    (the message is printed with `label`, the caller maps it to its exit
+    code); errors is the live list the caller checks before each verdict.
+    The caller keeps the view alive; the view is shown and pumped once
+    before being returned, ready for property writes + pump() + grab.
+    """
+    from PySide6.QtCore import QUrl, qInstallMessageHandler
+    from PySide6.QtQuick import QQuickView
+
+    url = QUrl.fromLocalFile(str(qml_file))
+
+    warm = QQuickView(engine, None)
+    warm.setSource(url)
+    if warm.status() != QQuickView.Status.Ready:
+        print(f"{label}: FAIL (warm-up)")
+        for error in warm.errors():
+            print(f" - {error.toString()}")
+        return None, []
+    warm.destroy()
+
+    errors: list[str] = []
+
+    def forward_qml_warnings(_mode, _context, message):
+        if any(signature in message for signature in error_signatures):
+            errors.append(message)
+
+    qInstallMessageHandler(forward_qml_warnings)
+
+    view = QQuickView(engine, None)
+    view.resize(*size)
+    view.setSource(url)
+    if view.status() != QQuickView.Status.Ready:
+        print(f"{label}: FAIL (engine)")
+        for error in view.errors():
+            print(f" - {error.toString()}")
+        return None, errors
+    view.show()
+    # First frame: the scene graph needs a few loop passes before the
+    # Texture.sourceItem grabs (faces, caps) hold real pixels.
+    pump(1.5)
+    return view, errors
+
+
+def pump(seconds):
+    """Drive the event loop for a bounded wall-clock stretch.
+
+    After a property write the QML bindings, the Loader activation and the
+    Texture.sourceItem re-grab need loop passes before the next grabWindow()
+    shows the new frame; a busy wait without processEvents starves them (the
+    same deadline loop check-cap.py uses for its asynchronous Image).
+    """
+    import time
+
+    from PySide6.QtGui import QGuiApplication
+
+    application = QGuiApplication.instance()
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        application.processEvents()
+        time.sleep(0.005)
 
 
 def to_xyz(value):

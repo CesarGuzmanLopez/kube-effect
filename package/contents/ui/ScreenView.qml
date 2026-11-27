@@ -574,6 +574,11 @@ Item {
             // user asking for it.
             capTop: effect.configuration.CapTop
             capBottom: effect.configuration.CapBottom
+            // With the overlay on, the caps force the Arrow marker whatever
+            // CapContent says (ADR-027 amendment 2, see Cube.qml): the same
+            // flag that already exposes yaw/pitch/d/v becomes the diagnostic
+            // for rotation and mirroring.
+            debugOverlay: effect.configuration.DebugOverlay === true
             capContent: effect.configuration.CapContent
             capColor: effect.configuration.CapColor
             capColor2: effect.configuration.CapColor2

@@ -1118,3 +1118,182 @@ vértices.
 comportamiento visual del disco sobre el tambor de 3 slots (cuñas vacías tapadas
 por el disco); sin métricas previas — se fijan en el anidado.
 
+### Enmienda (2026-11-27) — la tapa se acota a las ESQUINAS de cara, no a la intersección de planos
+
+**Qué se rompió**: el N-gono inscrito de arriba usa `rc = apotema / cos(π/N)`,
+que es la distancia a la **intersección de los planos** de dos caras consecutivas.
+Eso coincide con la esquina de cara solo mientras las caras se tocan
+(`CubeFaceDisplacement = 0`). Con separación positiva el ancho de cara W manda, y
+la tapa sacaba puntas tangenciales fuera de la esquina (medido con W = 2560, la
+protrusión `rc·sin(π/N) − W/2`):
+
+| N | d | rc | lateral del vértice | sobresale |
+| - | - | -- | ------------------- | --------- |
+| 3 | 0 | 1478.0 | 1280.0 | 0.0 px |
+| 3 | 100 | 1678.0 | 1453.2 | **+173.2 px (6.8 % de W)** |
+| 3 | 300 | 2078.0 | 1799.6 | **+519.6 px (20.3 % de W)** |
+| 4 | 100 | 1951.6 | 1380.0 | **+100.0 px** |
+| 5 | 100 | 2301.3 | 1352.7 | **+72.7 px** |
+
+El gate de la época (check-cap: punto medio del lado contra plano + rejilla de
+azimut + rejilla de la hoja) no podía verlo: los vértices bugeados caen EXACTAMENTE
+sobre dos planos de cara; lo que cruzan es la **esquina**. Captura real del usuario
+en el anidado: overlay `shape=poly n=3 tick=120 d=395` con puntas visibles. La tapa
+inferior es la misma malla rotada 180°, fallaba igual.
+
+**Qué se decide**: el anillo va a las **esquinas reales de cada cara**. Los vértices
+por cara k (azimut `step·k`, `step = 2π/N`) son el punto local `(apotema, ±W/2)`
+→ radio `rho = hypot(apotema, W/2)`, azimuts `step·k ± betaCara` con
+`betaCara = atan((W/2)/apotema)`, y el hueco entre caras se cierra con una
+**cuerda recta** (esquina derecha de k → izquierda de k+1). Dos **ramas
+explícitas**, no un clamp único:
+
+- `betaCara ≥ halfStep − 1e-9` ⟺ d ≤ 0 → **N-gono inscrito** (N vértices a
+  `apotema/cos(π/N)`), el de siempre.
+- `betaCara < halfStep − 1e-9` ⟺ d > 0 → **2N vértices** a `hypot`.
+
+La banda de 1e-9 rad colapsa el caso d = 0 (y su jitter de un ulp, medido a N = 4:
+`atan(1280/1280.0000000000002)` cae por debajo de π/4) sobre el N-gono: un solo
+vértice donde las dos esquinas coinciden, sin triángulos astilla. Las ramas
+coinciden exactamente en d = 0 (`hypot(a₀, W/2) = a₀/cos(π/N)`; diferencia medida
+≤ 2.3e-13 px), así que cruzar el cero del slider no produce salto, y con d < 0 la
+tapa es el N-gono virgen: **cero regresión** en el rango ADR-022.
+
+**Por qué no basta `beta = min(betaCara, halfStep)`**: con d < 0 esa regla deja el
+vértice en el azimut de la intersección de planos pero con el radio de esquina — y
+sale **fuera del plano de cara** (medido n=3 d=-200, W=2560: proyección 694.4 vs
+apotema 539.0; la tapa asomaría por las paredes, el fallo opuesto al que se
+arregla). La ramificación explícita elige también el **radio** (rc vs rho), no solo
+el azimut; el clamp puro solo puede elegir una de las dos cosas y se queda sin
+contrato con caras solapadas.
+
+**Invariante dura (nuevo contrato del gate)**: ningún vértice del anillo puede quedar
+fuera del plano de ninguna cara — `max over (v,k) de dot(v, n_k) ≤ apotema + eps` —
+y ningún vértice sobre un plano de cara puede cruzar la esquina de esa cara —
+`|dot(v, t_k)| ≤ W/2 + eps`. Ambas, **por cara y en el marco local de la cara**
+(`n_k = (sin step·k, cos step·k)`, `t_k = (cos step·k, −sin step·k)`), nunca contra
+un máximo global de coordenadas: el anillo correcto con n=3 d=300 tiene
+`max |x| = 1539.8 > W/2 = 1280) porque las esquinas de las caras laterales caen
+fuera del eje X del mundo (una aserción global daría falso rojo sobre la malla
+buena). Los lados de hueco cumplen además `dot(mid, n_k) < apotema` por identidad
+(`= apotema − d·sin²(π/N)`, medido −150 px a n=4 d=300): la tapa sella las caras,
+**no** los huecos — el casco sigue viéndose a través de ellos.
+
+**Consecuencias de código**: `capPolygonGeometry` pasa a firma
+`(apotem, faceWidth, sides, halfHeight)` — `faceWidth` era la entrada que faltaba
+(sin ella la tapa solo podía guiarse por los planos). El generador se traslada de
+`constants.js` a un módulo propio, `package/contents/ui/capGeometry.js`
+(`capPolygonGeometry` + `capDiscGeometry`; constants.js venía ya pasado de presupuesto
+de líneas y el anillo es una responsabilidad única). `CapMesh.qml` expone
+`property real faceWidth` y `Cube.qml` lo enlaza con
+`item.faceWidth = Qt.binding(() => cube.faceSize.width)` — el grafo de bindings de la
+tapa sigue leyendo solo geometría existente (nunca `viewRadius`), ACíclico como exige
+ADR-026b. `capDiscGeometry` NO cambia (el disco no tiene esquinas de cara que cruzar:
+R ya es la fuente única). No hay claves nuevas: `faceDistance`, `geometryCount` y
+`faceSize` ya existían; sin bump de versión (0.0.0.5 no publicado).
+
+**Gate (scripts/check-cap.py/.qml, extendido)**: contrato bidireccional por régimen
+(N-gono con d ≤ 0 colapsado y verificado; 2N esquinas exactas ±W/2 con d > 0 más
+cuerdas de hueco dentro del plano), la aserción anti-punta `|tangencial| ≤ W/2` y la
+invariante de prisma, sobre las dos mallas REALES (esquinas a n=4 d=100 e inscrita a
+n=5 con el mismo apotema) más la degenerate `faceWidth = 0`. `--selftest`: 17
+detecciones (las 8 mutaciones clásicas + 3 regresiones del bug del usuario: anillo
+pre-fix bajo d > 0, esquina deslizada más allá de W/2 manteniendo plano/normales/UVs
+coherentes, y vértice fuera del plano) + 4 sondas de aislamiento que mantienen cada
+rama de `_edge_problems` y ambas aserciones nuevas independientemente matables.
+
+
+### Enmienda 2 (2026-11-27) — el eje de giro de la tapa inferior era WRONG; el material sigue la regla ADR-026; Arrow (3) es el contenido por defecto
+
+**Qué reportó el usuario** (anidado 1600×900, overlay
+`shape=poly n=3 tick=120.0 d=472 v=472 pitch=30.0 yaw=154.3`, ambas tapas,
+contenido Color azul, opacidad 80): la tapa «se dibuja por encima de las caras y
+ventanas, cruzando el sólido», «no tapa el hueco», y la pista decisiva: *«el
+error pareciera que está 180° volteado»*.
+
+**La premisa del descarte inicial era falsa (refutada con píxeles).** Se había
+argumentado que `eulerRotation.x: 180` «manda α → −α» y que el conjunto de
+azimuts del anillo es invariante bajo ese mapa, concluyendo que la tapa
+inferior no podía estar girada. Las dos mitades eran ciertas; la unión, no:
+**la rotación 180° sobre X manda (x,z) → (x,−z), es decir azimut α → 180°−α,
+que NO es simetría del anillo de esquinas** `{59.47°, 60.53°, 179.47°, 180.53°,
+299.47°, 300.53°}` (las aristas largas abrazan las NORMALES de cara
+{0°,120°,240°}, las cuerdas cortas los HUECOS {60°,180°,300°}). Aplicar
+α→180°−α equivale a **girar el anillo 60° = medio tick**, y el gate
+`scripts/check-cap-overlap.py`, renderizando el `Cube.qml` REAL con la
+geometría exacta de la captura, lo midió:
+
+- la tapa inferior rotada con X (v3) y la MISMA malla sin rotar (v4) daban
+  siluetas DISTINTAS: mirror-symdiff de 78 a 220 celdas por escena (p. ej.
+  [−30/0]: v3 `cross=64 caplost=112 gapopen=2 outside=106` frente a v4 todo
+  ceros). El dump ASCII mostraba el anillo espejado clavado en la cara roja
+  frontal — literalmente «cruzando el sólido»;
+- geométricamente: los vértices del anillo espejado alcanzan
+  ρ·cos(0.53°) = 928.4 sobre la normal de cara cuyo plano está a 471.9 → la
+  tapa asomaba por las paredes (queja 1); y en el azimut del hueco (60°) la
+  frontera espejada caía a 472 en vez de 928 → la esquina quedaba abierta
+  (queja 2). Ninguna de las dos era un problema de orden de pintado;
+- el mapa que vuelca la normal +Y → −Y **y** preserva el anillo es la
+  rotación 180° sobre **Z**: (x,z) → (−x,z), α → −α (la simetría real). Con
+  `eulerRotation.z: 180` el mirror-symdiff v3-vs-v4 pasó a **0 celdas en las
+  14 filas** del barrido ±30 × 7 yaws y todos los contadores a cero.
+  La intuición del usuario («180° volteado») era exacta: el anillo estaba
+  girado medio tick.
+
+**Segundo hallazgo (régimen de material).** `Cap.qml` fijaba
+`alphaMode: Blend` siempre; el snapshot del motor midió `mask=False` también a
+`CapOpacity` 100 (evidencia estructural). Se extiende a las tapas la regla de
+ADR-026: **`Mask` con `alphaCutoff: 0.5` explícito desde ≥ 0.99** (los
+fragmentos conservados escriben profundidad: un empate de sort ya no puede
+pintar una tapa lejana sobre una cara cercana) y **`Blend` por debajo** (el
+default 80 sigue siendo translúcido real). NO `Opaque`/`SetToOpaque`:
+pintarían de negro los agujeros de alfa (medido en ADR-026). Nota honesta:
+el barrido por software NO reprodujo ningún cruce causado por el orden de
+pintado — todos los cruces venían del anillo mal girado; el cambio de régimen
+se aplica por contrato (en GPU real el pase transparente solo tiene el sort
+de centroides como guardaraíles) y el gate lo fija estructuralmente.
+
+**Tercera decisión: `CapContent.Arrow` (índice 3) como DEFAULT definitivo.**
+Petición del usuario: «pon por default una imagen con una flecha que apunte
+arriba para que puedas identificar la rotación que tiene». Un color uniforme
+no permite leer rotación ni espejo —no se distingue «la tapa está girada» de
+«la tapa se pinta encima», la confusión que retrasó este diagnóstico—, y un
+marcador asimétrico lo hace visible a simple vista Y medible con píxeles.
+Design (sin asset binario, regla de AGENTS.md): `CapArrow.qml` (el único
+fichero de tapas que importa `QtQuick.Shapes`, cargado tras `Loader` — patrón
+HullRadial ADR-022) pinta fondo `CapColor`, **flecha cian** (#00ffff) hacia el
+borde superior del ítem y **cuadrante magenta** (#ff00ff) en la esquina
+superior-izquierda. El cuadrante existe porque la flecha sola es simétrica
+izquierda-derecha: un espejo podría leerse como giro; el cuadrante rompe esa
+ambigüedad (el espejo lo mueve de lado x, un giro lo llevaría a otra esquina).
+Sin Shapes: la tapa degrada a `CapColor` plano y avisa UNA vez
+(`surfaceDegraded`). `Arrow` se AÑADE AL FINAL del enum (los índices
+guardados no se mueven); kwinrc existentes conservan su entero; valores
+desconocidos siguen cayendo a Color. Con `DebugOverlay` activo el contenido
+se fuerza a Arrow cualquiera que sea el valor guardado.
+
+**Convención de «arriba» (MEDIDA contra el mesh real, no asumida).** La UV
+de la malla es `u = 0.5 + x/(2ρ)`, `v = 0.5 + z/(2ρ)` sobre el cuadrado del
+ítem grabado. El PNG asimétrico y la tabla `arrow-*` del gate fijaron el
+mapeo: **borde superior del ítem ↔ v → 1 ↔ +z local**, es decir el azimut de
+la cara 0 (el escritorio 1): la flecha de ambas tapas apunta SIEMPRE hacia la
+cara del escritorio 1, y al girar el sólido se ve girar con él; en reposo con
+la vista lejana (cámara ligeramente por encima) se lee «hacia el frente».
+El flip Z de la tapa inferior conserva v (la flecha sigue apuntando al mismo
+azimut) y espeja u: números medidos en [−30/0], cuadrante bottom=(534.2,
+272.5) vs loose=(265.8, 272.5) — misma fila (Δy = 0.0), x espejada alrededor
+del eje de la flecha (|Σx − 2·400| = 0.6 px) — y el par entre cámaras
+top@+30=(266.5, 175.6) vs bottom@−30=(534.2, 272.5): Σx = 800.7 y Σy = 448.1
+(los dos espejos de pantalla, Δ ≤ 1.7 px). El contenido (Image) de la tapa
+inferior sale, por tanto, **espejado horizontalmente** — consecuencia
+direc­ta del flip de anillo correcto, visible por diseño gracias al cuadrante.
+
+**Puertas.** Gate nuevo `scripts/check-cap-overlap.py/.qml` enganchado a
+`make check` (arranque compartido vía `qml_check_harness.view_boot`; oráculo
+geométrico puro en Python; `--selftest` exige rechazar 5 escenas sintéticas
+trucadas —cap bleed, paint outside, hole open, face wins, y la identidad de
+espejo del propio oráculo— y quedar mudo en la limpia). Contrato de material
+(Mask/Blend por umbral con cutoff clavado) y de wiring (nodos ±H/2, rz=180)
+leídos en vivo del motor. `check-cap.qml` pasa sus Modelos de muestra a Z.
+Tapas apagadas (default del usuario) → render idéntico a 0.0.0.4 (contrato
+intacto); sin claves nuevas; sin bump de versión (0.0.0.5 no publicado).

@@ -10,17 +10,25 @@ import "../package/contents/ui"
 import "../package/contents/ui/constants.js" as Constants
 
 // Runs inside scripts/check-cap.py (offscreen QML engine, no window, no
-// KWin). It exposes the real ProceduralMesh data for both cap shapes — the
-// inscribed polygon (drum off) and the disc (drum on) — plus the two Models
-// that share ONE mesh the way Cube's top/bottom caps do, so the Python side
-// validates vertex data exactly as the renderer would read it.
+// KWin). It exposes the real ProceduralMesh data for both cap shapes and,
+// for the polygon, for BOTH ADR-027 regimes: the face-corner ring with gap
+// chords (displacement > 0, the case that used to poke) and the inscribed
+// N-gon (the same apothem below the no-displacement apothem of 5 sides),
+// plus the disc (drum on) — and the two Models that share ONE mesh the way
+// Cube's top/bottom caps do, so the Python side validates vertex data
+// exactly as the renderer would read it.
 Item {
     id: root
 
     // A 4-desktop screen: geometryCount = 4, faceDistance = W/2/tan(pi/4)
-    // + g (the polygon apothem plus the user's displacement, the value the
-    // cap must inscribe) and R = 4(W+g)/2pi for the drum.
+    // + g (the polygon apothem plus the user's displacement) and
+    // R = 4(W+g)/2pi for the drum. With g = 100 the apothem 1380 EXCEEDS
+    // W/2/tan(pi/4) = 1280: this is the face-corner regime (2N vertices,
+    // ADR-027 amendment) — the exact screen state that used to poke. The
+    // inscribed side is exercised at 5 sides, where 1380 < 1761.7 =
+    // W/2/tan(pi/5) is the no-displacement apothem (d < 0).
     readonly property int sides: 4
+    readonly property int inscribedSides: 5
     readonly property real faceWidth: 2560
     readonly property real faceHeight: 1440
     readonly property real displacement: 100
@@ -29,11 +37,38 @@ Item {
     readonly property real radius: Constants.cylinderRadius(sides, faceWidth, displacement)
     readonly property int segments: Constants.CYLINDER_SEGMENTS
 
-    // Polygon cap (Shape = Polygon, 3+ desktops).
+    // Polygon cap with separated faces (Shape = Polygon, g > 0): the ring
+    // must run the FACE CORNERS (2N vertices) closed by straight chords.
     CapMesh {
         id: polygonCap
         sides: root.sides
         apothem: root.apothem
+        faceWidth: root.faceWidth
+        radius: root.radius
+        halfHeight: root.halfHeight
+        useDisc: false
+    }
+
+    // Polygon cap at 5 sides with the same apothem: the displacement is
+    // effectively negative (1380 < 1761.7), so the ring must collapse to
+    // the inscribed N-gon (N vertices) — the untouched look of the cube.
+    CapMesh {
+        id: inscribedCap
+        sides: root.inscribedSides
+        apothem: root.apothem
+        faceWidth: root.faceWidth
+        radius: root.radius
+        halfHeight: root.halfHeight
+        useDisc: false
+    }
+
+    // faceWidth 0 is degenerate for the polygon branch (a face of no width
+    // has no corners to seal): empty arrays, never a plane of tips.
+    CapMesh {
+        id: zeroWidthCap
+        sides: root.sides
+        apothem: root.apothem
+        faceWidth: 0
         radius: root.radius
         halfHeight: root.halfHeight
         useDisc: false
@@ -56,6 +91,7 @@ Item {
         id: brokenCap
         sides: 2
         apothem: -5
+        faceWidth: root.faceWidth
         radius: 0
         halfHeight: 0
         useDisc: false
@@ -87,7 +123,7 @@ Item {
         source: ""
         geometry: polygonCap.mesh
         position: Qt.vector3d(0, -root.halfHeight, 0)
-        eulerRotation.x: 180
+        eulerRotation.z: 180
         materials: DefaultMaterial {
             lighting: DefaultMaterial.NoLighting
             cullMode: Material.NoCulling
@@ -95,6 +131,7 @@ Item {
     }
 
     readonly property QtObject polygonMesh: polygonCap.mesh
+    readonly property QtObject inscribedMesh: inscribedCap.mesh
     readonly property QtObject discMesh: discCap.mesh
     readonly property QtObject brokenMesh: brokenCap.mesh
     readonly property QtObject brokenDiscMesh: brokenDisc.mesh
@@ -104,10 +141,11 @@ Item {
     readonly property bool modelsHaveSourceCleared: String(topCapModel.source).length === 0 && String(bottomCapModel.source).length === 0
     readonly property int brokenVertexCount: brokenCap.mesh.positions.length
     readonly property int brokenDiscVertexCount: brokenDisc.mesh.positions.length
+    readonly property int zeroWidthVertexCount: zeroWidthCap.mesh.positions.length
 
     // The real Cap component (Model + PrincipledMaterial + 2D surface): the
     // same two Models Cube.qml places at y = +/- halfHeight, one rotated 180
-    // deg (ADR-027). Instantiating them here catches a broken import, a bad
+    // about Z (ADR-027). Instantiating them here catches a broken import, a bad
     // material property or a dead HullGradient binding in this gate, and the
     // image fallback signal is exercised: content Image with an empty source
     // must report ONCE (callLater absorbs the same-pass binding order), the
@@ -126,7 +164,7 @@ Item {
         mesh: root.polygonMesh
         content: Constants.CapContent.Gradient
         position: Qt.vector3d(0, -root.halfHeight, 0)
-        eulerRotation.x: 180
+        eulerRotation.z: 180
         onImageUnavailable: root.unavailableReports += 1
     }
     readonly property bool capsShareGeometry: capTopInstance.geometry === capBottomInstance.geometry && capTopInstance.geometry === polygonCap.mesh
@@ -144,6 +182,7 @@ Item {
     }
 
     readonly property string polygonIndexes: indexCopy(polygonCap.mesh)
+    readonly property string inscribedIndexes: indexCopy(inscribedCap.mesh)
     readonly property string discIndexes: indexCopy(discCap.mesh)
 
     // The enum value arrives as an unconvertible Proxy in PySide6; compare

@@ -242,6 +242,12 @@ Node {
     property bool capTop: false
     property bool capBottom: false
     property int capContent: Constants.CapContent.Color
+    // The overlay is the project's diagnostic switch (ADR-023); with it on,
+    // the caps PAINT THE ARROW MARKER whatever CapContent says (ADR-027
+    // amendment 2): rotation/mirror becomes readable in the nested test
+    // without touching the user's stored value, and the pixel gate can
+    // measure the marker centroids of both caps.
+    property bool debugOverlay: false
     property color capColor: "#1b3fd8"
     property color capColor2: "#0a1a5e"
     property int capGradientType: Constants.CapGradientType.LinearVertical
@@ -250,8 +256,9 @@ Node {
     property int capImageFit: Constants.CapImageFit.Cover
     property int capOpacity: 80
     // Resolved once here so both caps (and the debug paths later) share one
-    // interpretation of the stored values.
-    readonly property int capContentType: Constants.capContent(capContent)
+    // interpretation of the stored values. DebugOverlay overrides the
+    // content with the Arrow marker (see the debugOverlay property).
+    readonly property int capContentType: debugOverlay ? Constants.CapContent.Arrow : Constants.capContent(capContent)
     readonly property int capGradientTypeResolved: Constants.capGradientType(capGradientType)
     readonly property int capImageFitResolved: Constants.capImageFit(capImageFit)
     readonly property string capImageSource: Constants.capImageSource(capImage)
@@ -289,6 +296,11 @@ Node {
             // can resize, while the caps are open.
             item.sides = Qt.binding(() => cube.geometryCount);
             item.apothem = Qt.binding(() => cube.faceDistance);
+            // The face width is what keeps the polygon ring on the face
+            // corners instead of the plane intersections (ADR-027
+            // amendment): reads faceSize only, never viewRadius, so the
+            // binding graph stays acyclic (ADR-026b).
+            item.faceWidth = Qt.binding(() => cube.faceSize.width);
             item.radius = Qt.binding(() => cube.cylinderRadius);
             item.halfHeight = Qt.binding(() => cube.faceSize.height / 2);
             item.useDisc = Qt.binding(() => cube.cylinderActive);
@@ -316,6 +328,7 @@ Node {
         imageFit: cube.capImageFitResolved
         opacityValue: cube.capOpacityValue
         onImageUnavailable: cube.reportCapImageFailure(reason)
+        onSurfaceDegraded: cube.reportCapImageFailure(reason)
     }
     Cap {
         id: capBottomModel
@@ -325,7 +338,21 @@ Node {
         // Rotation of the SAME node content: +Y normal becomes -Y, and the
         // mesh (flat, y = 0 around its origin) lands in the plane y = 0 of
         // this node — the position above already carries the half-height.
-        eulerRotation.x: 180
+        // THE AXIS IS Z, NOT X (ADR-027 overlap fix, measured with pixels in
+        // scripts/check-cap-overlap.py): a 180 deg turn about X maps the
+        // ring's local (x, z) to (x, -z), i.e. azimuth a -> 180 - a, which
+        // is NOT a symmetry of the face-corner ring — it rotates the whole
+        // ring by half a tick (60 deg at N = 3). The mis-rotated ring then
+        // reaches 928 along the face normal (wall at 472: the cap pierces
+        // the faces) and its border at a GAP azimuth drops to 472 instead
+        // of 928 (the gap opens). Only 180 deg about Z flips the normal AND
+        // preserves the ring: it maps (x, z) -> (-x, z), azimuth a -> -a,
+        // the ring's real mirror symmetry (corner pairs straddle the face
+        // normals, gap chords straddle the face-gap azimuths). Side effect
+        // on the content: the grab is mirrored horizontally (u -> 1 - u)
+        // instead of vertically; the asymmetric Arrow marker makes that
+        // visible and is what the gate's mirror probe measures.
+        eulerRotation.z: 180
         content: cube.capContentType
         color1: cube.capColor
         color2: cube.capColor2
@@ -335,6 +362,7 @@ Node {
         imageFit: cube.capImageFitResolved
         opacityValue: cube.capOpacityValue
         onImageUnavailable: cube.reportCapImageFailure(reason)
+        onSurfaceDegraded: cube.reportCapImageFailure(reason)
     }
     // Culling: NoCulling ALWAYS, every shape (ADR-025 point 12, reverted
     // by the user; ADR-026 keeps the rule): the mirrored inner wall of the

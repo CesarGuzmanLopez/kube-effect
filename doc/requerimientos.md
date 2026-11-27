@@ -305,7 +305,7 @@ lateral: entre las caras sigue viéndose el casco (ADR-003 intacto en eso).
 | ----------------- | ----- | ---------------------------------------------- | ---------- | ------------------------------------------------------------------- |
 | `CapTop`          | Bool  | —                                              | false      | Habilita la tapa superior                                           |
 | `CapBottom`       | Bool  | —                                              | false      | Habilita la tapa inferior                                           |
-| `CapContent`      | Enum  | Color 0 / Gradient 1 / Image 2                 | 0          | Qué pinta la tapa (color sólido, degradado o imagen)                |
+| `CapContent`      | Enum  | Color 0 / Gradient 1 / Image 2 / Arrow 3         | **3**      | Qué pinta la tapa: color, degradado, imagen o marcador de orientación (flecha cian + cuadrante magenta; ver abajo) |
 | `CapColor`        | Color | —                                              | `#1b3fd8`  | Color sólido (y respaldo cuando la imagen falla)                    |
 | `CapColor2`       | Color | —                                              | `#0a1a5e`  | Segundo color del degradado                                         |
 | `CapGradientType` | Enum  | LinearVertical 0 / LinearHorizontal 1 / Radial 2 | 0         | Tipo de degradado                                                   |
@@ -316,13 +316,32 @@ lateral: entre las caras sigue viéndose el casco (ADR-003 intacto en eso).
 
 Geometría por forma (una sola malla compartida, ver abajo):
 
-- **Polígono** (3+ escritorios): la tapa es un **N-gono regular** con
-  N = `geometryCount` (= max(3, nº escritorios)) cuyo **apotema es la
-  distancia de cara ya calculada** (`faceDistance` = `W/2 / tan(π/N) +
-  CubeFaceDisplacement`). Así cada lado de la tapa cae sobre el plano de una
-  cara: la tapa queda **inscrita** en el prisma y no sobresale de las paredes.
-  El radio circunscrito es `apotema / cos(π/N)`, **derivado** — nunca una
-  segunda fuente de verdad.
+- **Polígono** (3+ escritorios): la tapa se acota a las **esquinas de cara**,
+  no a la intersección de los planos (ADR-027 enmendado). Con N =
+  `geometryCount` (= max(3, nº escritorios)) y apotema = `faceDistance`
+  (`W/2 / tan(π/N) + CubeFaceDisplacement`), la regla tiene **dos ramas
+  continuas en d = 0** (`betaCara = atan((W/2)/apotema)`, `halfStep = π/N`):
+
+  - `d ≤ 0` (`betaCara ≥ halfStep`, tolerancia 1e-9 rad): las caras se
+    tocan o solapan y la tapa es el **N-gono inscrito de siempre** (N
+    vértices a `apotema / cos(π/N)`, cada lado sobre el plano de una cara).
+    Cero regresión del look virgen.
+  - `d > 0` (`betaCara < halfStep`): las caras están separadas; 2N
+    vértices en las **esquinas reales de cada cara** (`rho = hypot(apotema,
+    W/2)`, azimuts `step·k ± betaCara`). Cada cara queda cubierta de canto
+    a canto (`|tangencial| = W/2` EXACTO) y el hueco entre caras se cierra
+    con una **cuerda recta** entre la esquina derecha de una cara y la
+    izquierda de la siguiente — cuerda que queda POR DENTRO de los planos
+    (`apotema − d·sin²(π/N)`), así que el casco sigue viéndose a través del
+    hueco: la tapa sella las caras, no los agujeros.
+
+  Invariantes duras (medidas por `scripts/check-cap.py`, evaluadas **por
+  cara en el marco local de esa cara**, nunca contra ejes del mundo): ningún
+  vértice asoma por fuera del plano de ninguna cara (`dot(v, n_k) ≤
+  apotema`) y ninguno cruza la esquina de la cara sobre la que está
+  (`|dot(v, t_k)| ≤ W/2`). La fórmula antigua (solo el N-gono
+  `apotema/cos(π/N)` a cualquier d) sacaba puntas tangenciales de hasta
+  +519.6 px (n=3, d=300, W=2560) — ver la enmienda en el ADR-027.
 - **Cilindro** (tambor, a cualquier count incluido el tambor de 3 slots con
   1-2 escritorios): la tapa es un **disco** de radio `R = cylinderRadius`
   (la misma `R = N·(W+g)/2π` de ADR-025, con `g` del usuario), triangulado en
@@ -334,13 +353,41 @@ Geometría por forma (una sola malla compartida, ver abajo):
 - **Malla compartida**: UNA sola `ProceduralMesh` por forma, reutilizada por las
   dos tapas (espejadas por rotación), igual que las caras comparten
   `CylinderArcMesh` (ADR-025). Sin shader: la tapa es un polígono plano (o
-  disco) con la textura de contenido.
+  disco) con la textura de contenido. **El eje del flip es Z, no X** (ADR-027
+  enmienda 2, medido con píxeles en `scripts/check-cap-overlap.py`): la tapa
+  inferior es el mismo nodo con `eulerRotation.z: 180`, el único giro de 180°
+  que vuelca la normal +Y → −Y **y** deja el anillo invariante (manda
+  α → −α). Con `eulerRotation.x: 180` (α → 180°−α) el anillo quedaba girado
+  medio tick: los vértices llegaban a 928 sobre la normal de cara (pared a
+  472 → la tapa atravesaba las caras) y la frontera en el azimut del hueco
+  caía a 472 (no cerraba la esquina) — el bug "180° volteado" reportado.
 - **Culling / normales**: coherente con las caras → `Material.NoCulling`
   (ADR-025 punto 12 revertido): la tapa se ve igual desde arriba y desde abajo.
 - **Orden de pintado**: las tapas aportan centroides de ordenación propios en
-  Y (±H/2), así que **no** pueden tapar las caras frontales; la regla de
-  ADR-026 (centroides + `alphaMode` explícito) se extiende a ellas.
-  `alphaMode: Blend` porque el contenido de la tapa tiene alfa (transparencia).
+  Y (±H/2); la regla de ADR-026 (centroides + `alphaMode` explícito por
+  umbral) se extiende a ellas (ADR-027 enmienda 2): **`Mask` con
+  `alphaCutoff: 0.5` desde `CapOpacity` ≥ 99** (escribe profundidad: ningún
+  empate de orden puede pintar una tapa lejana sobre una cara cercana) y
+  **`Blend` por debajo** (transparencia translúcida real, ordenada por
+  centroides). Nunca `Opaque`/`SetToOpaque`: pintaría de negro los agujeros
+  de alfa (medido en ADR-026).
+- **Marcador de orientación (Arrow, default nuevo)**: una tapa de color
+  uniforme no permite leer rotación ni espejo — no se puede distinguir "la
+  tapa está girada" de "la tapa se pinta encima" — así que `CapContent`
+  cambia su default a **Arrow (3)** (añadido AL FINAL del enum: los enteros
+  guardados no se mueven; los kwinrc existentes conservan su valor). El
+  marcador (`CapArrow.qml`) dibuja sin assets: fondo `CapColor`, **flecha
+  cian** apuntando al borde superior del ítem (que según el grab medido
+  corresponde a `v → 1` = +z local, el azimut de la cara 0) y **cuadrante
+  magenta** en la esquina superior-izquierda — la flecha sola no basta porque
+  un espejo puede parecer un giro; el cuadrante los distingue (el espejo Z de
+  la tapa inferior mueve el cuadrante de lado x; un giro lo movería a otra
+  esquina). `QtQuick.Shapes` es OPCIONAL aquí también (patrón HullRadial,
+  ADR-022): `CapArrow.qml` se carga tras un `Loader`; sin el módulo la tapa
+  degrada a `CapColor` plano y avisa **una vez**. Con `DebugOverlay` activo
+  las tapas se pintan SIEMPRE en modo Arrow (diagnóstico sin tocar el valor
+  guardado). Fijado con píxeles por `scripts/check-cap-overlap.py` (tabla de
+  centroides por tapa y yaw).
 
 Transparencia y contenido:
 

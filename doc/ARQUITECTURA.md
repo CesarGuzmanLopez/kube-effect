@@ -253,45 +253,85 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
   falta, solo ese Loader queda en `Error`: `capMesh` es nulo, las dos tapas
   no se pintan y el cubo queda intacto, con un único log del motor.
 - **UNA sola malla para las dos tapas**: la geometría es un plano en y = 0
-  generado por los helpers puros de `constants.js`
-  (`capPolygonGeometry`/`capDiscGeometry`). El desplazamiento ±alto/2 lo
+  generado por los helpers puros de `capGeometry.js`
+  (`capPolygonGeometry`/`capDiscGeometry` — módulo propio desde la enmienda de
+  ADR-027; `constants.js` guarda solo los resolvedores de valor). El desplazamiento ±alto/2 lo
   lleva el NODO del Model (`Cap` superior en `y = +faceSize.height/2`,
   inferior en `y = -faceSize.height/2` con `eulerRotation.x: 180` — la
   rotación invierte la normal +Y a -Y y el winding queda consistente visto
-  desde fuera; no existe segunda malla ni copia espejada). Los centroides de ordenación
-  son distintos en Y por tapa → la regla ADR-026 se extiende a ellas:
-  no pueden tapar las caras frontales.
-- **Sin fuente paralela de geometría**: el polígono se genera con apotema =
-  `cube.faceDistance` (el N-gono queda INSCRITO: cada lado cae sobre el plano
-  de una cara; el circunradio es derivado, `apotema/cos(π/N)`), y el disco
-  con radio = `cube.cylinderRadius` (tapa también las cuñas vacías del tambor
-  de 3 slots). Con la hoja 2D (`isSheet`) las tapas se desactivan POR CÓDIGO:
+  desde fuera; no existe segunda malla ni copia espejada). **El eje del flip
+  es Z** (ADR-027 enmienda 2, medido con píxeles por
+  `scripts/check-cap-overlap.py`): solo la rotación 180° sobre Z vuelca la
+  normal (+Y → −Y) MANTIENIENDO el anillo (manda azimut α → −α, la simetría
+  real del anillo de esquinas); sobre X mandaría α → 180°−α y giraría el
+  anillo medio tick — los vértices asomaban 928 sobre planos de cara a 472
+  (la tapa "cruzaba el sólido") y la frontera del hueco caía de 928 a 472
+  (no cerraba). Consecuencia visible: el grab de la tapa inferior queda
+  espejado en u (el cuadrante del marcador cambia de lado x; la flecha,
+  simétrica, no). Los centroides de ordenación son distintos en Y por tapa →
+  la regla ADR-026 se extiende a ellas, con el `alphaMode` por umbral de
+  opacidad que se describe justo abajo.
+- **Sin fuente paralela de geometría** (enmienda ADR-027): el polígono se
+  genera con apotema = `cube.faceDistance` y ancho = `cube.faceSize.width`
+  (enlazado por el Loader como `item.faceWidth`, sin leer `viewRadius`): con
+  separación nula o negativa la tapa es el N-gono INSCRITO de siempre (N
+  vértices, circunradio derivado `apotema/cos(π/N)`); con separación positiva
+  el anillo va a las ESQUINAS de cara (2N vértices a `hypot(apotema, W/2)`) y
+  los huecos se cierran con cuerdas rectas por dentro de los planos — ningún
+  vértice asoma fuera del prisma ni cruza la esquina de su cara. El disco
+  sigue con radio = `cube.cylinderRadius` (tapa también las cuñas vacías del
+  tambor de 3 slots; allí R ya es la fuente única y no hay esquinas). Con la hoja 2D (`isSheet`) las tapas se desactivan POR CÓDIGO:
   el Loader ni se monta. Ninguna propiedad nueva lee `viewRadius` ni la
   cadena de la hoja, así que no reabre el ciclo ADR-026b.
 - **Contenido sin shaders**: `Cap.qml` es un `Model` con
-  `PrincipledMaterial` (`NoLighting`, `NoCulling`, `alphaMode: Blend` — el
-  contenido lleva alfa por diseño: `CapOpacity` default 80) y
+  `PrincipledMaterial` (`NoLighting`, `NoCulling` y —desde ADR-027
+  enmienda 2— `alphaMode` por umbral como `CubeFace.qml`: **Mask con
+  `alphaCutoff: 0.5` explícito cuando `opacityValue ≥ 0.99`** —los
+  fragmentos conservados escriben profundidad y un empate de centroides ya
+  no puede pintar una tapa lejana sobre una cara cercana— y **Blend por
+  debajo** —el default `CapOpacity` 80 sigue siendo translúcido de verdad—;
+  nunca Opaque: pintaría de negro los agujeros de alfa, medido en ADR-026) y
   `baseColorMap: Texture { sourceItem }` sobre un `Item` de 512×512 que pinta
   Color (`Rectangle`), Degradado —reutilizando `HullGradient.qml`, cuyo
-  radial mantiene su propio Loader opcional de `QtQuick.Shapes`— o Imagen
-  local con `CapImageFit`. Imagen rota o ausente → `CapColor` y
+  radial mantiene su propio Loader opcional de `QtQuick.Shapes`—, Imagen
+  local con `CapImageFit`, o **Arrow (el default nuevo)**:
+  `CapArrow.qml` —fondo `CapColor`, flecha cian hacia el borde superior del
+  ítem y cuadrante magenta en la esquina superior-izquierda— cargado tras su
+  propio `Loader`: sin `QtQuick.Shapes` la tapa degrada a `CapColor` plano
+  y avisa UNA vez (señal `surfaceDegraded`, patrón HullRadial ADR-022). El
+  marcador existe porque un color uniforme no distingue "tapa girada" de
+  "tapa pintada encima" (la confusión del reporte del usuario) y porque hace
+  MEDIBLE el espejo de la tapa inferior con píxeles. Con `DebugOverlay` las
+  tapas se fuerzan a Arrow cualquiera que sea el valor guardado (ADR-023: el
+  overlay es el botón de diagnóstico). Imagen rota o ausente → `CapColor` y
   `console.warn` UNA vez (señal `imageUnavailable` filtrada en `Cube` con
   `capImageWarned`; el aviso de "fuente vacía" va diferido con
   `Qt.callLater` porque content e imageSource se re-enlazan en el mismo
   pase).
 - **Config**: claves `CapTop/CapBottom/CapContent/CapColor/CapColor2/
   CapGradientType/CapGradientStop/CapImage/CapImageFit/CapOpacity` en
-  `main.xml` (Enums como entero, KConfigXT); `config.ui` las agrupa en
+  `main.xml` (Enums como entero, KConfigXT; `CapContent` = Color 0 /
+  Gradient 1 / Image 2 / **Arrow 3 — el default**, añadido al final para no
+  mover los índices guardados; los valores desconocidos siguen cayendo a
+  Color en `constants.js`); `config.ui` las agrupa en
   «Tapas (Caps)» (Appearance) con el patrón de páginas apiladas del fondo
   (`kcfg_CapContent` → `capContentStack` por `<connections>`); el grupo no se
   puede encender por "OR" de dos checkboxes en Qt Designer (la última señal
   gana), así que la ayuda escrita sustituye al gating y el efecto oculta las
   tapas si ninguna está activa.
 - **Gate**: `scripts/check-cap.py` (+ `--selftest`) instancia el
-  `CapMesh.qml` real offscreen y mide: apotema por punto medio de lado ==
-  `faceDistance`, anillo del disco == `R`, plano y = 0, normales +Y unitarias,
-  UVs centradas en [0,1], fan CCW uniforme, índices en rango, mallas vacías
-  con entradas degeneradas y los dos `Cap` compartiendo la MISMA geometría.
+  `CapMesh.qml` real offscreen y mide, por cara y en su marco local: invariante
+  de prisma (ningún vértice del anillo proyecta más allá de `faceDistance`
+  sobre la normal de NINGUNA cara), cota de esquina (`|tangencial| ≤ W/2`),
+  régimen d ≤ 0 colapsado a N-gono (N vértices, apotema por punto medio de
+  lado == `faceDistance`, azimut en rejilla) y régimen d > 0 con lados de cara
+  exactos ±W/2 y cuerdas de hueco por dentro del plano; anillo del disco ==
+  `R`, plano y = 0, normales +Y unitarias, UVs centradas en [0,1], fan CCW
+  uniforme, índices en rango, mallas vacías con entradas degeneradas
+  (`faceWidth = 0` incluida) y los dos `Cap` compartiendo la MISMA
+  geometría. El `--selftest` (17 detecciones, 4 sondas de aislamiento) incluye
+  la regresión del bug: esquina deslizada más allá de W/2 y vértice fuera del
+  plano, con plano/normales/UVs coherentes.
 
 ## 3. Caras: fondo de cara (wallpaper real)
 

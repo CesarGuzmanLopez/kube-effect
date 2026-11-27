@@ -789,11 +789,16 @@ function videoSource(value) {
 // without KWin or a window — exactly like the cylinder section above.
 // ---------------------------------------------------------------------------
 
-// Matches the CapContent enum in config/main.xml.
+// Matches the CapContent enum in config/main.xml. Arrow (3) was APPENDED
+// at the end (the KConfigXT index rule) and is the schema default: the
+// asymmetric marker is the only cap content that makes rotation and
+// mirroring visible to the eye and to scripts/check-cap-overlap.py
+// (ADR-027 amendment 2).
 const CapContent = {
     Color: 0,
     Gradient: 1,
-    Image: 2
+    Image: 2,
+    Arrow: 3
 };
 // Matches the CapGradientType enum in config/main.xml. Same order as
 // BackgroundGradientType by design (the cap paints through HullGradient), but
@@ -811,8 +816,9 @@ const CapImageFit = {
     Contain: 1,
     Stretch: 2
 };
-// Defaults from config/main.xml, used when the stored value is not usable
-// (the backgroundMode / imageFit / gradientStop fallback pattern).
+// Fallback for values that cannot be used: Color is the safest thing a cap
+// can paint (the schema DEFAULT of a fresh kwinrc is Arrow, an intentional
+// choice — see the CapContent comment above and main.xml).
 const DEFAULT_CAP_CONTENT = CapContent.Color;
 const DEFAULT_CAP_GRADIENT_TYPE = CapGradientType.LinearVertical;
 const DEFAULT_CAP_IMAGE_FIT = CapImageFit.Cover;
@@ -831,10 +837,11 @@ function capOpacity(value) {
     return Math.min(1, Math.max(0, percent / 100));
 }
 
-// Unknown CapContent values (a hand-edited kwinrc) fall back to the solid
-// colour — the safest thing a cap can paint.
+// Known indexes pass (Arrow since ADR-027 amendment 2); unknown values (a
+// hand-edited kwinrc) still fall back to the solid colour — the safest
+// thing a cap can paint.
 function capContent(value) {
-    if (value === CapContent.Gradient || value === CapContent.Image) {
+    if (value === CapContent.Gradient || value === CapContent.Image || value === CapContent.Arrow) {
         return value;
     }
     return DEFAULT_CAP_CONTENT;
@@ -864,113 +871,11 @@ function capImageSource(value) {
     return localSource(value, ["file", "image"]);
 }
 
-// Regular N-gon in the XZ plane (y = 0) with the APOTEM equal to `apothem`,
-// centred on the node origin: the caps close the solid at y = +/- halfHeight,
-// but that offset is the NODE's position (Cube places the top/bottom Models
-// there), so one flat mesh serves both caps — the bottom one comes from a
-// 180 deg node rotation, never from a second geometry (ADR-027). The
-// circumradius is DERIVED (apothem / cos(pi/n)): faceDistance stays the only
-// geometric source of truth, the cap cannot ever poke out of the walls.
-//
-//   n        = sides (>= 3; the polygon floor, geometryCount = max(3, faces))
-//   rc       = apothem / cos(pi / n)
-//   alpha(k) = 2*pi * (k + 0.5) / n   -> the EDGE midpoints land on azimuths
-//              k * 2*pi/n, exactly where Cube.faceAzimuth places the faces,
-//              so every edge lies on its face's plane (inscribed cap).
-//   vertex k = (rc sin alpha_k, 0, rc cos alpha_k)
-//   normal   = (0, 1, 0)               CCW seen from +Y = the top cap's
-//                                      outward side; the bottom cap flips it
-//                                      through its node rotation.
-//   uv       = (0.5 + x/(2 rc), 0.5 + z/(2 rc))   centred, always in [0,1]
-//
-// Degenerate input answers EMPTY arrays (the cylinderArcGeometry contract):
-// apothem <= 0 happens for transient states and for a hand-edited negative
-// displacement beyond the apothem (ADR-022 range), sides < 3 is not a
-// polygon, and a non-finite halfHeight means faceSize has not settled yet —
-// a half-height the node position must respect, so mid-sync renders nothing
-// instead of a floating NaN plane.
-function capPolygonGeometry(apothem, sides, halfHeight) {
-    const a = Number(apothem);
-    const rawSides = Number(sides);
-    const h = Number(halfHeight);
-    if (!isFiniteNumber(a) || a <= 0 || !isFiniteNumber(h) || h <= 0
-        || !isFiniteNumber(rawSides) || Math.floor(rawSides) < 3) {
-        return { positions: [], normals: [], uvs: [], indexes: [] };
-    }
-    const n = Math.floor(rawSides);
-    // n >= 3 keeps cos(pi/n) >= 0.5: the circumradius is finite and positive.
-    const rc = a / Math.cos(Math.PI / n);
-    const step = 2 * Math.PI / n;
-
-    const positions = [];
-    const normals = [];
-    const uvs = [];
-    const indexes = [];
-
-    // Vertex 0 is the centre; the ring runs 1..n so the fan triangles are
-    // (0, 1 + k, 1 + (k + 1) mod n) — CCW seen from +Y (cross(e1, e2) along
-    // +Y for increasing azimuth, same outward convention as the arc mesh).
-    positions.push(Qt.vector3d(0, 0, 0));
-    normals.push(Qt.vector3d(0, 1, 0));
-    uvs.push(Qt.vector2d(0.5, 0.5));
-    for (let k = 0; k < n; ++k) {
-        const alpha = step * (k + 0.5);
-        const x = rc * Math.sin(alpha);
-        const z = rc * Math.cos(alpha);
-        positions.push(Qt.vector3d(x, 0, z));
-        normals.push(Qt.vector3d(0, 1, 0));
-        uvs.push(Qt.vector2d(0.5 + x / (2 * rc), 0.5 + z / (2 * rc)));
-    }
-    for (let k = 0; k < n; ++k) {
-        indexes.push(0, 1 + k, 1 + ((k + 1) % n));
-    }
-
-    return { positions: positions, normals: normals, uvs: uvs, indexes: indexes };
-}
-
-// Disc of radius `radius` in the XZ plane (y = 0), fan-triangulated from the
-// centre: the cap of the cylinder at any count, drum or three-slot drum
-// (ADR-027: it closes the empty wedges too). Same conventions as
-// capPolygonGeometry — derived nothing (R is already the single source),
-// normals +Y, CCW seen from +Y, centred UVs, one flat mesh shared by both
-// caps through a node rotation. `segments` follows the arc mesh (64, fixed),
-// so the disc silhouette matches the drum it closes. Degenerate input
-// (radius <= 0, non-finite halfHeight, fewer than 3 segments) answers EMPTY
-// arrays, exactly like the arc generator's mid-sync rule.
-function capDiscGeometry(radius, segments, halfHeight) {
-    const r = Number(radius);
-    const rawSegments = Number(segments);
-    const h = Number(halfHeight);
-    if (!isFiniteNumber(r) || r <= 0 || !isFiniteNumber(h) || h <= 0
-        || !isFiniteNumber(rawSegments) || Math.floor(rawSegments) < 3) {
-        return { positions: [], normals: [], uvs: [], indexes: [] };
-    }
-    const s = Math.floor(rawSegments);
-    const step = 2 * Math.PI / s;
-
-    const positions = [];
-    const normals = [];
-    const uvs = [];
-    const indexes = [];
-
-    positions.push(Qt.vector3d(0, 0, 0));
-    normals.push(Qt.vector3d(0, 1, 0));
-    uvs.push(Qt.vector2d(0.5, 0.5));
-    for (let k = 0; k < s; ++k) {
-        // No half-step offset: a disc is rotationally symmetric, its ring
-        // needs no alignment with the face azimuths (unlike the polygon).
-        const x = r * Math.sin(step * k);
-        const z = r * Math.cos(step * k);
-        positions.push(Qt.vector3d(x, 0, z));
-        normals.push(Qt.vector3d(0, 1, 0));
-        uvs.push(Qt.vector2d(0.5 + x / (2 * r), 0.5 + z / (2 * r)));
-    }
-    for (let k = 0; k < s; ++k) {
-        indexes.push(0, 1 + k, 1 + ((k + 1) % s));
-    }
-
-    return { positions: positions, normals: normals, uvs: uvs, indexes: indexes };
-}
+// The cap MESH generators (capPolygonGeometry / capDiscGeometry) live in
+// capGeometry.js (ADR-027): the ring is a single responsibility of its own
+// and this module had no room left for the amendment's second branch. The
+// cap VALUE helpers above (opacity/content/gradient/fit/image) stay here —
+// they read kwinrc entries, the generators read geometry.
 
 // Shared scheme filter of backgroundImageSource/videoSource/capImageSource. A
 // bare path (no scheme) is kept only when it is absolute: a relative one would

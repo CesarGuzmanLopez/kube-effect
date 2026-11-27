@@ -600,8 +600,15 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                                     </widget>
                                                 </item>
                                                 <item row="0" column="1">
-                                                    <!-- Items in main.xml order: Color=0, Gradient=1, Image=2. -->
+                                                    <!-- Items in main.xml order: Color=0, Gradient=1,
+                                                         Image=2, Arrow=3 (appended last, ADR-027
+                                                         amendment 2). currentIndex 3 mirrors the schema
+                                                         default Arrow; KConfigDialogManager overwrites
+                                                         it with the stored kwinrc value. -->
                                                     <widget class="QComboBox" name="kcfg_CapContent">
+                                                        <property name="currentIndex">
+                                                            <number>3</number>
+                                                        </property>
                                                         <item>
                                                             <property name="text">
                                                                 <string>Color</string>
@@ -615,6 +622,11 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                                         <item>
                                                             <property name="text">
                                                                 <string>Imagen (Image)</string>
+                                                            </property>
+                                                        </item>
+                                                        <item>
+                                                            <property name="text">
+                                                                <string>Flecha (Arrow)</string>
                                                             </property>
                                                         </item>
                                                     </widget>
@@ -641,8 +653,10 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                         </item>
                                         <item>
                                             <widget class="QStackedWidget" name="capContentStack">
+                                                <!-- Page index == combo index; starts on page 3 (Arrow),
+                                                     the schema default (ADR-027 amendment 2). -->
                                                 <property name="currentIndex">
-                                                    <number>0</number>
+                                                    <number>3</number>
                                                 </property>
 
                                                 <!-- 0: Color -->
@@ -782,6 +796,22 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                                             <widget class="QLabel" name="capImageHint">
                                                                 <property name="text">
                                                                     <string>Solo archivos locales (el compositor no descarga al activarse). Si la imagen falta o falla, la tapa se pinta con el color de las tapas y se avisa una vez.</string>
+                                                                </property>
+                                                                <property name="wordWrap">
+                                                                    <bool>true</bool>
+                                                                </property>
+                                                            </widget>
+                                                        </item>
+                                                    </layout>
+                                                </widget>
+
+                                                <!-- 3: Arrow (default, ADR-027 amendment 2) -->
+                                                <widget class="QWidget" name="capArrowPage">
+                                                    <layout class="QFormLayout" name="capArrowForm">
+                                                        <item row="0" column="0" colspan="2">
+                                                            <widget class="QLabel" name="capArrowHint">
+                                                                <property name="text">
+                                                                    <string>Flecha (por defecto): cada tapa se pinta con el color de las tapas de fondo, una flecha cian y un cuadrante magenta en una esquina. El marcador es asimétrico a propósito: permite leer de un vistazo la rotación del sólido y distinguir un espejo de un giro (la tapa inferior es la misma malla girada 180° sobre Z). Sin QtQuick.Shapes la tapa degrada a color plano y avisa una vez.</string>
                                                                 </property>
                                                                 <property name="wordWrap">
                                                                     <bool>true</bool>

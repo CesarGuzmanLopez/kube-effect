@@ -409,6 +409,35 @@ en su `config.ui`.
   (el KCM nativo lanzado dentro del anidado no puede registrarse en el portal
   del host).
 
+- **Wallpaper de prueba en el anidado (2026-11-27)**: la estructura real del
+  appletsrc medida en Plasma 6.8.3 (host, solo lectura) es un bloque
+  `[Containments][N]` con `wallpaperplugin=org.kde.image` y las claves del
+  plugin en `[Containments][N][Wallpaper][org.kde.image][General]` → `Image=`
+  (URL `file://` con ruta absoluta). Trampeos:
+  * el id del plugin es `org.kde.image`, **no** `image`
+    (`ls /usr/share/plasma/wallpapers/`);
+  * la clave es `Image` (`type="String"` en
+    `/usr/share/plasma/wallpapers/org.kde.image/contents/config/main.xml`); no
+    existe `url`;
+  * **no hay claves por escritorio virtual** (`Image1`/`Desktop1` no existen):
+    Plasma 6.8.3 sigue sin admitir un wallpaper por escritorio (bug upstream
+    155150 abierto; comprobado también en el QML del plugin, que no itera
+    escritorios). El único truco conocido es por ACTIVIDADES (un containment por
+    actividad), inservible aquí: el cubo rota escritorios de UNA actividad. El
+    arnés usa un patrón direccional único
+    (`scripts/make-test-wallpaper.py`, PNG generado en la raíz privada, nunca
+    commiteado) y ventanas maximizadas `E1..EN` por escritorio
+    (`scripts/test-wallpaper-label.py`) para identificar cada cara;
+  * el containment de ESCRITORIO es el bloque con `formfactor=0` (los paneles
+    traen `formfactor=2`; medido en el host);
+  * plasmashell **no relee ediciones externas** del appletsrc en caliente: el
+    arnés lo lanza una vez (etapa 1) para que él mismo escriba su containment de
+    fábrica — nunca adivinar el `id` ni el vínculo con la actividad —, lo para,
+    parchea con `kwriteconfig6` (varios `--group` = grupos anidados; produce
+    `[Containments][N][Wallpaper][org.kde.image][General]` idéntico al del host)
+    y lo relanza (etapa 2). Validado con `kreadconfig6` (round-trip de la ruta)
+    y con `configparser` estricto de Python sobre el fichero generado.
+
 ## K. Ficha rápida de comandos
 
 ```bash
@@ -561,6 +590,36 @@ dispara transparencia (el tipo `BaseColor` se salta a propósito), así que la
 pasada la decide el umbral, no el contenido.
 
 ### ⚠️ OJO: `alphaMode: Mask` descarta alpha<cutoff y pinta el resto OPACO escribiendo profundidad
+
+### ❌ FALSO: "180° sobre X" es el espejo que deja un anillo de tapas en su sitio (ADR-027 enmienda 2)
+
+La tapa inferior se construye como "la MISMA malla girada 180°" y se documentó
+`eulerRotation.x: 180` "mandando α → −α" sobre un conjunto de azimuts
+invariante bajo α → −α. Cada premisa suelta era cierta; la combinación, no:
+**una rotación 180° sobre X manda (x,z) → (x,−z), es decir azimut α → 180°−α**,
+que NO es simetría del anillo de esquinas (sus aristas largas abrazan las
+normales de cara {0°,120°,240°} y sus cuerdas cortas los huecos
+{60°,180°,300°}); el resultado es el anillo GIRADO MEDIO TICK: vértices a 928
+sobre planos de cara a 472 (la tapa "atravesaba el sólido") y frontera del
+hueco caída de 928 a 472 ("no tapa el hueco"). El giro de 180° que SÍ respeta
+el anillo y vuelca la normal es **sobre Z** ((x,z) → (−x,z), α → −α). Truco
+transferible: cuando una malla compuesta "se ve igual por el otro lado" es una
+premisa de diseño, medirla con píxeles — renderizar la malla rotada y SIN
+rotar y comparar siluetas (`check-cap-overlap.py`, variantes v3/v4: con X,
+78–220 celdas de diferencia; con Z, 0 en 14 filas del barrido). Un razonamiento
+solo con conjuntos de azimuts no basta: hay que comprobar qué mapa implementa
+CADA eje.
+
+### ⚠️ OJO: en un gate de píxeles, el color de prueba no puede chocar con los colores del stub
+
+La tapa "azul puro" del reporte del usuario es píxel-idéntica al azul del
+escritorio 3 del stub compartido (`check-video-dome.py`): la pared interior de
+esa cara alimentaba el contador "fuera de silueta" con 218 falsos positivos.
+Los colores de un gate deben ser clases DISJUNTAS de todo lo demás en escena
+(aquí: tapa naranja #ff8000; el fondo del casco, negro; el marcador del
+contenido, magenta/cian — y las mezclas al 80 % de opacidad tienen que seguir
+dentro de su clase, que es lo que fija la tabla `classify()` del
+`--selftest`).
 
 `Mask` descarta los fragmentos con alpha < `alphaCutoff` (el escritorio se sigue
 viendo por los huecos de la textura de cara) y pinta el resto **opaco escribiendo

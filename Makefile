@@ -117,6 +117,26 @@ lint-ci: check
 # — el guard del «detrás» y del «v=4 dentro del tambor» que pidió el usuario
 # (ADR-026b). Necesita pantalla real (QtQuick3D no
 # renderiza offscreen) y PySide6; sin ellos se salta (exit 0).
+# check-cap-overlap.py RENDERIZA el Cube.qml REAL con sus dos tapas (ADR-027
+# + enmiendas) en la geometría de la captura del usuario (W=1600 H=900, N=3,
+# separación 10, Color/Flecha) y decide con PÍXELES sobre un barrido
+# pitch 0/15/30/45/60 × yaw 0/60/120/154/180/240/300 (el 30 corre también su
+# espejo -30 = la cámara por debajo que midió el usuario): (a) en píxeles cuya
+# cara frontal confirma el oráculo la tapa no puede pintarse por encima
+# ("cruzando el sólido"); (b) ningún píxel de tapa cae fuera del polígono
+# proyectado y el hueco que la tapa debe cerrar no queda abierto ("no tapa el
+# hueco"); (c) ambas = superior ∪ inferior y la tapa inferior rotada 180°
+# sobre Z coincide con la misma malla SIN rotar (con rotación sobre X el
+# anillo giraba medio tick: 78–220 px de diferencia — el bug "180 volteado"
+# que cazó este gate); (d) alphaMode Mask con alphaCutoff 0.5 a opacidad 100
+# y Blend por debajo (la regla ADR-026 extendida; NO SetToOpaque: pinta los
+# agujeros de negro, medido en ADR-026); (e/f) tablas medidas del espejo del
+# contenido (PNG asimétrico) y del marcador Flecha (centroide del cuadrante
+# magenta y de la flecha cian por tapa y yaw — el marcador es el default de
+# CapContent desde la enmienda 2). Su --selftest exige que el oráculo rechace
+# escenas sintéticas trucadas (tapa sobre cara, pintura fuera del anillo,
+# hueco abierto, cara ganando a la tapa) y quede mudo en la limpia. Necesita
+# pantalla real y PySide6; sin ellos se salta (exit 0).
 # check-video.py instancia HullVideo.qml (el único fichero que importa
 # QtMultimedia) con un motor QML real y comprueba los dos caminos del Loader de
 # ScreenView: módulo presente -> item y VideoOutput creados; módulo ausente y
@@ -161,6 +181,8 @@ check:
 	@python3 scripts/check-cap.py --selftest
 	@python3 scripts/check-cylinder-wiring.py
 	@python3 scripts/check-cylinder-overlap.py
+	@python3 scripts/check-cap-overlap.py
+	@python3 scripts/check-cap-overlap.py --selftest
 	@python3 scripts/check-video.py
 	@python3 scripts/check-video-dome.py
 	@python3 scripts/check-features.py

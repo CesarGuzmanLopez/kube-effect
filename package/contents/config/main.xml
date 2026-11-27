@@ -181,12 +181,23 @@
         <entry name="CapBottom" type="Bool">
             <default>false</default>
         </entry>
+        <!-- Arrow (3) is the DEFAULT because a uniform colour cannot show
+             orientation: with a flat cap the user cannot tell "the cap is
+             turned" from "the cap paints over the faces" (ADR-027
+             amendment 2). The asymmetric marker (arrow + magenta corner
+             quadrant) makes rotation and mirroring readable at a glance and
+             is what makes the bottom cap's mirror testable in
+             scripts/check-cap-overlap.py. Appended at the END of the
+             choices: KConfigXT stores the integer index, so existing keys
+             never move (the project's enum rule). Unknown kwinrc values
+             still fall back to Color through constants.js capContent(). -->
         <entry name="CapContent" type="Enum">
-            <default>Color</default>
+            <default>Arrow</default>
             <choices>
                 <choice name="Color" />
                 <choice name="Gradient" />
                 <choice name="Image" />
+                <choice name="Arrow" />
             </choices>
         </entry>
         <entry name="CapColor" type="Color">

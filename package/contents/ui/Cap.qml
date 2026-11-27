@@ -12,19 +12,30 @@ import "constants.js" as Constants
 // CapMesh.qml) painted with its own content — solid colour, gradient or local
 // image — and its own transparency.
 //
-// The material is the ADR-026 rule extended to the caps: NoLighting (the cap
-// is a flat UI surface, not a lit object), NoCulling (parity with the faces,
-// ADR-023/ADR-025 pt.12: the cap reads the same from above and below, and
-// the bottom one is the SAME mesh on a node rotated 180 deg, so culling
-// would delete it), Blend always (the content carries alpha by default:
-// CapOpacity 80). Each Cap Model sits at y = +/- faceHeight/2, so it brings
-// its own sort centroid on Y and can never paint over the front faces.
+// The material is the ADR-026 rule extended to the caps (overlap fix):
+// NoLighting (the cap is a flat UI surface, not a lit object), NoCulling
+// (parity with the faces, ADR-023/ADR-025 pt.12: the cap reads the same
+// from above and below, and the bottom one is the SAME mesh on a node
+// rotated 180 deg about Z, so culling would delete it), and an alphaMode
+// that follows the opacity threshold exactly like CubeFace: Mask at rest
+// (>= 0.99: the kept fragments WRITE DEPTH, so no sort tie can ever paint
+// a far cap over a near face) and Blend while translucent (the default
+// CapOpacity 80 stays a real see-through cap, back-to-front by the node
+// centroids at y = +/- faceHeight/2). NOT SetToOpaque/Opaque: measured in
+// ADR-026, those paint the texture's alpha holes BLACK. alphaCutoff is
+// pinned explicitly (CubeFace's lesson: Qt's default could move the hard
+// edge under a future Qt). The pixel gate scripts/check-cap-overlap.py
+// asserts both regimes and the depth consequence.
 //
 // The content is a plain 2D Item used as Texture.sourceItem (no shaders):
 // a Rectangle for the colour, the reused HullGradient for the gradient
-// (Fixed rotation: the cap turns with the solid anyway) and an Image for the
-// picture. A broken or absent image falls back to CapColor and asks Cube to
-// warn ONCE (imageUnavailable, the background-video pattern of ADR-020).
+// (Fixed rotation: the cap turns with the solid anyway), an Image for the
+// picture and CapArrow.qml (behind its own Loader) for the Arrow marker —
+// the schema default, the only content that can be READ as oriented. A
+// broken or absent image falls back to CapColor and asks Cube to warn ONCE
+// (imageUnavailable, the background-video pattern of ADR-020); a missing
+// QtQuick.Shapes degrades the arrow the same way (surfaceDegraded, the
+// HullRadial pattern of ADR-022).
 Model {
     id: cap
 
@@ -60,15 +71,25 @@ Model {
     // turns it into a single console.warn for the whole effect (both caps
     // share one image, two Models must not log twice).
     signal imageUnavailable(string reason)
+    // Emitted once when the Arrow content cannot paint (QtQuick.Shapes
+    // missing -> CapArrow.qml's Loader is in Error): the cap keeps its
+    // CapColor background, exactly the HullRadial degradation of ADR-022.
+    // The SAME one-line budget applies (Cube dedupes with capImageWarned).
+    signal surfaceDegraded(string reason)
 
     // One report per instance is the cap's own budget; Cube still filters
     // the global duplicate (the radialWarned pattern of HullGradient).
     property bool reported: false
+    property bool degradedReported: false
 
     readonly property bool imageReady: capImage.status === Image.Ready
     readonly property bool imageUsable: cap.imageSource.length > 0 && cap.imageReady
     readonly property bool paintColor: cap.content === Constants.CapContent.Color || (cap.content === Constants.CapContent.Image && !cap.imageUsable)
     readonly property bool paintImage: cap.content === Constants.CapContent.Image && cap.imageUsable
+    // CapContent Arrow (the schema default): the orientation marker of
+    // CapArrow.qml. Its Loader's Error state feeds back into paintColor, so
+    // without QtQuick.Shapes the cap degrades to a plain CapColor surface.
+    readonly property bool paintArrow: cap.content === Constants.CapContent.Arrow
 
     function report(reason) {
         if (cap.reported) {
@@ -84,7 +105,8 @@ Model {
         PrincipledMaterial {
             lighting: PrincipledMaterial.NoLighting
             cullMode: Material.NoCulling
-            alphaMode: PrincipledMaterial.Blend
+            alphaMode: cap.opacityValue >= 0.99 ? PrincipledMaterial.Mask : PrincipledMaterial.Blend
+            alphaCutoff: 0.5
             opacity: cap.opacityValue
             baseColorMap: Texture {
                 // Surface item (grabbed, never laid into the scene graph):
@@ -99,8 +121,32 @@ Model {
 
                     Rectangle {
                         anchors.fill: parent
-                        visible: cap.paintColor
+                        // Also the Arrow fallback: when CapArrow.qml cannot
+                        // load (no QtQuick.Shapes) the plain colour holds.
+                        visible: cap.paintColor || (cap.paintArrow && arrowLoader.status === Loader.Error)
                         color: cap.color1
+                    }
+
+                    Loader {
+                        id: arrowLoader
+                        anchors.fill: parent
+                        visible: cap.paintArrow && status === Loader.Ready
+                        // Isolated behind a Loader (the HullRadial / HullVideo
+                        // pattern): CapArrow.qml is the ONLY cap file that
+                        // imports QtQuick.Shapes, so a system without the
+                        // module only errors HERE — the cap falls back to the
+                        // CapColor Rectangle above and warns once.
+                        active: cap.paintArrow
+                        source: "CapArrow.qml"
+                        onStatusChanged: {
+                            if (status === Loader.Error && !cap.degradedReported) {
+                                cap.degradedReported = true;
+                                cap.surfaceDegraded("QtQuick.Shapes unavailable; the cap marker cannot paint");
+                            }
+                        }
+                        onLoaded: {
+                            item.color1 = Qt.binding(() => cap.color1);
+                        }
                     }
 
                     HullGradient {

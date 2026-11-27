@@ -1,5 +1,6 @@
 import QtQuick
 import "../package/contents/ui/constants.js" as Constants
+import "../package/contents/ui/capGeometry.js" as CapGeo
 
 // Runs inside scripts/check-constants.py. The holder `h` exposes QUrl
 // properties, i.e. exactly what KConfigLoader hands QML for a Url entry: the
@@ -614,7 +615,11 @@ Item {
         check("capContent(Color)", Constants.capContent(Constants.CapContent.Color), Constants.CapContent.Color);
         check("capContent(Gradient)", Constants.capContent(Constants.CapContent.Gradient), Constants.CapContent.Gradient);
         check("capContent(Image)", Constants.capContent(Constants.CapContent.Image), Constants.CapContent.Image);
-        check("capContent(unknown 3)", Constants.capContent(3), Constants.CapContent.Color);
+        // Arrow is a stored index 3 (ADR-027 amendment 2, appended last, the
+        // schema DEFAULT: the marker is the only content that reads oriented).
+        check("capContent(Arrow)", Constants.capContent(Constants.CapContent.Arrow), Constants.CapContent.Arrow);
+        check("capContent(unknown 4)", Constants.capContent(4), Constants.CapContent.Color);
+        check("capContent(texto basura)", Constants.capContent("basura"), Constants.CapContent.Color);
         check("capContent(-1)", Constants.capContent(-1), Constants.CapContent.Color);
         check("capContent(undefined)", Constants.capContent(undefined), Constants.CapContent.Color);
         check("capContent(string)", Constants.capContent("Gradient"), Constants.CapContent.Color);
@@ -641,17 +646,23 @@ Item {
         check("capSource(http)", Constants.capImageSource("http://example.com/cap.png"), "");
         check("capSource(smb)", Constants.capImageSource("smb://host/cap.png"), "");
 
-        // Cap generators (ADR-027): the polygon cap is INSCRIBED — its edge
-        // midpoints sit exactly on the apothem (the live faceDistance) and on
-        // the face azimuth grid; the circumradius is derived. Flat y = 0, +Y
-        // normals, centred UVs, CCW fan (cross along +Y). Degenerate inputs
-        // answer EMPTY arrays (mid-sync contract, like the arc generator).
+        // Cap generators (ADR-027 amendment): the polygon ring is stated in
+        // each face's LOCAL frame. Regime d <= 0: the inscribed N-gon (its
+        // edge midpoints on the apothem and on the face azimuth grid,
+        // circumradius derived). Regime d > 0: 2N face-corner vertices at
+        // hypot(apothem, faceWidth/2) — every face owns an exact -W/2/+W/2
+        // side on its plane, closed by gap chords that stay INSIDE the
+        // planes. Flat y = 0, +Y normals, centred UVs, CCW fan (cross along
+        // +Y). Degenerate inputs (sides < 3, apothem or faceWidth or
+        // halfHeight <= 0, non-finite) answer EMPTY arrays (mid-sync
+        // contract, like the arc generator).
         const apothem = 1200;
+        const capW = 2560;
         const sides = 5;
         const halfHeight = 720;
         const circum = apothem / Math.cos(Math.PI / sides);
-        const capPoly = Constants.capPolygonGeometry(apothem, sides, halfHeight);
-        check("capPoly vertices", capPoly.positions.length, sides + 1);
+        const capPoly = CapGeo.capPolygonGeometry(apothem, capW, sides, halfHeight);
+        check("capPoly vertices (d<=0 branch)", capPoly.positions.length, sides + 1);
         check("capPoly triangles", capPoly.indexes.length, sides * 3);
         check("capPoly centre", capPoly.positions[0].x === 0 && capPoly.positions[0].y === 0 && capPoly.positions[0].z === 0, true);
         let capOnRing = true;
@@ -711,14 +722,56 @@ Item {
         for (let i = 0; i <= sides; ++i) {
             const uv = capPoly.uvs[i];
             const p = capPoly.positions[i];
-            if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1
-                || Math.abs(uv.x - (0.5 + p.x / (2 * circum))) > 1e-6
-                || Math.abs(uv.y - (0.5 + p.z / (2 * circum))) > 1e-6) {
+            if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1 || Math.abs(uv.x - (0.5 + p.x / (2 * circum))) > 1e-6 || Math.abs(uv.y - (0.5 + p.z / (2 * circum))) > 1e-6) {
                 capUvOk = false;
             }
         }
         check("capPoly centred UVs in [0,1]", capUvOk, true);
-        const capDisc = Constants.capDiscGeometry(800, 64, halfHeight);
+
+        // The corners regime: 5 sides with a face whose no-displacement
+        // apothem (1280 / tan 36deg = 1761.8) sits ABOVE the live apothem
+        // puts the faces apart (d > 0): the ring must present two corners
+        // per face at hypot(apothem, faceWidth/2), each face owning a side
+        // that lies ON its plane across exactly the face width, and no
+        // vertex may stand outside a plane or past a corner (the local-frame
+        // bound — the ring's max |x| legitimately exceeds faceWidth/2).
+        const poke = CapGeo.capPolygonGeometry(1861.8, capW, 5, halfHeight);
+        check("capPoly corners vertices (d>0 branch)", poke.positions.length, 11);
+        check("capPoly corners triangles", poke.indexes.length, 30);
+        const cornerRho = Math.hypot(1861.8, capW / 2);
+        let cornersRing = true;
+        let insidePlanes = true;
+        let insideCorners = true;
+        let onAnyPlane = true;
+        for (let i = 1; i < poke.positions.length; ++i) {
+            const p = poke.positions[i];
+            if (Math.abs(p.y) > 1e-9 || Math.abs(Math.hypot(p.x, p.z) - cornerRho) > 1e-6 * cornerRho) {
+                cornersRing = false;
+            }
+            let onPlane = false;
+            for (let k = 0; k < 5; ++k) {
+                const theta = (2 * Math.PI / 5) * k;
+                const dotN = p.x * Math.sin(theta) + p.z * Math.cos(theta);
+                if (dotN > 1861.8 + 1e-6 * cornerRho) {
+                    insidePlanes = false;
+                }
+                if (Math.abs(dotN - 1861.8) <= 1e-6 * cornerRho) {
+                    onPlane = true;
+                    const dotT = p.x * Math.cos(theta) - p.z * Math.sin(theta);
+                    if (Math.abs(dotT) > capW / 2 + 1e-6 * cornerRho) {
+                        insideCorners = false;
+                    }
+                }
+            }
+            if (!onPlane) {
+                onAnyPlane = false;
+            }
+        }
+        check("capPoly corners ring at hypot(a, W/2), flat", cornersRing, true);
+        check("capPoly corners inside every face plane", insidePlanes, true);
+        check("capPoly corners within their face widths", insideCorners, true);
+        check("capPoly corners every vertex on its plane", onAnyPlane, true);
+        const capDisc = CapGeo.capDiscGeometry(800, 64, halfHeight);
         check("capDisc vertices", capDisc.positions.length, 65);
         check("capDisc triangles", capDisc.indexes.length, 64 * 3);
         let capDiscRing = true;
@@ -729,11 +782,13 @@ Item {
             }
         }
         check("capDisc ring at R, flat", capDiscRing, true);
-        check("capDisc degenerate radius", Constants.capDiscGeometry(0, 64, halfHeight).positions.length, 0);
-        check("capDisc few segments", Constants.capDiscGeometry(800, 2, halfHeight).positions.length, 0);
-        check("capPoly sides below 3", Constants.capPolygonGeometry(1200, 2, halfHeight).positions.length, 0);
-        check("capPoly negative apothem", Constants.capPolygonGeometry(-5, 5, halfHeight).positions.length, 0);
-        check("capPoly zero halfHeight", Constants.capPolygonGeometry(1200, 5, 0).positions.length, 0);
-        check("capPoly garbage input", Constants.capPolygonGeometry("x", "y", "z").positions.length, 0);
+        check("capDisc degenerate radius", CapGeo.capDiscGeometry(0, 64, halfHeight).positions.length, 0);
+        check("capDisc few segments", CapGeo.capDiscGeometry(800, 2, halfHeight).positions.length, 0);
+        check("capPoly sides below 3", CapGeo.capPolygonGeometry(1200, capW, 2, halfHeight).positions.length, 0);
+        check("capPoly negative apothem", CapGeo.capPolygonGeometry(-5, capW, 5, halfHeight).positions.length, 0);
+        check("capPoly zero faceWidth", CapGeo.capPolygonGeometry(1200, 0, 5, halfHeight).positions.length, 0);
+        check("capPoly negative faceWidth", CapGeo.capPolygonGeometry(1200, -10, 5, halfHeight).positions.length, 0);
+        check("capPoly zero halfHeight", CapGeo.capPolygonGeometry(1200, capW, 5, 0).positions.length, 0);
+        check("capPoly garbage input", CapGeo.capPolygonGeometry("x", "y", "z", "w").positions.length, 0);
     }
 }
