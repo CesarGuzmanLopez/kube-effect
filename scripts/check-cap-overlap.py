@@ -498,11 +498,107 @@ def _scratch_root():
         except OSError as exc:
             return None, f"cannot create {base} ({exc.strerror})"
     st = base.stat()
-    if st.st_uid != os.getuid() and st.st_mode & 0o022:
-        return None, f"{base} is foreign-owned and group/world writable"
+    if st.st_uid != os.getuid():
+        return None, f"{base} is not owned by uid {os.getuid()}"
+    # Own the base is NOT enough: a group/world-writable directory of ours
+    # still lets any local user plant the stub module or the pattern PNG we
+    # are about to read (measured before this branch: a 0777 dir owned by us
+    # passed the old `uid != uid AND 0o022` test, which only fired for
+    # foreign-owned bases). Normalise our own directory to 0700 instead of
+    # refusing it, exactly like nested-harness-root.sh chmods its root.
+    if st.st_mode & 0o077:
+        try:
+            base.chmod(0o700)
+        except OSError as exc:
+            return None, f"cannot tighten {base} to 0700 ({exc.strerror})"
+        st = base.stat()
+        if st.st_mode & 0o077:
+            return None, f"{base} stays group/world writable"
     if not os.access(base, os.W_OK | os.X_OK):
         return None, f"{base} is not writable by us"
     return base, None
+
+
+def _scratch_selftest():
+    """Regression tests for _scratch_root(), the anti-hijack contract.
+
+    The pixel gate reads a QML stub module and a pattern PNG out of this
+    directory, so a base another local user can write into is code execution
+    as us, not just a broken check. Measured gap this pins: the first version
+    only refused FOREIGN-owned writable bases, so a 0777 directory owned by us
+    passed; now our own base is tightened to 0700 instead.
+    """
+    failures = []
+    root, why = _scratch_root()
+    if root is None:
+        return ["no usable scratch base on this machine (" + str(why) + ")"]
+    saved = os.environ.get("TMPDIR")
+    loose = link = victim = None
+    try:
+        # 1. ours but group/world writable -> accepted AND tightened to 0700.
+        loose = root / "st-scratch-loose"
+        loose.mkdir(exist_ok=True)
+        os.chmod(loose, 0o777)
+        os.environ["TMPDIR"] = str(loose)
+        got, why2 = _scratch_root()
+        if got is None:
+            failures.append("0777 base of ours was refused (" + str(why2) + ")")
+        elif os.stat(loose).st_mode & 0o077:
+            failures.append(
+                "0777 base stayed loose: " + oct(os.stat(loose).st_mode & 0o777)
+            )
+
+        # 2. a symlink at the base path -> refused, and never followed.
+        victim = root / "st-scratch-victim"
+        victim.mkdir(exist_ok=True)
+        link = root / "st-scratch-link"
+        if link.is_symlink() or link.exists():
+            link.unlink()
+        link.symlink_to(victim)
+        os.environ["TMPDIR"] = str(link)
+        got, why2 = _scratch_root()
+        if got is not None:
+            failures.append("symlink base accepted: " + str(got))
+
+        # 3. a base owned by ANOTHER uid -> refused. Reproducing it for real
+        #    needs a second user (or root), so the uid check itself is
+        #    exercised by pretending we are somebody else: the branch is the
+        #    code under test, not os.stat().
+        real_getuid = os.getuid
+        try:
+            os.getuid = lambda: real_getuid() + 1
+            os.environ["TMPDIR"] = str(victim)
+            got, why2 = _scratch_root()
+            if got is not None:
+                failures.append("foreign-owned base accepted: " + str(got))
+        finally:
+            os.getuid = real_getuid
+
+        # 4. the bare world-writable /tmp -> refused (only asserted when /tmp
+        #    really is world-writable, which is the case on the distros that
+        #    run this gate).
+        if os.stat("/tmp").st_mode & 0o022:
+            os.environ["TMPDIR"] = "/tmp"
+            got, why2 = _scratch_root()
+            if got is not None:
+                failures.append("bare /tmp accepted as scratch base: " + str(got))
+    finally:
+        if saved is None:
+            os.environ.pop("TMPDIR", None)
+        else:
+            os.environ["TMPDIR"] = saved
+        for stale in (link, loose):
+            if stale is not None:
+                try:
+                    stale.unlink()
+                except OSError:
+                    pass
+        if victim is not None:
+            try:
+                victim.rmdir()
+            except OSError:
+                pass
+    return failures
 
 
 def _run_pitch_child(pitch, import_root, png):
@@ -545,6 +641,15 @@ def main(argv):
         return run_child(import_root, pitch, png)
 
     if "--selftest" in argv:
+        # The scratch-root contract is checked BEFORE the oracle verdict so
+        # the printed line stays the last one (the label is part of the gate
+        # contract of the other checks).
+        scratch_failures = _scratch_selftest()
+        if scratch_failures:
+            for failure in scratch_failures:
+                print(" - " + failure)
+            print("check-cap-overlap --selftest: FAIL")
+            return 1
         return selftest()
 
     if not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
