@@ -32,7 +32,7 @@ Model {
     // desktop showing through the face's alpha holes, a kept pixel renders
     // as opaque and WRITES DEPTH, so a far arc can never paint over a near
     // face even if a sort tie ever comes back). Measured in the engine
-    // (scripts/check-cylinder-overlap): a SetToOpaque/Opaque at rest would
+    // (the removed pixel gate (cost: minutes per run; recover with `git log --diff-filter=D --name-only -- cylinder pixel gate, removed for cost (doc/trucos-aprendidos.md, section P).py`)): a SetToOpaque/Opaque at rest would
     // instead paint those holes BLACK, which is why the rest branch is
     // Mask, not Opaque.
     // The Mask branch is bounded to the cylinder (re-review): the polygon

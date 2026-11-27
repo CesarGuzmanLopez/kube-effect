@@ -4,7 +4,7 @@
 check-cylinder.py validates the arc's vertex data through CylinderArcMesh;
 this script proves the cable above it — Cube.qml itself, instantiated with
 the stub org.kde.kwin module (the same VirtualDesktopModel stub as
-check-video-dome.py, reused so the two never drift) and Shape = Cylinder:
+qml_check_harness.STUB_MODULE, the single copy) and Shape = Cylinder:
 
   * 3 desktops  -> isCylinder + cylinderActive, Loader.Ready produced a
     real Geometry (cylinderMesh non-null) or — on a system without
@@ -58,8 +58,8 @@ root cause of ADR-026b; with the old Cube.qml it fails (measured before
 the fix: 'Binding loop detected for property "viewRadius"', v=4).
 
 Nothing is rendered: no View3D, no window — only the object tree and the
-bindings, so QT_QPA_PLATFORM=offscreen is enough (unlike check-video-dome,
-which needs a real screen to grab pixels). Skipped (exit 0) when PySide6 is
+bindings, so QT_QPA_PLATFORM=offscreen is enough (unlike the removed render
+gates, which needed a real screen to grab pixels). Skipped (exit 0) when PySide6 is
 missing.
 """
 
@@ -82,21 +82,15 @@ except ImportError:  # pragma: no cover - optional dependency
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Reuse the stub org.kde.kwin module of check-video-dome.py: the same
-# VirtualDesktopModel (rows with a real desktop QObject), WindowFilterModel,
-# WindowThumbnail and Workspace singleton. Loaded as a file module because
-# the name contains hyphens.
-_spec = importlib.util.spec_from_file_location(
-    "check_video_dome_for_stubs", ROOT / "scripts/check-video-dome.py"
-)
-_dome = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_dome)
+# The stub org.kde.kwin module lives in the shared harness now (one copy,
+# so the fast and the removed render gates could never drift).
+from qml_check_harness import QML_ERROR_SIGNATURES, write_stub_module
 
 messages: list[str] = []
 
 
 def collect_errors(_mode, _context, message):
-    if any(signature in message for signature in _dome.QML_ERROR_SIGNATURES):
+    if any(signature in message for signature in QML_ERROR_SIGNATURES):
         messages.append(message)
 
 
@@ -442,7 +436,7 @@ def flip_child(import_root: Path) -> int:
 
     def collect(_mode, _context, message):
         if (
-            any(signature in message for signature in _dome.QML_ERROR_SIGNATURES)
+            any(signature in message for signature in QML_ERROR_SIGNATURES)
             or "inding loop" in message
         ):
             captured.append(message)
@@ -565,7 +559,7 @@ def main():
     problems: list[str] = []
     infos: list[str] = []
     with tempfile.TemporaryDirectory(prefix="kube-stub-") as temporary:
-        import_root = _dome.write_stub_module(temporary)
+        import_root = write_stub_module(temporary)
         for desktop_count in (3, 2, 1):
             scenario, info = run_scenario(application, import_root, desktop_count)
             infos.append(info)
@@ -589,7 +583,7 @@ def main():
             line
             for line in (flip.stdout + flip.stderr).splitlines()
             if (
-                any(signature in line for signature in _dome.QML_ERROR_SIGNATURES)
+                any(signature in line for signature in QML_ERROR_SIGNATURES)
                 or "inding loop" in line
             )
             and "qml:" not in line

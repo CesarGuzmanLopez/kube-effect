@@ -339,7 +339,7 @@ Node {
         // mesh (flat, y = 0 around its origin) lands in the plane y = 0 of
         // this node — the position above already carries the half-height.
         // THE AXIS IS Z, NOT X (ADR-027 overlap fix, measured with pixels in
-        // scripts/check-cap-overlap.py): a 180 deg turn about X maps the
+        // cap pixel gate, removed for cost (doc/trucos-aprendidos.md, section P)): a 180 deg turn about X maps the
         // ring's local (x, z) to (x, -z), i.e. azimuth a -> 180 - a, which
         // is NOT a symmetry of the face-corner ring — it rotates the whole
         // ring by half a tick (60 deg at N = 3). The mis-rotated ring then

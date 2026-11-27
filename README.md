@@ -41,7 +41,7 @@ vídeo se sustituye por el color de respaldo y el resto del efecto sigue igual.
 ## Instalar / probar
 
 ```bash
-make check                # qmllint + formato + esquema + UI + constants + vídeo (sin Sonar)
+make check                # qmllint + formato + esquema + UI + geometría (7 s, sin Sonar)
 make lint                 # make check + SonarQube en localhost:9000
 make install              # kpackagetool6 --upgrade package/
 ```

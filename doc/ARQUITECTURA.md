@@ -137,7 +137,7 @@ Cómo está implementado:
   escritorio el target del estado es azimut 0 verbatim → la cara queda
   **siempre de frente al activar** (guard del addendum, verificado por
   `check-cylinder-wiring.py` —`slotZeroAzimuth`/`slotOneAzimuth`— y por el
-  escenario `single` de `check-cylinder-overlap.py`). Los helpers de la
+  escenario `single` del gate de píxeles retirado (sección P de trucos). Los helpers de la
   banda (`cylinderArcRadius`, `cylinderSegmentAzimuth`,
   `cylinderAzimuthRange`, `cylinderSegmentDesktopAt`,
   `CYLINDER_SEGMENT_DEG`) fueron RETIRADOS de `constants.js`. `faceDistance
@@ -261,7 +261,7 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
   rotación invierte la normal +Y a -Y y el winding queda consistente visto
   desde fuera; no existe segunda malla ni copia espejada). **El eje del flip
   es Z** (ADR-027 enmienda 2, medido con píxeles por
-  `scripts/check-cap-overlap.py`): solo la rotación 180° sobre Z vuelca la
+  gate de píxeles de tapas, retirado por coste: ver doc/trucos-aprendidos.md sección P): solo la rotación 180° sobre Z vuelca la
   normal (+Y → −Y) MANTIENIENDO el anillo (manda azimut α → −α, la simetría
   real del anillo de esquinas); sobre X mandaría α → 180°−α y giraría el
   anillo medio tick — los vértices asomaban 928 sobre planos de cara a 472

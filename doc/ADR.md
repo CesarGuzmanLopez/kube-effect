@@ -296,8 +296,8 @@ y su ruta de `probeExposure`, en vez de dejarlo como código muerto.
 abajo (faltaba cielo y suelo y el horizonte saltaba al girar) y con Contain
 entraban barras negras a los polos. El ajuste del usuario solo manda en la
 capa plana; la esfera hace el envoltorio. Medido con un clip 608×304.
-`scripts/check-video-dome.py` ahora exige `fillMode == Stretch` en el caso 360.
-**Verificación**: `scripts/check-video-dome.py` renderiza el `ScreenView.qml` real
+`scripts/check-video-dome.py` (retirado por coste, ver doc/trucos-aprendidos.md sección P) exigía `fillMode == Stretch` en el caso 360.
+**Verificación**: `scripts/check-video-dome.py` (retirado por coste; sección P de trucos) renderizaba el `ScreenView.qml` real
 (con un módulo `org.kde.kwin` simulado y un `effect` falso: `Background=Video`,
 Equirect, girar) y exige un frame con muchos colores distintos; cargar sin error
 no basta, porque el fallo anterior cargaba bien y pintaba negro. Necesita
@@ -405,7 +405,7 @@ de 25 s, reconstrucción de texturas por ciclo) que hay que cerrar antes de la
 forma cilíndrica (ADR-002), que multiplica delegates, caras y cargas.
 
 **Verificación**: `make check` (qmllint, check-constants con los tests null →
-default, check-scene-environment, check-video-dome, check-features) y
+default, check-scene-environment, check-features) y
 `make native` (ctest: quoting del bloque de comandos). Prueba visual solo en
 el anidado (`scripts/kwin-nested-test.sh`).
 
@@ -525,7 +525,7 @@ que en el recorrido extremo el quad nunca se vea de canto con el dorso asomando
 por perspectiva.
 
 **Verificación**: `make check` (check-constants con los helpers
-nuevos y los bordes de `clampSheetAzimuth`; check-video-dome renderiza
+nuevos y los bordes de `clampSheetAzimuth`; el gate de vídeo (retirado, sección P de trucos) renderizaba
 `ScreenView` con el stub de 3 escritorios → camino poligonal intacto, más una
 segunda pasada con el stub de 2 → `debugInfo` dice `sheet=1 tick=180.0`; el
 stub ya no devuelve `currentDesktop` nulo — el camino poligonal la necesitaba
@@ -667,7 +667,7 @@ N arcos**, con estas reglas:
    azimut 0 y el target de los estados es verbatim sobre rango abierto →
    **la cara queda SIEMPRE de frente al activar** (guard verificado por
    `check-cylinder-wiring.py` y por el escenario `single` de
-   `check-cylinder-overlap.py`).
+   el gate de píxeles de cilindro, retirado: sección P de `doc/trucos-aprendidos.md`).
 
    Consecuencia en helpers: `cylinderArcRadius`, `cylinderSegmentAzimuth`,
    `cylinderAzimuthRange` y `cylinderSegmentDesktopAt` **mueren** — el azimut
@@ -853,7 +853,7 @@ el comportamiento pedido, no un salto).
 **Decisión**: el solapamiento de la pared interior sobre las caras frontales
 (problema abierto por ADR-025 pt.12, medido por el usuario en el anidado con
 `op=1.00` en reposo y peor al girar) se cierra con dos mecanismos, y ambos
-quedan fijados por `scripts/check-cylinder-overlap.py`:
+quedaron fijados por `scripts/check-cylinder-overlap.py` (retirado por coste; sección P de trucos), y la estructura sigue fijada por `check-cylinder-wiring.py`:
 
 1. **Malla centrada en el nodo, colocación como el polígono** (fix a).
    `cylinderArcGeometry()` genera ahora el arco **alrededor de su propio
@@ -962,7 +962,7 @@ combinación; el cilindro ahora usa exactamente la misma.
 - Dejar la malla en el eje y confiar en el bbox: es justo lo que falló en el
   anidado; la `position` por cara es la única clave que el efecto controla.
 
-**Verificación**: `make check` — `check-cylinder-overlap.py` (nuevo; píxeles +
+**Verificación**: `make check` — `check-cylinder-overlap.py` (píxeles + estructura; retirado por coste, sección P de trucos; la parte de estructura quedó en
 estructura; necesita pantalla real, se salta sin ella), `check-cylinder.py`
 recalibrado (cilindricidad, longitud de arco y winding alrededor del eje local
 `(0,0,−R)`; su `--selftest` sigue rechazando las nueve rupturas),
@@ -972,7 +972,7 @@ R = 3(W+g)/2π con el g del harness, rango abierto, slot 0 en azimut 0 —la
 guarda «cara de frente»— y slot 1 vacío alcanzable) y
 `check-constants` con `azimuthRangeFor` recalibrado (los helpers de la banda
 retirada murieron con ella). El escenario `single` de
-`check-cylinder-overlap.py` cubre además la intersección de ambos fixes: el
+el gate de píxeles retirado cubría además la intersección de ambos fixes: el
 tambor de un escritorio mantiene la cara de frente (slot 0, centro de
 pantalla rojo) con la malla re-centrada (ADR-026 fix a no desplaza el azimut:
 el arco envuelve el nodo y el nodo sigue la grid del tambor). La verificación visual del overlap
@@ -1047,7 +1047,7 @@ distancia `distant` del tambor nuevo (vive el binding de estado o
 (con el código viejo este escenario falla: `v=4`, medido; sin
 `QtQuick3D.Helpers` el flip **se salta con aviso** — el fallback hoja es
 configuración soportada y lo cubren los escenarios de `Cube`);
-`check-cylinder-overlap.py` gana el escenario **two-slot** (2 escritorios,
+el gate de píxeles retirado tenía el escenario **two-slot** (2 escritorios,
 yaw 0: la fila central es el rojo de la cara del slot 0 — la cara de frente
 también con huecos).
 ---
@@ -1220,7 +1220,7 @@ que NO es simetría del anillo de esquinas** `{59.47°, 60.53°, 179.47°, 180.5
 299.47°, 300.53°}` (las aristas largas abrazan las NORMALES de cara
 {0°,120°,240°}, las cuerdas cortas los HUECOS {60°,180°,300°}). Aplicar
 α→180°−α equivale a **girar el anillo 60° = medio tick**, y el gate
-`scripts/check-cap-overlap.py`, renderizando el `Cube.qml` REAL con la
+el gate de píxeles de tapas (retirado por coste; sección P de trucos), renderizando el `Cube.qml` REAL con la
 geometría exacta de la captura, lo midió:
 
 - la tapa inferior rotada con X (v3) y la MISMA malla sin rotar (v4) daban
@@ -1288,10 +1288,11 @@ top@+30=(266.5, 175.6) vs bottom@−30=(534.2, 272.5): Σx = 800.7 y Σy = 448.1
 inferior sale, por tanto, **espejado horizontalmente** — consecuencia
 direc­ta del flip de anillo correcto, visible por diseño gracias al cuadrante.
 
-**Puertas.** Gate nuevo `scripts/check-cap-overlap.py/.qml` enganchado a
+**Puertas.** Gate de píxeles `scripts/check-cap-overlap.py/.qml` (retirado por coste el 2026-11-27; recuperable según doc/trucos-aprendidos.md sección P) estuvo enganchado a
 `make check` (arranque compartido vía `qml_check_harness.view_boot`), partido en
 dos ficheros por el tope de 1000 líneas: el **driver** (grabs reales y comparación
-de píxeles) y el **oráculo geométrico** `scripts/cap_overlap_oracle.py`, que solo
+de píxeles) y su **oráculo geométrico** `scripts/cap_overlap_oracle.py` (ambos retirados: sección P de
+`doc/trucos-aprendidos.md`), que solo
 usa `math` + `cap_contract` (sin PySide6). Por eso el `--selftest` del oráculo
 corre **sin pantalla ni GPU** y exige rechazar las escenas sintéticas trucadas
 (cap bleed, paint outside, hole open, face wins, la identidad de espejo del propio

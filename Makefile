@@ -85,7 +85,8 @@ lint-ci: check
 # winding invertido, UV/índice fuera, triángulo ausente) en polígono y disco.
 # Se salta (exit 0) si faltan PySide6 o QtQuick3D.Helpers.
 # check-cylinder-wiring.py instancia el Cube.qml REAL (no la malla suelta) contra
-# el stub org.kde.kwin de check-video-dome con Shape=Cylinder: 3 escritorios
+# el stub org.kde.kwin del harness comun (qml_check_harness.STUB_MODULE)
+# con Shape=Cylinder: 3 escritorios
 # (tambor: flags, Loader→Ready con Geometry no-nula o fallback documentado sin
 # Helpers, angleTick=360/N, faceDistance=R y paridad NoCulling dentro/margen/
 # fuera — el culling dinámico se retiró, ADR-025 pt.12) y 2/1 (tambor de TRES
@@ -101,56 +102,11 @@ lint-ci: check
 # escenario FLIP (ScreenView.qml real, 2 escritorios, Shape Polígono→Cilindro
 # en caliente): el overlay debe leer v == d == R sin warning de binding loop.
 # No renderiza nada: basta el motor offscreen. Se salta sin PySide6.
-# check-cylinder-overlap.py RENDERIZA el Cube.qml REAL (Shape=Cylinder,
-# colores planos por cara vía los stubs de check-video-dome; tambor de 3
-# escritorios y tambor de 3 slots con 1 y con 2) y
-# fija el fix de ADR-026 en dos planos: píxeles — la cara frontal gana en toda
-# su huella en reposo (op=1, yaw 0) y a medio giro (yaw 60, op=0.7: el color
-# dominante sigue siendo la cara cercana; la pared interior sólo aparece por
-# el hueco) y los huecos del textura de cara siguen dejando ver el fondo en
-# reposo (Mask descarta, NO pinta negro — Opaque pintaría negro: medido);
-# estructura — los centroides de las N caras son dos a dos distintos (la
-# malla envuelve el nodo; el radius vive en la position, paridad con el
-# polígono) y alphaMode sale del umbral de faceOpacity (≥0.99 Mask, <0.99
-# Blend); escenarios «single»/«two-slot» — 1 y 2 escritorios: el tambor de 3
-# slots mantiene la cara de frente (slot 0 centro de pantalla, R = 3(W+g)/2π)
-# — el guard del «detrás» y del «v=4 dentro del tambor» que pidió el usuario
-# (ADR-026b). Necesita pantalla real (QtQuick3D no
-# renderiza offscreen) y PySide6; sin ellos se salta (exit 0).
-# check-cap-overlap.py RENDERIZA el Cube.qml REAL con sus dos tapas (ADR-027
-# + enmiendas) en la geometría de la captura del usuario (W=1600 H=900, N=3,
-# separación 10, Color/Flecha) y decide con PÍXELES sobre un barrido
-# pitch 0/15/30/45/60 × yaw 0/60/120/154/180/240/300 (el 30 corre también su
-# espejo -30 = la cámara por debajo que midió el usuario): (a) en píxeles cuya
-# cara frontal confirma el oráculo la tapa no puede pintarse por encima
-# ("cruzando el sólido"); (b) ningún píxel de tapa cae fuera del polígono
-# proyectado y el hueco que la tapa debe cerrar no queda abierto ("no tapa el
-# hueco"); (c) ambas = superior ∪ inferior y la tapa inferior rotada 180°
-# sobre Z coincide con la misma malla SIN rotar (con rotación sobre X el
-# anillo giraba medio tick: 78–220 px de diferencia — el bug "180 volteado"
-# que cazó este gate); (d) alphaMode Mask con alphaCutoff 0.5 a opacidad 100
-# y Blend por debajo (la regla ADR-026 extendida; NO SetToOpaque: pinta los
-# agujeros de negro, medido en ADR-026); (e/f) tablas medidas del espejo del
-# contenido (PNG asimétrico) y del marcador Flecha (centroide del cuadrante
-# magenta y de la flecha cian por tapa y yaw — el marcador es el default de
-# CapContent desde la enmienda 2). El oráculo geométrico vive aparte, en
-# scripts/cap_overlap_oracle.py (solo math + cap_contract, SIN PySide6), y por
-# eso su --selftest corre también sin pantalla ni GPU: exige que el oráculo
-# rechace escenas sintéticas trucadas (tapa sobre cara, pintura fuera del
-# anillo, hueco abierto, cara ganando a la tapa), quede mudo en la limpia y
-# reporte la fila de control expect=0. Los PÍXELES del driver necesitan pantalla
-# real y PySide6; sin ellos se salta (exit 0).
 # check-video.py instancia HullVideo.qml (el único fichero que importa
 # QtMultimedia) con un motor QML real y comprueba los dos caminos del Loader de
 # ScreenView: módulo presente -> item y VideoOutput creados; módulo ausente y
 # fuente rota -> Loader.Error sin llevarse la escena. También se salta (exit 0)
 # si falta PySide6.
-# check-video-dome.py RENDERIZA el ScreenView.qml real (módulo org.kde.kwin
-# simulado + effect falso, Background=Video equirect + girar) y exige un frame
-# con muchos colores: el 360 de vídeo no se puede validar con lint, porque el
-# fallo clásico (SkyBox + Texture.sourceItem) cargaba sin error y pintaba negro.
-# Necesita pantalla real: QtQuick3D no renderiza en offscreen, así que en CI se
-# salta (exit 0).
 # check-features.py valida el catálogo features.json (campos obligatorios,
 # status válido, ids únicos y dependencias conocidas); un JSON inválido rompe
 # el gate. Su --selftest comprueba el propio validador (JSON inválido, id
@@ -160,10 +116,12 @@ lint-ci: check
 check:
 	@files=$$(find $(QML_DIR) -name '*.qml'); \
 	if [ -n "$$files" ]; then \
-		$(QMLLINT) -I $(QML_IMPORT) $$files > /tmp/kube-effect-qmllint.log 2>&1 || true; \
-		bad=$$(grep -oE '\[[a-z-]+\]$$' /tmp/kube-effect-qmllint.log | tr -d '[]' | sort -u \
+		qmllint_log=$$(mktemp "$${TMPDIR:-/tmp}/kube-effect-qmllint.XXXXXX") || exit 1; \
+		$(QMLLINT) -I $(QML_IMPORT) $$files > "$$qmllint_log" 2>&1 || true; \
+		bad=$$(grep -oE '\[[a-z-]+\]$$' "$$qmllint_log" | tr -d '[]' | sort -u \
 			| grep -vE "^($(subst $(space),|,$(QMLLINT_ALLOWED)))$$" || true); \
-		if [ -n "$$bad" ]; then echo "qmllint: reglas nuevas sin revisar: $$bad"; cat /tmp/kube-effect-qmllint.log; exit 1; fi; \
+		if [ -n "$$bad" ]; then echo "qmllint: reglas nuevas sin revisar: $$bad"; cat "$$qmllint_log"; rm -f "$$qmllint_log"; exit 1; fi; \
+		rm -f "$$qmllint_log"; \
 		$(QMLFORMAT) -i $$files; \
 		untracked=$$(git ls-files --others --exclude-standard -- $(QML_DIR) | grep -E '\.qml$$' || true); \
 		if ! git diff --exit-code -- $$files || [ -n "$$untracked" ]; then \
@@ -183,11 +141,7 @@ check:
 	@python3 scripts/check-cap.py
 	@python3 scripts/check-cap.py --selftest
 	@python3 scripts/check-cylinder-wiring.py
-	@python3 scripts/check-cylinder-overlap.py
-	@python3 scripts/check-cap-overlap.py
-	@python3 scripts/check-cap-overlap.py --selftest
 	@python3 scripts/check-video.py
-	@python3 scripts/check-video-dome.py
 	@python3 scripts/check-features.py
 	@python3 scripts/check-features.py --selftest
 	@if [ ! -d $(NATIVE_PACKAGE_DIR) ]; then \

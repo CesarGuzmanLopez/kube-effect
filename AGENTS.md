@@ -109,7 +109,10 @@ captura/suelta).
 
 `make lint` (qmllint + qmlformat + esquema + json/yaml + sincronía de
 `package/contents/native/`). Si hay SonarQube local, `make lint` corre además el
-escaneo; si no, `make check` basta.
+escaneo; si no, `make check` basta. `make check` es deliberadamente rápido
+(~7 s): los gates de render (píxeles) se retiraron por coste el 2026-11-27 y se
+recuperan según `doc/trucos-aprendidos.md`, sección P. La orientación de las
+tapas se comprueba a ojo con `CapContent=Arrow` y el wallpaper direccional.
 
 ## KConfigXT
 

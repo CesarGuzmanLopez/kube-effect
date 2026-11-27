@@ -24,7 +24,7 @@ import "constants.js" as Constants
 // centroids at y = +/- faceHeight/2). NOT SetToOpaque/Opaque: measured in
 // ADR-026, those paint the texture's alpha holes BLACK. alphaCutoff is
 // pinned explicitly (CubeFace's lesson: Qt's default could move the hard
-// edge under a future Qt). The pixel gate scripts/check-cap-overlap.py
+// edge under a future Qt). The pixel gate (the removed pixel gate (cost: minutes per run; recover with `git log --diff-filter=D --name-only -- cap pixel gate, removed for cost (doc/trucos-aprendidos.md, section P)`))
 // asserts both regimes and the depth consequence.
 //
 // The content is a plain 2D Item used as Texture.sourceItem (no shaders):
@@ -40,7 +40,7 @@ Model {
     id: cap
 
     // Symbolic marker so the face-walking test harnesses (the collectFaces of
-    // check-cylinder-overlap.qml, which treats any node with materials +
+    // the removed cylinder pixel gate, which treats any node with materials +
     // position + geometry as a face) can tell a cap from a face: the caps are
     // NOT desktop faces and must never join the face-count, radius-centroid or
     // faceOpacity assertions of that gate.

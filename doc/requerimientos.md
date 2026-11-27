@@ -354,7 +354,7 @@ Geometría por forma (una sola malla compartida, ver abajo):
   dos tapas (espejadas por rotación), igual que las caras comparten
   `CylinderArcMesh` (ADR-025). Sin shader: la tapa es un polígono plano (o
   disco) con la textura de contenido. **El eje del flip es Z, no X** (ADR-027
-  enmienda 2, medido con píxeles en `scripts/check-cap-overlap.py`): la tapa
+  enmienda 2, medido con píxeles por el gate retirado (doc/trucos-aprendidos.md sección P)): la tapa
   inferior es el mismo nodo con `eulerRotation.z: 180`, el único giro de 180°
   que vuelca la normal +Y → −Y **y** deja el anillo invariante (manda
   α → −α). Con `eulerRotation.x: 180` (α → 180°−α) el anillo quedaba girado
@@ -386,7 +386,7 @@ Geometría por forma (una sola malla compartida, ver abajo):
   ADR-022): `CapArrow.qml` se carga tras un `Loader`; sin el módulo la tapa
   degrada a `CapColor` plano y avisa **una vez**. Con `DebugOverlay` activo
   las tapas se pintan SIEMPRE en modo Arrow (diagnóstico sin tocar el valor
-  guardado). Fijado con píxeles por `scripts/check-cap-overlap.py` (tabla de
+  guardado). Fijado en su momento con píxeles por el gate retirado (sección P de trucos; tabla de
   centroides por tapa y yaw).
 
 Transparencia y contenido:

@@ -10,7 +10,7 @@
 // cannot tell "the cap is turned/mirrored" from "the cap paints over the
 // faces" (the exact confusion of the overlap report). One asymmetric marker
 // makes rotation and mirror readable at a glance — and it is what makes the
-// bottom cap's flip testable with pixels (scripts/check-cap-overlap.py
+// bottom cap's flip testable with pixels (cap pixel gate, removed for cost (doc/trucos-aprendidos.md, section P)
 // measures the magenta centroid of each cap against its mirror).
 //
 // SHAPES IS OPTIONAL (ADR-022 pattern, like HullRadial.qml for the radial
@@ -30,7 +30,7 @@
 // corner. The colours are the gate's classes "C" and "M".
 //
 // UV CONVENTION (MEASURED against the real ProceduralMesh by the arrow
-// scenario of scripts/check-cap-overlap.py, not assumed): the mesh maps
+// scenario of cap pixel gate, removed for cost (doc/trucos-aprendidos.md, section P), not assumed): the mesh maps
 // u = 0.5 + x/(2 rho), v = 0.5 + z/(2 rho) over the item's square, and the
 // grab places the item's TOP edge at v -> 1 = LOCAL +z = the azimuth of
 // face 0 (desktop 1). So the arrow "up" means "toward face 0": both caps

@@ -257,3 +257,140 @@ def dispatch(argv, selftest_main, check_main):
     if "--selftest" in argv[1:]:
         return selftest_main()
     return check_main()
+
+# ------------------------------------------------------------------
+# Stub org.kde.kwin QML module.
+#
+# Shared on purpose: the render gates were removed for cost, but the
+# fast wiring gate still instantiates the real Cube.qml against this
+# module, and one copy is the only way the two never drift.
+STUB_MODULE = {
+    "qmldir": """module org.kde.kwin
+singleton SceneView 1.0 SceneView.qml
+singleton Workspace 1.0 Workspace.qml
+VirtualDesktopModel 1.0 VirtualDesktopModel.qml
+WindowModel 1.0 WindowModel.qml
+WindowFilterModel 1.0 WindowFilterModel.qml
+WindowThumbnail 1.0 WindowThumbnail.qml
+""",
+    "SceneView.qml": """pragma Singleton
+import QtQuick
+QtObject {
+    property var screen: null
+}
+""",
+    "Workspace.qml": """pragma Singleton
+import QtQuick
+QtObject {
+    id: ws
+    signal currentDesktopChanged(var previous, var current, var screen)
+    property var activeScreen: null
+    property var cursorPos: Qt.point(0, 0)
+    property var currentActivity: ""
+    property var desktops: []
+    // A real desktop, not null: Cube.desktopAzimuth(currentDesktop) reads
+    // .x11DesktopNumber in the polygon path and used to throw a TypeError
+    // here, killing the state rotation binding without failing the test.
+    // Parented to the singleton so the object outlives the binding.
+    property var firstDesktop: Qt.createQmlObject("import QtQuick; QtObject { property int x11DesktopNumber: 1; property string name: \\"1\\" }", ws)
+    function currentDesktopForScreen(screen) { return firstDesktop; }
+    function setCurrentDesktopForScreen(desktop, screen) {}
+    function createDesktop() { return null; }
+    function screenAt(pos) { return null; }
+}
+""",
+    # The desktop role carries a real QObject (verified: ListModel.append()
+    # keeps it and delegates read it back), because CubeFace declares
+    # "required property QtObject desktop": rows without the role make the
+    # delegate fail to build and the render test would never touch the faces
+    # or the ADR-022 LOD. x11DesktopNumber is read by Cube.desktopAzimuth.
+    # stubDesktopCount (context property) sets the size: 3 = polygon, 2 = sheet.
+    "VirtualDesktopModel.qml": """import QtQuick
+ListModel {
+    id: vdm
+    property int stubCount: (typeof stubDesktopCount === "number" && stubDesktopCount > 0) ? stubDesktopCount : 3
+    Component.onCompleted: {
+        for (let n = 1; n <= stubCount; ++n) {
+            // createQmlObject, not a Component child element: a ListModel
+            // parses any nested element as a ListElement.
+            const desktop = Qt.createQmlObject("import QtQuick; QtObject { property int x11DesktopNumber; property string name }", vdm);
+            desktop.x11DesktopNumber = n;
+            desktop.name = String(n);
+            append({ "desktop": desktop, "x11DesktopNumber": n, "name": String(n) });
+        }
+    }
+}
+""",
+    "WindowModel.qml": """import QtQuick
+ListModel {
+}
+""",
+    # One fake window per desktop so every DesktopView face carries a FLAT
+    # COLOUR the render tests can identify (check-cylinder-overlap.py samples
+    # pixels per face). internalId carries the desktop number: the stub maps
+    # it to red/green/blue. The thumbnail fills the face by default; with the
+    # stubFaceCoverage context property below 1 it leaves an alpha-0 border
+    # (keeps the "wallpaper shows through the face texture" case visible in
+    # the grabs: a blending material reveals it, an opaque one paints black).
+    "WindowFilterModel.qml": """import QtQuick
+ListModel {
+    id: wfm
+    property var activity
+    property var desktop
+    property string screenName
+    property var windowModel
+    Component.onCompleted: {
+        if (desktop === null || desktop === undefined) {
+            return;
+        }
+        const number = desktop.x11DesktopNumber;
+        // createQmlObject: a ListModel parses any nested element as a ListElement.
+        const win = Qt.createQmlObject("import QtQuick; QtObject { property string internalId; property real x; property real y; property int stackingOrder; property bool minimized }", wfm);
+        win.internalId = "stub-" + number;
+        win.x = 0;
+        win.y = 0;
+        win.stackingOrder = 0;
+        win.minimized = false;
+        append({ "window": win });
+    }
+}
+""",
+    "WindowThumbnail.qml": """import QtQuick
+Item {
+    id: thumb
+    property var wId
+    // Size to the DesktopView (the Repeater's parent): a plain delegate Item
+    // has no implicit size, and the render tests need the colour to cover the
+    // face. 72 % leaves an alpha-0 border around the colour block.
+    // stubFaceCoverage (context property): 1 fills the whole face (ordering
+    // tests, no holes); <1 leaves an alpha border (transparency tests).
+    readonly property real cover: (typeof stubFaceCoverage === "number" && stubFaceCoverage > 0) ? stubFaceCoverage : 1
+    width: parent !== null ? parent.width * cover : 0
+    height: parent !== null ? parent.height * cover : 0
+    Rectangle {
+        anchors.fill: parent
+        color: String(thumb.wId).endsWith("-1") ? "#ff0000"
+            : String(thumb.wId).endsWith("-2") ? "#00ff00"
+            : String(thumb.wId).endsWith("-3") ? "#0000ff"
+            : "#ffa500"
+    }
+}
+""",
+}
+
+# Background enum index for Video (see package/contents/config/main.xml).
+BACKGROUND_VIDEO = 3
+# Enough distinct colours to rule out a uniform clear/black frame.
+MIN_COLOURS = 50
+# Only these three signatures fail a scenario (the check-constants.py pattern).
+# Other qWarnings are legitimate Qt chatter (shader backend, vsync, ...) and
+# must NOT break the gate.
+QML_ERROR_SIGNATURES = ("TypeError", "ReferenceError", "is not defined")
+
+
+def write_stub_module(directory):
+    target = Path(directory) / "org/kde/kwin"
+    target.mkdir(parents=True, exist_ok=True)
+    for name, contents in STUB_MODULE.items():
+        (target / name).write_text(contents, encoding="utf-8")
+    return Path(directory)

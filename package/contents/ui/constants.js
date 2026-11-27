@@ -792,7 +792,7 @@ function videoSource(value) {
 // Matches the CapContent enum in config/main.xml. Arrow (3) was APPENDED
 // at the end (the KConfigXT index rule) and is the schema default: the
 // asymmetric marker is the only cap content that makes rotation and
-// mirroring visible to the eye and to scripts/check-cap-overlap.py
+// mirroring visible to the eye and to cap pixel gate, removed for cost (doc/trucos-aprendidos.md, section P)
 // (ADR-027 amendment 2).
 const CapContent = {
     Color: 0,

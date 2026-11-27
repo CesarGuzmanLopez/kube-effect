@@ -187,7 +187,7 @@
              amendment 2). The asymmetric marker (arrow + magenta corner
              quadrant) makes rotation and mirroring readable at a glance and
              is what makes the bottom cap's mirror testable in
-             scripts/check-cap-overlap.py. Appended at the END of the
+             cap pixel gate, removed for cost (doc/trucos-aprendidos.md, section P). Appended at the END of the
              choices: KConfigXT stores the integer index, so existing keys
              never move (the project's enum rule). Unknown kwinrc values
              still fall back to Color through constants.js capContent(). -->

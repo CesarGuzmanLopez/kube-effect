@@ -85,7 +85,7 @@ Texture.sourceItem as light probe.» (medido 2026-11-25; además repetía el avi
 cada frame). `Texture.sourceItem` sí vale en el `baseColorMap` de un material.
 Vídeo 360 = esfera vista desde dentro (ADR-020), no entorno.
 
-Verificación automática: `scripts/check-video-dome.py` (en `make check`) carga el
+Verificación automática (retirada por coste; sección P): `scripts/check-video-dome.py` cargaba el
 `ScreenView.qml` real con un `org.kde.kwin` simulado y exige que el frame tenga
 muchos colores; necesita pantalla real y en CI se salta.
 
@@ -517,7 +517,7 @@ en pantalla 16:9 pierde franjas superior/inferior); Contain
 ambas deforman el panorama: la envoltura la hace la geometría, no el ajuste.
 Fix: propiedad `dome` en `HullVideo.qml` — con Equirect + girar el `fillMode`
 es `Stretch` (fotograma completo); el fit solo aplica a la capa plana.
-`scripts/check-video-dome.py` exige `fillMode == Stretch` en el caso 360.
+`scripts/check-video-dome.py` (retirado, sección P) exigía `fillMode == Stretch` en el caso 360.
 Medido 2026-11-25 con clip 608×304. (ADR-020, corrección.)
 
 ### ⚠️ OJO: delegate de SceneEffect evaluado una vez
@@ -605,7 +605,7 @@ hueco caída de 928 a 472 ("no tapa el hueco"). El giro de 180° que SÍ respeta
 el anillo y vuelca la normal es **sobre Z** ((x,z) → (−x,z), α → −α). Truco
 transferible: cuando una malla compuesta "se ve igual por el otro lado" es una
 premisa de diseño, medirla con píxeles — renderizar la malla rotada y SIN
-rotar y comparar siluetas (`check-cap-overlap.py`, variantes v3/v4: con X,
+rotar y comparar siluetas (gate de píxeles retirado, sección P; variantes v3/v4: con X,
 78–220 celdas de diferencia; con Z, 0 en 14 filas del barrido). Un razonamiento
 solo con conjuntos de azimuts no basta: hay que comprobar qué mapa implementa
 CADA eje.
@@ -613,7 +613,7 @@ CADA eje.
 ### ⚠️ OJO: en un gate de píxeles, el color de prueba no puede chocar con los colores del stub
 
 La tapa "azul puro" del reporte del usuario es píxel-idéntica al azul del
-escritorio 3 del stub compartido (`check-video-dome.py`): la pared interior de
+escritorio 3 del stub compartido (gate de vídeo retirado, sección P): la pared interior de
 esa cara alimentaba el contador "fuera de silueta" con 218 falsos positivos.
 Los colores de un gate deben ser clases DISJUNTAS de todo lo demás en escena
 (aquí: tapa naranja #ff8000; el fondo del casco, negro; el marcador del
@@ -654,7 +654,7 @@ Medido con faulthandler: el hilo main se bloquea en `QQmlTypeLoader::getType`
 parseo (hang de ~12 s, traza bajo `QWaitCondition`). Sin handler instalado, este
 PySide6 **se traga en silencio** todos los mensajes QML (ni logging ni stderr los
 ven): un `TypeError` silencioso deja bindings rotos con el test en verde. Fix
-(`scripts/check-video-dome.py`): carga de **calentamiento sin handler** (parsea
+(gate de vídeo retirado, sección P): carga de **calentamiento sin handler** (parsea
 todos los tipos y llena la caché del motor), **después** se instala el handler y
 se crea la vista real (los mensajes restantes llegan al hilo main), y **un
 subproceso por escenario** (un segundo `QGuiApplication.exec()` tras el primer
@@ -670,6 +670,46 @@ para que sobrevivan al binding) y `append({ "desktop": desktop, ... })` — el r
 lleva un `QObject` real que los delegates leen de vuelta (`CubeFace` declara
 `required property QtObject desktop`; `Cube.desktopAzimuth` lee
 `.x11DesktopNumber`, que con `null` tiraba un `TypeError` matando el binding sin
-fallar el test). Ver `check-video-dome.py` (STUB_MODULE, `VirtualDesktopModel.qml`
+fallar el test). Ver `scripts/qml_check_harness.py` (STUB_MODULE, `VirtualDesktopModel.qml`
 y `WindowFilterModel.qml`).
 
+## P. Gates de render retirados por coste (2026-11-27)
+
+Tres gates dibujaban la escena real y se comparaban píxel a píxel:
+
+| fichero | qué protegía |
+|---|---|
+| `scripts/check-cap-overlap.py` + `.qml` + `scripts/cap_overlap_oracle.py` | orden de pintado y silueta de las tapas (ADR-027 enmiendas 1 y 2) |
+| `scripts/check-cylinder-overlap.py` + `.qml` | que la pared lejana no quedara encima de las caras (ADR-026) |
+| `scripts/check-video-dome.py` | el vídeo 360 forzado a Stretch y la cúpula pintada (ADR-020) |
+
+**Por qué se fueron:** cada pasada costaba minutos (un proceso hijo por pitch,
+42 filas de grabs) y `check-video-dome` fallaba con la VRAM saturada, así que el
+gate local se había convertido en la fuente de trabajo en vez del filtro. El
+intentó intermedio —separar `check` rápido de `check-render` con disparo
+automático si la geometría estaba tocada— funcionaba, pero seguía corriendo los
+lentos en cuanto la geometría cambiaba, que es casi siempre que algo va mal.
+
+**Qué se pierde:** el orden de pintado de tapas y cilindro vuelve a ser
+invisible para las máquinas. La geometría sigue cubierta (offscreen, segundos):
+`check-cap.py` + `cap_contract.py` (apotema/esquinas/vinding/UVs/malla compartida)
+y `check-cylinder.py` + `check-cylinder-wiring.py`. La orientación de la tapa
+inferior se comprueba a ojo con el marcador `CapContent=Arrow` (flecha +
+cuadrante magenta) y con el wallpaper direccional del arnés.
+
+**Cómo recuperarlos** (están en el historial, borrados en el commit que los
+retiró):
+
+```bash
+git log --diff-filter=D --name-only -- 'scripts/check-cap-overlap.*' 'scripts/cap_overlap_oracle.py'
+git log --diff-filter=D --name-only -- 'scripts/check-cylinder-overlap.*'
+git log --diff-filter=D --name-only -- scripts/check-video-dome.py
+# y resucitarlos desde ese commit padre:
+git checkout <commit>~1 -- scripts/check-cap-overlap.py scripts/check-cap-overlap.qml \
+    scripts/cap_overlap_oracle.py scripts/check-cylinder-overlap.py \
+    scripts/check-cylinder-overlap.qml scripts/check-video-dome.py
+```
+
+El stub `org.kde.kwin` que compartían vive ahora en `scripts/qml_check_harness.py`
+(`STUB_MODULE`, `write_stub_module`, `QML_ERROR_SIGNATURES`): lo usa
+`check-cylinder-wiring.py`, que sí se queda.
