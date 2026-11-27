@@ -90,6 +90,54 @@ def selftest(engine):
     return failures
 
 
+def _probe_exposure(application, harness, environment, log, name, target, expected):
+    """One exposure probe: set the harness value (None leaves it), let the
+    Behavior settle, and check probeExposure back. True on PASS; the PASS/
+    FAIL texts mirror the original gate output verbatim."""
+    if target is not None:
+        harness.setProperty("exposure", target)
+        settle(application, 400)
+    value = environment.property("probeExposure")
+    if abs(float(value) - expected) <= 1e-5:
+        log.append(f"PASS exposure({name}) = {expected:g}")
+        return True
+    log.append(f"FAIL exposure({name}) = {value} (expected {expected:g})")
+    return False
+
+
+def _load_harness(engine, application):
+    """Load check-scene-environment.qml offscreen. Returns (harness,
+    component, status): a non-None status is the caller's exit code. The
+    component travels with the harness on purpose — when the local were
+    dropped here PySide would GC it and delete the created object (the
+    original kept both alive in main's frame)."""
+    component = QQmlComponent(engine)
+    component.loadUrl(
+        QUrl.fromLocalFile(str(ROOT / "scripts/check-scene-environment.qml"))
+    )
+    if component.isError():
+        print("check-scene-environment: FAIL")
+        for error in component.errors():
+            print(f" - {error.toString()}")
+        return None, None, 1
+    harness = component.create()
+    if harness is None:
+        print("check-scene-environment: FAIL could not create the QML harness")
+        return None, None, 1
+    application.processEvents()
+    return harness, component, None
+
+
+def _selftest_verdict(failures):
+    """Print every detection and the OK/FAIL line (the harness of the
+    property-missing probe: an unknown SceneEnvironment property MUST
+    fail, or the gate is blind)."""
+    for failure in failures:
+        print(f"FAIL {failure}")
+    print("check-scene-environment --selftest:", "OK" if not failures else "FAIL")
+    return 0 if not failures else 1
+
+
 def main():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     # Same software-only setup: no GPU and no window surface is needed.
@@ -99,25 +147,10 @@ def main():
 
     engine = QQmlEngine()
     if "--selftest" in sys.argv[1:]:
-        failures = selftest(engine)
-        for failure in failures:
-            print(f"FAIL {failure}")
-        print("check-scene-environment --selftest:", "OK" if not failures else "FAIL")
-        return 0 if not failures else 1
-    component = QQmlComponent(engine)
-    component.loadUrl(
-        QUrl.fromLocalFile(str(ROOT / "scripts/check-scene-environment.qml"))
-    )
-    if component.isError():
-        print("check-scene-environment: FAIL")
-        for error in component.errors():
-            print(f" - {error.toString()}")
-        return 1
-    harness = component.create()
-    if harness is None:
-        print("check-scene-environment: FAIL could not create the QML harness")
-        return 1
-    application.processEvents()
+        return _selftest_verdict(selftest(engine))
+    harness, _component, status = _load_harness(engine, application)
+    if status is not None:
+        return status
 
     log = [harness.property("log") or ""]
     ok = bool(harness.property("ok"))
@@ -127,37 +160,21 @@ def main():
         print("check-scene-environment: FAIL (no SceneEnvironment)")
         return 1
 
-    def close(actual, expected):
-        return abs(float(actual) - expected) <= 1e-5
-
     # Still cube: base exposure, untouched by the dim amount.
-    if not close(environment.property("probeExposure"), 1.0):
-        log.append(
-            f"FAIL exposure(still) = {environment.property('probeExposure')} (expected 1)"
-        )
+    if not _probe_exposure(application, harness, environment, log, "still", None, 1.0):
         ok = False
-    else:
-        log.append("PASS exposure(still) = 1")
 
     # Rotating with a 40 % dim: 1.0 - 0.4, reached through the Behavior.
-    harness.setProperty("exposure", 0.4)
-    settle(application, 400)
-    value = environment.property("probeExposure")
-    if not close(value, 0.4):
-        log.append(f"FAIL exposure(rotating 40%) = {value} (expected 0.4)")
+    if not _probe_exposure(
+        application, harness, environment, log, "rotating 40%", 0.4, 0.4
+    ):
         ok = False
-    else:
-        log.append("PASS exposure(rotating 40%) = 0.4")
 
     # Back to the base value: the same binding must still be alive.
-    harness.setProperty("exposure", 1.0)
-    settle(application, 400)
-    value = environment.property("probeExposure")
-    if not close(value, 1.0):
-        log.append(f"FAIL exposure(still again) = {value} (expected 1)")
+    if not _probe_exposure(
+        application, harness, environment, log, "still again", 1.0, 1.0
+    ):
         ok = False
-    else:
-        log.append("PASS exposure(still again) = 1")
 
     if messages:
         ok = False

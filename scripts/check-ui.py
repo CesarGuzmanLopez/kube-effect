@@ -255,50 +255,63 @@ def _check_cap_stack(form, problems):
             )
 
 
-def _check_advanced_behaviour(form, problems):
-    """The Advanced tab is the only dynamic part left besides the mode stack.
-
-    Nothing here is kcfg-bound logic: the whole behaviour is the <connections>
-    block, so it has to be exercised, not just parsed.
-    """
+def _check_dim_pair(form, problems):
+    """DimWhileRotating gates its amount spin box through <connections>:
+    start disabled, toggled(true) enables, toggled(false) disables."""
     dim = form.findChild(QCheckBox, "kcfg_DimWhileRotating")
     amount = form.findChild(QSpinBox, "kcfg_DimWhileRotatingAmount")
     if dim is None or amount is None:
         problems.append("config.ui: dim checkbox and amount spin box are required")
-    else:
-        if amount.isEnabled():
-            problems.append("kcfg_DimWhileRotatingAmount: must start disabled")
-        dim.setChecked(True)
-        if not amount.isEnabled():
-            problems.append(
-                "kcfg_DimWhileRotatingAmount: toggled(true) does not enable it"
-            )
-        dim.setChecked(False)
-        if amount.isEnabled():
-            problems.append(
-                "kcfg_DimWhileRotatingAmount: toggled(false) does not disable it"
-            )
+        return
+    if amount.isEnabled():
+        problems.append("kcfg_DimWhileRotatingAmount: must start disabled")
+    dim.setChecked(True)
+    if not amount.isEnabled():
+        problems.append("kcfg_DimWhileRotatingAmount: toggled(true) does not enable it")
+    dim.setChecked(False)
+    if amount.isEnabled():
+        problems.append(
+            "kcfg_DimWhileRotatingAmount: toggled(false) does not disable it"
+        )
 
+
+def _check_plus_section(form, problems):
+    """showPlusSection toggles the Plus section: start hidden, toggled(true)
+    shows, toggled(false) hides."""
     toggle = form.findChild(QCheckBox, "showPlusSection")
     section = form.findChild(QWidget, "plusSection")
     if toggle is None or section is None:
         problems.append("config.ui: showPlusSection and plusSection are required")
-    else:
-        if not section.isHidden():
-            problems.append("plusSection: must start hidden")
-        toggle.setChecked(True)
-        if section.isHidden():
-            problems.append("plusSection: toggled(true) does not show it")
-        toggle.setChecked(False)
-        if not section.isHidden():
-            problems.append("plusSection: toggled(false) does not hide it")
+        return
+    if not section.isHidden():
+        problems.append("plusSection: must start hidden")
+    toggle.setChecked(True)
+    if section.isHidden():
+        problems.append("plusSection: toggled(true) does not show it")
+    toggle.setChecked(False)
+    if not section.isHidden():
+        problems.append("plusSection: toggled(false) does not hide it")
 
+
+def _check_advanced_separators(form, problems):
+    """The two separators exist and are horizontal lines."""
     for name in ("advancedSeparator1", "advancedSeparator2"):
         separator = form.findChild(QFrame, name)
         if separator is None:
             problems.append(f"config.ui: missing separator {name}")
         elif separator.frameShape() != QFrame.Shape.HLine:
             problems.append(f"{name}: frameShape is not HLine")
+
+
+def _check_advanced_behaviour(form, problems):
+    """The Advanced tab is the only dynamic part left besides the mode stack.
+
+    Nothing here is kcfg-bound logic: the whole behaviour is the <connections>
+    block, so it has to be exercised, not just parsed.
+    """
+    _check_dim_pair(form, problems)
+    _check_plus_section(form, problems)
+    _check_advanced_separators(form, problems)
 
 
 def _check_widget(name, widget, info, problems):

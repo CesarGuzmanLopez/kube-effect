@@ -710,6 +710,12 @@ git checkout <commit>~1 -- scripts/check-cap-overlap.py scripts/check-cap-overla
     scripts/check-cylinder-overlap.qml scripts/check-video-dome.py
 ```
 
+Con los gates salieron también sus dos manijas de sonda PySide, ya sin
+lector: `HullVideo.fillModeValue` (el entero del `fillMode` que el gate de
+cúpula leía porque PySide no convierte el enum) y `Cap.kubeCapSurface` (el
+marcador que separaba tapas de caras al caminar nodos). Resucitar los gates
+impuelve reponerlas (`git log --diff-filter=D -S fillModeValue`).
+
 El stub `org.kde.kwin` que compartían vive ahora en `scripts/qml_check_harness.py`
 (`STUB_MODULE`, `write_stub_module`, `QML_ERROR_SIGNATURES`): lo usa
 `check-cylinder-wiring.py`, que sí se queda.

@@ -7,8 +7,6 @@
 import QtQuick
 import QtQuick3D
 
-import "constants.js" as Constants
-
 Item {
     id: root
 

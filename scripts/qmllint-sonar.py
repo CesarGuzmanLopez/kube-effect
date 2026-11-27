@@ -101,9 +101,13 @@ def main() -> int:
     with open(noise_path, "w", encoding="utf-8") as fh:
         for i in noise:
             loc = i["primaryLocation"]
-            fh.write(f'{loc["filePath"]}:{loc["textRange"]["startLine"]}: {i["ruleId"]} {loc["message"]}\n')
+            fh.write(
+                f"{loc['filePath']}:{loc['textRange']['startLine']}: {i['ruleId']} {loc['message']}\n"
+            )
 
-    print(f"qmllint-sonar: {len(real)} issues en el gate, {len(noise)} de ruido -> {noise_path}")
+    print(
+        f"qmllint-sonar: {len(real)} issues en el gate, {len(noise)} de ruido -> {noise_path}"
+    )
     return 0
 
 

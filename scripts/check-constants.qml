@@ -1,6 +1,7 @@
 import QtQuick
 import "../package/contents/ui/constants.js" as Constants
 import "../package/contents/ui/capGeometry.js" as CapGeo
+import "../package/contents/ui/arcGeometry.js" as ArcGeo
 
 // Runs inside scripts/check-constants.py. The holder `h` exposes QUrl
 // properties, i.e. exactly what KConfigLoader hands QML for a Url entry: the
@@ -288,14 +289,29 @@ Item {
         // Arc geometry (ADR-025): structure only here — check-cylinder.py
         // validates the REAL ProceduralMesh (radius, isometry, winding, arc
         // length) offscreen. Degenerate input answers empty arrays.
-        const arc = Constants.cylinderArcGeometry(2560, 1440, Constants.cylinderRadius(4, 2560, 100), Constants.CYLINDER_SEGMENTS);
+        // The three JS modules carry their own copy of the finite guard
+        // (QML scripts cannot import each other: the documented isolation of
+        // arcGeometry.js/capGeometry.js). These cases pin them to the SAME
+        // string-coercion behaviour as constants.js, so a copy can never
+        // drift into rejecting "50" (KConfig delivers strings).
+        // Equality (not absolutes): the shared coercion is documented in
+        // constants.js — Number() first, so null and "" are finite zeros
+        // (finiteOr is the one that answers null for them). A copy that
+        // started rejecting "50" — or accepting NaN differently — fails.
+        [null, "", "50", "x", NaN, undefined, 7, 1 / 0].forEach(function (probe) {
+            var base = Constants.isFiniteNumber(probe);
+            check("guard parity arc " + String(probe), ArcGeo.isFiniteNumber(probe), base);
+            check("guard parity cap " + String(probe), CapGeo.isFiniteNumber(probe), base);
+        });
+
+        const arc = ArcGeo.cylinderArcGeometry(2560, 1440, Constants.cylinderRadius(4, 2560, 100), Constants.CYLINDER_SEGMENTS);
         check("arc positions", arc.positions.length, 130);
         check("arc normals", arc.normals.length, 130);
         check("arc uvs", arc.uvs.length, 130);
         check("arc indexes", arc.indexes.length, 384);
-        check("arc degenerate R", Constants.cylinderArcGeometry(2560, 1440, 0, 64).positions.length, 0);
-        check("arc degenerate W", Constants.cylinderArcGeometry(0, 1440, 100, 64).indexes.length, 0);
-        check("arc degenerate H", Constants.cylinderArcGeometry(2560, 0, 100, 64).normals.length, 0);
+        check("arc degenerate R", ArcGeo.cylinderArcGeometry(2560, 1440, 0, 64).positions.length, 0);
+        check("arc degenerate W", ArcGeo.cylinderArcGeometry(0, 1440, 100, 64).indexes.length, 0);
+        check("arc degenerate H", ArcGeo.cylinderArcGeometry(2560, 0, 100, 64).normals.length, 0);
 
         // Three-slot drum (ADR-025 pt.11 re-rectified, ADR-026): with 1-2
         // desktops and Shape = Cylinder the drum formula runs with N = 3 —

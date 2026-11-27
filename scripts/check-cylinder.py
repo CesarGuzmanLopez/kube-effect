@@ -59,55 +59,53 @@ from qml_check_harness import (
 require_pyside("check-cylinder")
 
 
-def validate(
-    positions, normals, uvs, indexes, width, height, radius, segments, primitive=5
-):
-    """Return a list of human-readable problems (empty = valid mesh)."""
+def _vertex_problems(positions, height, radius):
+    """Cylindricity + rows (ADR-026): every vertex sits on the circle of
+    radius R around the node-local axis (0, 0, -R), for BOTH height rows
+    (column i: bottom 2i, top 2i+1)."""
     problems = []
-    vertex_count = (segments + 1) * 2
-    expected_indexes = segments * 6
-
-    def finite(value):
-        return math.isfinite(value)
-
-    problems, malformed = mesh_size_problems(
-        positions, normals, uvs, indexes, vertex_count, expected_indexes
-    )
-    if malformed:
-        return problems
-
     radial_eps = 1e-6 * max(1.0, radius)
     for index, (x, y, z) in enumerate(positions):
-        if not (finite(x) and finite(y) and finite(z)):
+        if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(z)):
             problems.append(f"vertex {index} is not finite: {x}, {y}, {z}")
             continue
-        # Cylindricity (ADR-026): every vertex sits on the circle of radius
-        # R around the node-local axis (0, 0, -R), for BOTH height rows.
         drift = abs(math.hypot(x, z + radius) - radius)
         if drift > radial_eps:
             problems.append(
                 f"vertex {index} off the cylinder: |x,(z+R)|={math.hypot(x, z + radius):.6f} != R={radius:.6f}"
             )
-        # Two rows at the exact half-height (column i: bottom 2i, top 2i+1).
         expect_y = -height / 2 if index % 2 == 0 else height / 2
         if abs(y - expect_y) > radial_eps:
             problems.append(f"vertex {index} y={y} != {expect_y} (row of the arc)")
+    return problems
 
+
+def _uv_problems(uvs, segments):
+    """UVs in [0,1] with u LINEAR in s (isometry: u = i/segments across the
+    column) and v by row (#Rectangle convention: v=0 bottom, ADR-025
+    mirrored-v contract)."""
+    problems = []
     for index, (u, v) in enumerate(uvs):
-        if not (finite(u) and finite(v)) or not 0.0 <= u <= 1.0 or not 0.0 <= v <= 1.0:
+        if (
+            not (math.isfinite(u) and math.isfinite(v))
+            or not 0.0 <= u <= 1.0
+            or not 0.0 <= v <= 1.0
+        ):
             problems.append(f"uv {index} out of range: {u}, {v}")
             continue
-        # Isometry: u must be LINEAR in s (u = i/segments across the column).
         column = index // 2
         if abs(u - column / segments) > 1e-9:
             problems.append(f"uv {index} not linear in s: u={u} != {column / segments}")
-        expect_v = 0.0 if index % 2 == 0 else 1.0  # #Rectangle convention: v=0 bottom
+        expect_v = 0.0 if index % 2 == 0 else 1.0
         if abs(v - expect_v) > 1e-9:
             problems.append(f"uv {index} v={v} != {expect_v} (row)")
+    return problems
 
-    # Integrated arc length from the vertex angles AROUND THE NODE-LOCAL
-    # AXIS (0, 0, -R): sum R*dphi over the bottom row must equal W exactly
-    # (theta = W/R is the whole point).
+
+def _arc_length_problems(positions, width, radius, segments):
+    """Integrated arc length from the vertex angles AROUND THE NODE-LOCAL
+    AXIS (0, 0, -R): sum R*dphi over the bottom row must equal W exactly
+    (theta = W/R is the whole point)."""
     length = 0.0
     for column in range(1, segments + 1):
         x0, _, z0 = positions[2 * (column - 1)]
@@ -116,11 +114,16 @@ def validate(
         u1 = z1 + radius
         length += radius * math.atan2(x1 * u0 - x0 * u1, x0 * x1 + u0 * u1)
     if abs(length - width) > 1e-6 * max(1.0, width):
-        problems.append(f"arc length {length:.6f} != face width {width:.6f}")
+        return [f"arc length {length:.6f} != face width {width:.6f}"]
+    return []
 
-    # Normals: unit and radial outward (x, 0, z)/R on the axis.
+
+def _normal_problems(positions, normals, radius):
+    """Normals: unit, radial outward (x, 0, z)/R on the axis, and flat
+    (a vertical arc has no y component)."""
+    problems = []
     for index, (nx, ny, nz) in enumerate(normals):
-        if not (finite(nx) and finite(ny) and finite(nz)):
+        if not (math.isfinite(nx) and math.isfinite(ny) and math.isfinite(nz)):
             problems.append(f"normal {index} is not finite")
             continue
         px, _, pz = positions[index]
@@ -136,10 +139,14 @@ def validate(
             problems.append(
                 f"normal {index} has y={ny} (a vertical arc has flat normals)"
             )
+    return problems
 
-    # Indexes + winding.
-    if expected_indexes == 0:
-        return problems
+
+def _winding_problems(positions, indexes, radius):
+    """Indexes in range and CCW seen from OUTSIDE: the cross product must
+    lean onto the radial direction of the triangle centroid measured from
+    the node-local axis."""
+    problems = []
     for triangle in range(len(indexes) // 3):
         i0, i1, i2 = indexes[triangle * 3 : triangle * 3 + 3]
         if not all(0 <= i < len(positions) for i in (i0, i1, i2)):
@@ -157,15 +164,34 @@ def validate(
             e1[2] * e2[0] - e1[0] * e2[2],
             e1[0] * e2[1] - e1[1] * e2[0],
         ]
-        # Outward test: the cross product must lean onto the radial
-        # direction of the triangle centroid measured from the node-local
-        # axis (CCW seen from OUTSIDE).
         mid_x = (v0[0] + v1[0] + v2[0]) / 3.0
         mid_z = (v0[2] + v1[2] + v2[2]) / 3.0 + radius
         if cross[0] * mid_x + cross[2] * mid_z <= 0.0:
             problems.append(f"triangle {triangle} wound inwards (flipped?)")
     if len(indexes) % 3 != 0:
         problems.append(f"indexes count {len(indexes)} is not a multiple of 3")
+    return problems
+
+
+def validate(positions, normals, uvs, indexes, width, height, radius, segments):
+    """Return a list of human-readable problems (empty = valid mesh).
+    One helper per documented rule; order kept as in the original gate."""
+    vertex_count = (segments + 1) * 2
+    expected_indexes = segments * 6
+
+    problems, malformed = mesh_size_problems(
+        positions, normals, uvs, indexes, vertex_count, expected_indexes
+    )
+    if malformed:
+        return problems
+
+    # (the preamble messages stay first: the selftest compares texts)
+    problems.extend(_vertex_problems(positions, height, radius))
+    problems.extend(_uv_problems(uvs, segments))
+    problems.extend(_arc_length_problems(positions, width, radius, segments))
+    problems.extend(_normal_problems(positions, normals, radius))
+    if expected_indexes != 0:
+        problems.extend(_winding_problems(positions, indexes, radius))
     return problems
 
 
@@ -189,7 +215,7 @@ def reference_mesh(width=2560.0, height=1440.0, radius=1000.0, segments=64):
         b, c, d = a + 1, a + 2, a + 3
         indexes += [a, c, b]
         indexes += [b, c, d]
-    return positions, normals, uvs, indexes, 5
+    return positions, normals, uvs, indexes
 
 
 def selftest():
@@ -197,18 +223,16 @@ def selftest():
     width, height, radius, segments = 2560.0, 1440.0, 1693.4, 64
     failures = []
 
-    positions, normals, uvs, indexes, primitive = reference_mesh(
-        width, height, radius, segments
-    )
+    positions, normals, uvs, indexes = reference_mesh(width, height, radius, segments)
     problems = validate(
-        positions, normals, uvs, indexes, width, height, radius, segments, primitive
+        positions, normals, uvs, indexes, width, height, radius, segments
     )
     if problems:
         failures.append(f"the reference mesh did not pass: {problems[0]}")
 
     def mutation(name, mutate):
         good = reference_mesh(width, height, radius, segments)
-        broken = [list(good[0]), list(good[1]), list(good[2]), list(good[3]), good[4]]
+        broken = [list(good[0]), list(good[1]), list(good[2]), list(good[3])]
         mutate(broken)
         found = validate(
             broken[0],
@@ -219,7 +243,6 @@ def selftest():
             height,
             radius,
             segments,
-            broken[4],
         )
         if not found:
             failures.append(f"{name} was NOT detected")
@@ -286,21 +309,14 @@ def selftest():
     return selftest_verdict("check-cylinder", failures)
 
 
-def main():
-    application, _engine, _component, harness, status = boot_qml(
-        "check-cylinder", ROOT / "scripts/check-cylinder.qml"
-    )
-    if status is not None:
-        return status
-    application.processEvents()
-
-    problems: list[str] = []
-    width = float(harness.property("faceWidth"))
-    height = float(harness.property("faceHeight"))
-    segments = int(harness.property("segments"))
-    face_count = int(harness.property("faceCount"))
-
-    cases = [
+def _harness_cases(harness, width, face_count):
+    """The real meshes the QML harness measured: closed drum, open drum,
+    negative clamp, and the three-slot drum of 1-2 desktops (ADR-025 pt.11,
+    recast by ADR-026): N = 3 with g = 0 gives R = 3W/2pi, W measured as
+    before; g > 0 is the ordinary drum formula, covered by the open-drum
+    case. The same validator must hold everywhere: node-local
+    cylindricity, linear u, arc length = W, winding."""
+    return [
         (
             "drum closed (g=0)",
             float(harness.property("radiusClosed")),
@@ -323,11 +339,6 @@ def main():
             face_count * width / (2 * math.pi),
         ),
         (
-            # The three-slot drum of 1-2 desktops (ADR-025 pt.11, recast by
-            # ADR-026): N = 3 with g = 0 gives R = 3W/2pi, W measured as
-            # before. The same validator must hold: node-local cylindricity,
-            # linear u, arc length = W, winding. (g > 0 is the ordinary drum
-            # formula, covered by the open-drum case.)
             "three-slot drum, g=0 (2 faces)",
             float(harness.property("radiusSlots")),
             harness.property("slotsMesh"),
@@ -335,19 +346,56 @@ def main():
             3 * width / (2 * math.pi),
         ),
     ]
+
+
+def _check_case(label, radius, mesh, indexes, expected, width, height, segments):
+    """Mesh presence, the exact radius formula, and the full validation of
+    that mesh."""
+    if mesh is None:
+        return [f"{label}: CylinderArcMesh not instantiated"]
+    if radius <= 0:
+        return [f"{label}: radius {radius} is not positive"]
+    problems = []
+    # R must be exactly the formula's value, straight from constants.js.
+    if abs(radius - expected) > 1e-6:
+        problems.append(f"{label}: radius {radius} != expected {expected}")
+    found = validate(*read_mesh(mesh, indexes), width, height, radius, segments)
+    for problem in found:
+        problems.append(f"{label}: {problem}")
+    return problems
+
+
+def _clamp_identity_problems(closed, negative):
+    """The clamp contract, end to end: the negative-gap mesh must be
+    IDENTICAL to the closed one (same R, same vertices)."""
+    if closed is None or negative is None:
+        return []
+    cp = [to_xyz(v) for v in closed.property("positions")]
+    np_ = [to_xyz(v) for v in negative.property("positions")]
+    if cp != np_:
+        return ["negative displacement did NOT clamp: mesh differs from the closed one"]
+    return []
+
+
+def main():
+    application, _engine, _component, harness, status = boot_qml(
+        "check-cylinder", ROOT / "scripts/check-cylinder.qml"
+    )
+    if status is not None:
+        return status
+    application.processEvents()
+
+    width = float(harness.property("faceWidth"))
+    height = float(harness.property("faceHeight"))
+    segments = int(harness.property("segments"))
+    face_count = int(harness.property("faceCount"))
+
+    problems: list[str] = []
+    cases = _harness_cases(harness, width, face_count)
     for label, radius, mesh, indexes, expected in cases:
-        if mesh is None:
-            problems.append(f"{label}: CylinderArcMesh not instantiated")
-            continue
-        if radius <= 0:
-            problems.append(f"{label}: radius {radius} is not positive")
-            continue
-        # R must be exactly the formula's value, straight from constants.js.
-        if abs(radius - expected) > 1e-6:
-            problems.append(f"{label}: radius {radius} != expected {expected}")
-        found = validate(*read_mesh(mesh, indexes), width, height, radius, segments)
-        for problem in found:
-            problems.append(f"{label}: {problem}")
+        problems.extend(
+            _check_case(label, radius, mesh, indexes, expected, width, height, segments)
+        )
 
     # theta = W/R of the three-slot drum arc (g = 0) must be exactly 2pi/3
     # (the generator is shared with the drum: 120 degrees comes from
@@ -356,17 +404,7 @@ def main():
     if abs(theta - 2 * math.pi / 3) > 1e-9:
         problems.append(f"segment theta {theta} != 2pi/3 = {2 * math.pi / 3}")
 
-    # The clamp contract, end to end: the negative-gap mesh must be
-    # IDENTICAL to the closed one (same R, same vertices).
-    closed = cases[0][2]
-    negative = cases[2][2]
-    if closed is not None and negative is not None:
-        cp = [to_xyz(v) for v in closed.property("positions")]
-        np_ = [to_xyz(v) for v in negative.property("positions")]
-        if cp != np_:
-            problems.append(
-                "negative displacement did NOT clamp: mesh differs from the closed one"
-            )
+    problems.extend(_clamp_identity_problems(cases[0][2], cases[2][2]))
 
     if not bool(harness.property("meshesUseTriangles")):
         problems.append("primitiveMode is not ProceduralMesh.Triangles on some mesh")

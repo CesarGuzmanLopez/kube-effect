@@ -846,6 +846,20 @@ blend=0 = profundidad), los huecos del tambor de 1-2 dejando ver el casco y
 las flechas/estados girando fluidos por la grid (el aparcado en slot vacío es
 el comportamiento pedido, no un salto).
 
+### Enmienda (2026-11-27) — modularización: `cylinderArcGeometry()` vive en `arcGeometry.js`
+
+El generador de malla salió de `constants.js` hacia
+**`package/contents/ui/arcGeometry.js`**, el mismo reparto que la enmienda de
+ADR-027 hizo con `capGeometry.js`: `constants.js` queda solo con resolvedores
+de valor y fórmulas (`cylinderRadius`, `cylinderArcAngle`, la semilla
+`cylinderCullMode`, `CYLINDER_SEGMENTS`), y cada generador de vértices es un
+módulo autocontenido (lleva su propia copia del guard `isFiniteNumber`
+porque los scripts QML no se importan entre sí; `check-constants.qml` fija
+ambos lados). `CylinderArcMesh.qml` importa `arcGeometry.js` además de
+`constants.js`. Sin cambio de comportamiento: la fórmula, el fallback de
+segmentos (64, fijado por «segments fixed») y los contratos que validan
+`check-cylinder.py`/`check-cylinder-wiring.py` quedan verbatim.
+
 ---
 
 ## ADR-026 — Overlap del cilindro: centroide por cara + alphaMode explícito.

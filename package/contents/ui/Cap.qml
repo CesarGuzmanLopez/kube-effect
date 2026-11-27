@@ -39,13 +39,6 @@ import "constants.js" as Constants
 Model {
     id: cap
 
-    // Symbolic marker so the face-walking test harnesses (the collectFaces of
-    // the removed cylinder pixel gate, which treats any node with materials +
-    // position + geometry as a face) can tell a cap from a face: the caps are
-    // NOT desktop faces and must never join the face-count, radius-centroid or
-    // faceOpacity assertions of that gate.
-    readonly property bool kubeCapSurface: true
-
     // Shared geometry from Cube.capMesh (null = no QtQuick3D.Helpers or the
     // loader is not ready: the cap must not render, exactly like the arc).
     property Geometry mesh: null

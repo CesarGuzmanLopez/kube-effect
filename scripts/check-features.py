@@ -187,28 +187,26 @@ def _check_field(feature, field, where, problems):
     return True
 
 
-def check_feature(feature, index, problems):
-    where = f"feature #{index + 1}"
-    if not isinstance(feature, dict):
-        problems.append(f"{where}: must be a JSON object")
-        return
-    for field in REQUIRED_FIELDS:
-        _check_field(feature, field, where, problems)
-
+def _check_id(feature, where, problems):
+    """The id is kebab-case and becomes the label of every later message
+    (so a broken requirement points at the feature, not at its index)."""
     feature_id = feature.get("id")
-    if "id" in feature:
-        if not isinstance(feature_id, str) or not ID_PATTERN.match(feature_id):
-            problems.append(f"{where}: id {feature_id!r} is not kebab-case")
-        else:
-            where = f"{feature_id}"
+    if "id" not in feature:
+        return where
+    if not isinstance(feature_id, str) or not ID_PATTERN.match(feature_id):
+        problems.append(f"{where}: id {feature_id!r} is not kebab-case")
+        return where
+    return f"{feature_id}"
 
+
+def _check_scalar_fields(feature, where, problems):
+    """label/native/notes/status: the simple typed fields."""
     if "label" in feature and (
         not isinstance(feature["label"], str) or not feature["label"]
     ):
         problems.append(f"{where}: label must be a non-empty string")
 
-    native = feature.get("native")
-    if "native" in feature and not isinstance(native, bool):
+    if "native" in feature and not isinstance(feature.get("native"), bool):
         problems.append(f"{where}: native must be true or false")
 
     if "notes" in feature and not isinstance(feature["notes"], str):
@@ -220,26 +218,76 @@ def check_feature(feature, index, problems):
             f"{where}: status {status!r} is not one of {sorted(VALID_STATUSES)}"
         )
 
-    since = feature.get("since")
-    if "since" in feature:
-        if not isinstance(since, str) or not since:
-            problems.append(f"{where}: since must be a non-empty string")
-        elif parse_version(since) is None:
-            problems.append(f"{where}: since {since!r} must be X.Y.Z[.W]")
 
+def _check_since(feature, where, problems):
+    """since: a non-empty X.Y.Z[.W] string (the package version it shipped
+    in; validate() additionally forbids a FUTURE since)."""
+    if "since" not in feature:
+        return
+    since = feature.get("since")
+    if not isinstance(since, str) or not since:
+        problems.append(f"{where}: since must be a non-empty string")
+    elif parse_version(since) is None:
+        problems.append(f"{where}: since {since!r} must be X.Y.Z[.W]")
+
+
+def _check_requires(feature, where, problems):
+    """requires: an array of strings, each one a probe name the scripts and
+    the KCM actually know (REQUIREMENT_PROBES)."""
+    if "requires" not in feature:
+        return
     requires = feature.get("requires")
-    if "requires" in feature:
-        if not isinstance(requires, list) or not all(
-            isinstance(item, str) for item in requires
-        ):
-            problems.append(f"{where}: requires must be an array of strings")
-        else:
-            for requirement in requires:
-                if requirement not in REQUIREMENT_PROBES:
-                    problems.append(
-                        f"{where}: unknown requirement {requirement!r} "
-                        f"(known: {sorted(REQUIREMENT_PROBES)})"
-                    )
+    if not isinstance(requires, list) or not all(
+        isinstance(item, str) for item in requires
+    ):
+        problems.append(f"{where}: requires must be an array of strings")
+        return
+    for requirement in requires:
+        if requirement not in REQUIREMENT_PROBES:
+            problems.append(
+                f"{where}: unknown requirement {requirement!r} "
+                f"(known: {sorted(REQUIREMENT_PROBES)})"
+            )
+
+
+def check_feature(feature, index, problems):
+    where = f"feature #{index + 1}"
+    if not isinstance(feature, dict):
+        problems.append(f"{where}: must be a JSON object")
+        return
+    for field in REQUIRED_FIELDS:
+        _check_field(feature, field, where, problems)
+
+    where = _check_id(feature, where, problems)
+    _check_scalar_fields(feature, where, problems)
+    _check_since(feature, where, problems)
+    _check_requires(feature, where, problems)
+
+
+def _check_unique_id(feature, seen, problems):
+    """Register the id and flag a duplicate."""
+    feature_id = feature.get("id") if isinstance(feature, dict) else None
+    if not isinstance(feature_id, str):
+        return None
+    if feature_id in seen:
+        problems.append(f"duplicated id {feature_id!r}")
+    seen[feature_id] = True
+    return feature_id
+
+
+def _check_since_not_future(
+    feature, index, feature_id, current, current_version, problems
+):
+    """A feature cannot claim to have shipped in a version newer than the
+    package being released (the selftest pins this detection)."""
+    since = feature.get("since") if isinstance(feature, dict) else None
+    since_version = parse_version(since)
+    if current is None or since_version is None or since_version <= current:
+        return
+    where = feature_id if isinstance(feature_id, str) else f"feature #{index + 1}"
+    problems.append(
+        f"{where}: since {since!r} is newer than the package version {current_version}"
+    )
 
 
 def validate(features, current_version):
@@ -248,25 +296,10 @@ def validate(features, current_version):
     current = parse_version(current_version)
     for index, feature in enumerate(features):
         check_feature(feature, index, problems)
-        feature_id = feature.get("id") if isinstance(feature, dict) else None
-        if isinstance(feature_id, str):
-            if feature_id in seen:
-                problems.append(f"duplicated id {feature_id!r}")
-            seen[feature_id] = True
-        since = feature.get("since") if isinstance(feature, dict) else None
-        since_version = parse_version(since)
-        if (
-            current is not None
-            and since_version is not None
-            and since_version > current
-        ):
-            where = (
-                feature_id if isinstance(feature_id, str) else f"feature #{index + 1}"
-            )
-            problems.append(
-                f"{where}: since {since!r} is newer than the package version "
-                f"{current_version}"
-            )
+        feature_id = _check_unique_id(feature, seen, problems)
+        _check_since_not_future(
+            feature, index, feature_id, current, current_version, problems
+        )
     return problems
 
 

@@ -13,6 +13,9 @@ mistakes the KCM cannot report:
 
   * every Enum default is one of its choices, and choice names are unique;
   * constants.js mirrors main.xml: same enum names, same order, indexes 0..n;
+  * the native KCM's kwinrc Background mirror (kube_effect_kcm.cpp) reads the
+    SAME indexes the schema's choices define — the enum exists in three
+    languages (XML, constants.js, C++) and only this line ties the third;
   * every entry has exactly one kcfg_* widget and vice versa;
   * each widget class matches the entry type (Url -> KUrlRequester,
     Color -> KColorButton, Int -> QSlider/QSpinBox, Double -> QDoubleSpinBox,
@@ -37,6 +40,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "package/contents/config/main.xml"
 UI = ROOT / "package/contents/ui/config.ui"
 CONSTANTS = ROOT / "package/contents/ui/constants.js"
+KCM_CPP = ROOT / "native/src/kcm/kube_effect_kcm.cpp"
 
 KCFG = "{http://www.kde.org/standards/kcfg/1.0}"
 JS_ENUM = re.compile(r"const\s+(\w+)\s*=\s*\{(.*?)\};", re.DOTALL)
@@ -301,12 +305,45 @@ def check_ui(entries, widgets, duplicates, cells_by_layout, problems):
         check_bounds(name, widget, info, problems)
 
 
+def check_kcm_mirror(entries, problems):
+    """The Background enum lives in three places: main.xml (the source),
+    constants.js (cross-checked by check_enums) and the C++ diagnostic in
+    kube_effect_kcm.cpp, which hardcodes the indexes kwinrc stores. This
+    gate pins that third copy: 'mode == N' must mean Color, Image and
+    Video at the schema's own indexes (Gradient needs no branch: it paints
+    from stored colours whatever kwinrc holds)."""
+    if not KCM_CPP.exists():
+        return
+    text = KCM_CPP.read_text(encoding="utf-8")
+    choices = entries["Background"]["choices"]
+    patterns = {
+        "Color": r"mode == (\d++) && \(!image",
+        "Image": r"mode == (\d++) && image\.isEmpty",
+        "Video": r"mode == (\d++) && video\.isEmpty",
+    }
+    for name, pattern in patterns.items():
+        match = re.search(pattern, text)
+        if match is None:
+            problems.append(
+                "kcm: kube_effect_kcm.cpp lost the Background branch for "
+                f"{name!r} (the mirror contract changed; update this check)"
+            )
+            continue
+        actual = int(match.group(1))
+        expected = choices.index(name)
+        if actual != expected:
+            problems.append(
+                f"kcm: Background {name} branch reads index {actual}, main.xml says {expected}"
+            )
+
+
 def main():
     entries = read_schema()
     constants = read_constants()
 
     problems = []
     check_enums(entries, constants, problems)
+    check_kcm_mirror(entries, problems)
 
     if not UI.exists():
         # A virgin cube (e.g. the upstream KDE cube) ships no config.ui: it

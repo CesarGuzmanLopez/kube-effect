@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 Cesar Guzman
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# clangd (and the LSP in nvim) needs the compilation database that "make
+# native" writes into native/build (CMAKE_EXPORT_COMPILE_COMMANDS). Without it
+# the C++ side has no include paths and every .cpp under native/src lights up
+# with a cascade of false errors that starts at "kube_effect_install.h file not
+# found". Edit the sources in native/ (source of truth): the mirror under
+# package/contents/native/ is not what this database describes.
+CompileFlags:
+  CompilationDatabase: native/build

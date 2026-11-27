@@ -50,7 +50,9 @@ UV:    u = s / W,  v = t/H              → misma convención que #Rectangle (v=
 Cómo está implementado:
 
 - **Función pura** `cylinderArcGeometry(faceWidth, faceHeight, radius, segments)`
-  en `constants.js`: devuelve `{positions, normals, uvs, indexes}` como listas de
+  en `arcGeometry.js` (módulo propio desde la enmienda de ADR-025, al estilo de
+  `capGeometry.js`; `constants.js` guarda los resolvedores y las fórmulas de
+  valor): devuelve `{positions, normals, uvs, indexes}` como listas de
   `Qt.vector3d/vector2d/uint` (130 vértices, 384 índices con 64 segmentos). Sin
   KWin ni escena: es lo que validan los checks (ADR: decisión testeable).
 - **Componente con módulo aislado** (`CylinderArcMesh.qml`): es el
@@ -257,7 +259,7 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
   (`capPolygonGeometry`/`capDiscGeometry` — módulo propio desde la enmienda de
   ADR-027; `constants.js` guarda solo los resolvedores de valor). El desplazamiento ±alto/2 lo
   lleva el NODO del Model (`Cap` superior en `y = +faceSize.height/2`,
-  inferior en `y = -faceSize.height/2` con `eulerRotation.x: 180` — la
+  inferior en `y = -faceSize.height/2` con `eulerRotation.z: 180` — la
   rotación invierte la normal +Y a -Y y el winding queda consistente visto
   desde fuera; no existe segunda malla ni copia espejada). **El eje del flip
   es Z** (ADR-027 enmienda 2, medido con píxeles por

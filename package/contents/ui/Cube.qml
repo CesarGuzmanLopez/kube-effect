@@ -309,9 +309,10 @@ Node {
     // Loader.Ready can still hand a transient null item (ADR-022 guard).
     readonly property Geometry capMesh: capMeshLoader.status === Loader.Ready && capMeshLoader.item !== null && capMeshLoader.item !== undefined ? capMeshLoader.item.mesh : null
     // The two closing surfaces at y = +/- faceSize.height/2. The BOTTOM one
-    // is the SAME mesh on a node rotated 180 deg about X (ADR-027: no second
-    // geometry): the rotation flips the +Y normal to -Y (outward down) and
-    // keeps the winding consistent seen from outside. Distinct Y centroids
+    // is the SAME mesh on a node rotated 180 deg about Z (ADR-027 amendment
+    // 2 — see the axis note on the node below: no second geometry): the turn
+    // flips the +Y normal to -Y (outward down) and keeps the winding
+    // consistent seen from outside. Distinct Y centroids
     // (+H/2 vs -H/2) extend the ADR-026 ordering rule to the caps: they can
     // never paint over the front faces.
     Cap {

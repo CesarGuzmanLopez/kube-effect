@@ -483,79 +483,6 @@ function azimuthRangeFor(shape, count, hasArcMesh) {
     return flatAzimuthRange(count);
 }
 
-// Vertex data of ONE face-arc, generated around ITS OWN NODE: the arc's
-// mid-point sits at the origin and the drum axis at (0, 0, -R), so placing
-// the face is exactly the polygon rule — position = rotate(azimuth) *
-// (0, 0, faceDistance=R) plus eulerRotation.y = azimuth (ADR-026). The old
-// mesh lived centred on +Z with every node pinned to (0, 0, 0): all the
-// faces then shared one sort centroid and QtQuick3D's transparent-pass
-// ordering (world bounds centre -> view depth, qssglayerrenderdata.cpp)
-// lost a reliable key for the drum; the polygon never had that problem
-// because each Model already carries its own position. phi0 is NOT baked
-// into the mesh, which is what lets all faces still share one geometry.
-// Returns {positions, normals, uvs, indexes} in the shape ProceduralMesh
-// wants (lists of Qt.vector3d / Qt.vector2d / uint), for arc-length s in
-// [0, W] and height t in [0, H]:
-//
-//   phi(s)    = (s - W/2) / R            arc symmetric about +Z, mid at 0
-//   P(s, t)   = (R sin phi, t - H/2, R cos phi - R)
-//   normal(s) = (sin phi, 0, cos phi)    radial, pointing OUT of the axis
-//   uv(s, t)  = (s / W, t / H)           v = 0 at the bottom row (y = -H/2)
-//
-// The v convention was MEASURED, not assumed: decoding Qt 6.12's own
-// Rectangle.mesh shows the built-in #Rectangle carries (u, v) = (0, 0) at
-// (x, y) = (-50, -50) and (1, 1) at (50, 50) — bottom-left origin — so the
-// same Texture { sourceItem } that paints a polygon face upright paints the
-// arc upright (winding is likewise CCW seen from outside, like the
-// rectangle's own 0,1,2 order).
-//
-// Degenerate input (a zero/garbage width, height or radius — transiently
-// possible while the model syncs) answers EMPTY arrays: a ProceduralMesh
-// with no positions renders nothing, which is the safe mid-sync state.
-function cylinderArcGeometry(faceWidth, faceHeight, radius, segments) {
-    const width = Number(faceWidth);
-    const height = Number(faceHeight);
-    const r = Number(radius);
-    if (!isFiniteNumber(width) || !isFiniteNumber(height) || !isFiniteNumber(r)
-        || width <= 0 || height <= 0 || r <= 0) {
-        return { positions: [], normals: [], uvs: [], indexes: [] };
-    }
-    const rawSegments = Number(segments);
-    const segs = isFiniteNumber(rawSegments) ? Math.max(1, Math.floor(rawSegments)) : CYLINDER_SEGMENTS;
-
-    const positions = [];
-    const normals = [];
-    const uvs = [];
-    const indexes = [];
-
-    for (let i = 0; i <= segs; ++i) {
-        // Column i sits at arc-length s = W*i/segs, centred: phi runs from
-        // -theta/2 to +theta/2 with theta = W/R.
-        const phi = (width * i / segs - width / 2) / r;
-        const sine = Math.sin(phi);
-        const cosine = Math.cos(phi);
-        // Two vertices per column: bottom (v = 0) then top (v = 1), so the
-        // indexes of a column are (2i, 2i + 1).
-        positions.push(Qt.vector3d(r * sine, -height / 2, r * cosine - r),
-                       Qt.vector3d(r * sine, height / 2, r * cosine - r));
-        normals.push(Qt.vector3d(sine, 0, cosine), Qt.vector3d(sine, 0, cosine));
-        uvs.push(Qt.vector2d(i / segs, 0), Qt.vector2d(i / segs, 1));
-    }
-
-    for (let i = 0; i < segs; ++i) {
-        const a = 2 * i; //     bottom, column i
-        const b = a + 1; //     top,    column i
-        const c = a + 2; //     bottom, column i + 1
-        const d = a + 3; //     top,    column i + 1
-        // Cross products of both triangles point along the radial (outward)
-        // normal: seen from OUTSIDE the cylinder each triangle runs
-        // counter-clockwise, the same convention as #Rectangle's mesh.
-        indexes.push(a, c, b, b, c, d);
-    }
-
-    return { positions: positions, normals: normals, uvs: uvs, indexes: indexes };
-}
-
 // Cull tokens (ADR-025 point 12): 1 = cull back faces (only the arcs' outer
 // skin is visible), 0 = cull nothing. NO LONGER APPLIED AT RUNTIME: the
 // dynamic BackFaceCulling outside 1.05 R was reverted by the user — seeing
@@ -646,13 +573,126 @@ function cylinderCullMode(cameraRadius, radius) {
 // current; an empty/non-array face list falls back to the open arithmetic
 // (with a range) or the current (limited range without faces = no-op —
 // safer than pointing at azimuths with no desktop).
+// Numeric-filtered face list: entries that survive Number() as finite.
+// Shared by the two face-list branches below (the originals skipped
+// non-finite entries inline, four times over).
+function finiteFaces(list) {
+    if (!Array.isArray(list)) {
+        return [];
+    }
+    const out = [];
+    for (const item of list) {
+        const face = Number(item);
+        if (isFiniteNumber(face)) {
+            out.push(face);
+        }
+    }
+    return out;
+}
+
+// The face the camera stands on (offset within the threshold), or null.
+function standingFace(faces, norm, threshold) {
+    for (const face of faces) {
+        if (Math.abs(normalizeSheetAzimuth(norm - face)) < threshold) {
+            return face;
+        }
+    }
+    return null;
+}
+
+// The nearest face strictly in the requested direction of `norm` (lowest
+// above for right / highest below for left, in normalized space), or null.
+function nextFaceInDirection(faces, norm, step) {
+    let best = null;
+    for (const face of faces) {
+        if (step > 0 ? face > norm : face < norm) {
+            if (best === null || (step > 0 ? face < best : face > best)) {
+                best = face;
+            }
+        }
+    }
+    return best;
+}
+
+// Carousel wrap over ALL faces: lowest for right, highest for left — the
+// first stop past the band edge. null only for an empty list.
+function wrapFace(faces, step) {
+    let best = null;
+    for (const face of faces) {
+        if (best === null || (step > 0 ? face < best : face > best)) {
+            best = face;
+        }
+    }
+    return best;
+}
+
+// Limited-range answer (the sheet-1 [-80, 80] band is today's only real
+// one): skip the face the camera stands on (within the 0.05 tick
+// threshold), take the nearest face in the requested direction, and with
+// no face ahead wrap inside the band — left to the highest face, right to
+// the lowest. One face wrapped onto itself answers itself: the arrow
+// holds. `faces` is numeric-filtered; `norm` the normalized current;
+// `fallback` returned when nothing finite is left.
+function bandedArrowAzimuth(faces, norm, step, threshold, fallback) {
+    const ahead = standingFace(faces, norm, threshold);
+    const candidates = ahead === null ? faces : faces.filter(f => f !== ahead);
+    const best = nextFaceInDirection(candidates, norm, step);
+    if (best !== null) {
+        return best;
+    }
+    // Wrap inside the band over the WHOLE list: the standing face is a
+    // valid wrap target (sheet-1 holds, ADR-024 tested).
+    const wrapped = wrapFace(faces, step);
+    return wrapped === null ? fallback : wrapped;
+}
+
+// Open-range answer with holes in the tick grid (ADR-026b, the three-slot
+// drum at 1-2 desktops): walk the REAL faces circularly so no arrow stop
+// ever lands the camera on an empty slot. The standing face is skipped
+// with the STRICT < against the 0.05 tick threshold — exactly 0.05*tick
+// away counts as NOT standing (tested at the boundary). Ahead in the
+// requested direction wins, otherwise the sweep wraps the circle (the
+// face furthest BEHIND is the first one past +-180). A single real face
+// already stood on: no other stop, the current comes back verbatim and
+// the arrow holds (n=1 drum). The answer is the chosen face's
+// representative nearest to `current`, so the quaternion Behavior always
+// slerps the short way (same verbatim-sign rule as the grid path).
+// `faces` is numeric-filtered; `centre` the normalized current.
+function ringArrowAzimuth(faces, current, centre, step, threshold) {
+    let ahead = null;
+    let wrap = null;
+    for (const face of faces) {
+        const offset = normalizeSheetAzimuth(face - centre);
+        if (Math.abs(offset) < threshold) {
+            continue;
+        }
+        if (step > 0 ? offset > 0 : offset < 0) {
+            if (ahead === null || Math.abs(offset) < Math.abs(ahead)) {
+                ahead = offset;
+            }
+        } else if (wrap === null || Math.abs(offset) > Math.abs(wrap)) {
+            wrap = offset;
+        }
+    }
+    // Plain Number.isFinite on purpose, NOT isFiniteNumber(): ahead/wrap are
+    // null sentinels and Number.isFinite(null) is false, so the fallback
+    // chain keeps its meaning. With isFiniteNumber() the null would pass as
+    // 0 and the arrow would stop holding on a one-face band.
+    const offset = Number.isFinite(ahead) ? ahead : wrap;
+    if (offset === null) {
+        return current;
+    }
+    const stop = centre + offset;
+    return stop + 360 * Math.round((current - stop) / 360);
+}
+
 function arrowAzimuth(currentAzimuth, direction, tick, azimuthMin, azimuthMax, faceAzimuths) {
     const current = Number(currentAzimuth);
     if (!isFiniteNumber(current)) {
         return 0;
     }
     const step = Number(direction) < 0 ? -1 : 1;
-    const faces = Array.isArray(faceAzimuths) ? faceAzimuths : [];
+    const faces = finiteFaces(faceAzimuths);
     const lo = Number(azimuthMin);
     const hi = Number(azimuthMax);
     const limited = azimuthMin !== null && azimuthMin !== undefined && isFiniteNumber(lo)
@@ -664,100 +704,16 @@ function arrowAzimuth(currentAzimuth, direction, tick, azimuthMin, azimuthMax, f
             return current;
         }
         const threshold = (isFiniteNumber(t) && t > 0 ? t : 360) * 0.05;
-        const norm = normalizeSheetAzimuth(current);
-        // Skip the face the camera stands on (if any).
-        let ahead = null;
-        let best = null;
-        for (const item of faces) {
-            const face = Number(item);
-            if (!isFiniteNumber(face)) {
-                continue;
-            }
-            const offset = normalizeSheetAzimuth(norm - face);
-            if (Math.abs(offset) < threshold) {
-                ahead = face;
-                break;
-            }
-        }
-        for (const item of faces) {
-            const face = Number(item);
-            if (!isFiniteNumber(face) || (ahead !== null && face === ahead)) {
-                continue;
-            }
-            if (step > 0 ? face > norm : face < norm) {
-                if (best === null || (step > 0 ? face < best : face > best)) {
-                    best = face;
-                }
-            }
-        }
-        if (best !== null) {
-            return best;
-        }
-        // Wrap inside the band: highest face for left, lowest for right.
-        for (const item of faces) {
-            const face = Number(item);
-            if (!isFiniteNumber(face)) {
-                continue;
-            }
-            if (best === null || (step > 0 ? face < best : face > best)) {
-                best = face;
-            }
-        }
-        return best === null ? current : best;
+        return bandedArrowAzimuth(faces, normalizeSheetAzimuth(current), step, threshold, current);
     }
 
     if (!isFiniteNumber(t) || t <= 0) {
         return current;
     }
 
-    // Open range with holes in the tick grid (ADR-026b, the three-slot drum
-    // at 1-2 desktops: tick 120, faces [0] or [0, 120], slot 2 empty): walk
-    // the REAL faces circularly instead of the raw grid, so no arrow stop
-    // ever lands the camera on an empty slot. The standing face is skipped
-    // with the STRICT < against the 0.05 tick threshold — the same
-    // convention as the limited branch and the verbatim grid path below
-    // (exactly 0.05*tick away counts as NOT standing: the arrow snaps to
-    // the face; tested at the boundary). Ahead in the requested direction
-    // wins, otherwise the sweep wraps the circle (the face that is furthest
-    // BEHIND is the first one past +-180). A single real face already stood
-    // on: no other stop, return the current verbatim, the arrow holds (n=1
-    // drum). The answer is the chosen face's representative nearest to the
-    // current angle, so the quaternion Behavior always slerps the short way
-    // (same verbatim-sign rule as the grid path below).
     const slots = Math.round(360 / t);
     if (slots > 1 && faces.length > 0 && faces.length < slots) {
-        const threshold = t * 0.05;
-        const centre = normalizeSheetAzimuth(current);
-        let ahead = null;
-        let wrap = null;
-        for (const item of faces) {
-            const face = Number(item);
-            if (!isFiniteNumber(face)) {
-                continue;
-            }
-            const offset = normalizeSheetAzimuth(face - centre);
-            if (Math.abs(offset) < threshold) {
-                continue;
-            }
-            if (step > 0 ? offset > 0 : offset < 0) {
-                if (ahead === null || Math.abs(offset) < Math.abs(ahead)) {
-                    ahead = offset;
-                }
-            } else if (wrap === null || Math.abs(offset) > Math.abs(wrap)) {
-                wrap = offset;
-            }
-        }
-        // Plain Number.isFinite on purpose, NOT isFiniteNumber(): ahead/wrap are
-        // null sentinels and Number.isFinite(null) is false, so the fallback
-        // chain and the offset === null guard below keep their meaning. With
-        // isFiniteNumber() the null would pass as 0 and the arrow would stop
-        // holding on a one-face band.
-        const offset = Number.isFinite(ahead) ? ahead : wrap;
-        if (offset === null) {
-            return current;
-        }
-        const stop = centre + offset;
-        return stop + 360 * Math.round((current - stop) / 360);
+        return ringArrowAzimuth(faces, current, normalizeSheetAzimuth(current), step, t * 0.05);
     }
 
     let next = step > 0 ? Math.ceil(current / t) * t : Math.floor(current / t) * t;

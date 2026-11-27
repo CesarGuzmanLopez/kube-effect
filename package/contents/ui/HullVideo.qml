@@ -50,12 +50,6 @@ Item {
     readonly property bool frameAvailable: player.hasVideo
     readonly property int mediaStatus: player.mediaStatus
     readonly property string errorString: player.errorString
-    // Int mirror of the VideoOutput's fillMode. video dome render gate, removed for cost (doc/trucos-aprendidos.md, section P)
-    // reads the output through PySide, which cannot convert the
-    // QQuickVideoOutput::FillMode enum itself ("Can't find converter"); an int
-    // carries the same assertion (VideoOutput.Stretch == 0).
-    readonly property int fillModeValue: output.fillMode
-
     function applyPlayback() {
         if (root.playing && root.source.toString().length > 0) {
             player.play();
