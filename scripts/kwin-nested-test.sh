@@ -3,14 +3,18 @@
 #
 #   ./scripts/kwin-nested-test.sh              # compila native/ y abre el KCM
 #   ./scripts/kwin-nested-test.sh --no-native  # experiencia SIN compilar
-#   ./scripts/kwin-nested-test.sh --with-plasma # + wallpaper real de Plasma
+#   ./scripts/kwin-nested-test.sh --no-test-wallpaper # wallpaper del sistema
 #   ./scripts/kwin-nested-test.sh --help
 #
 # Abre un escritorio KWin VIRTUAL (ventana 1600x900 sobre tu sesión) como si
 # fuera una INSTALACIÓN LIMPIA: kwinrc de fábrica, 3 escritorios virtuales, una
-# ventana por cara y plasmashell con el panel y el wallpaper del sistema. Los
-# plasmoids descargados no se ven (XDG_DATA_HOME temporal), así que sus errores
-# no ensucian la prueba.
+# ventana por cara y plasmashell con el panel y un WALLPAPER DE PRUEBA
+# direccional generado por el propio arnés (izquierda/derecha/arriba/abajo,
+# flecha, esquina magenta y rejilla; --no-test-wallpaper vuelve al wallpaper
+# del sistema). Como Plasma 6.8 no admite un wallpaper por escritorio virtual
+# (medido 2026-11-27), cada escritorio lleva además una ventana maximizada
+# E1/E2/E3 de color distinto. Los plasmoids descargados no se ven
+# (XDG_DATA_HOME temporal), así que sus errores no ensucian la prueba.
 #
 # Dato para la prueba: dentro del anidado Meta+K NO llega (el KWin del host se
 # lo queda como atajo global). El arnés registra un atajo propio, por defecto
@@ -28,7 +32,8 @@
 # Aislamiento (nunca toca tu sesión):
 #   * bus D-Bus propio (dbus-run-session)
 #   * XDG_CONFIG_HOME temporal con kwinrc DE FÁBRICA (KUBE_NESTED_CONFIG=clean):
-#     como una instalación limpia de Plasma; solo se hereda [Effect-kube-effect]
+#     como una instalación limpia de Plasma; solo se hereda [Effect-kube-effect].
+#     El appletsrc también es de fábrica y se le apunta el wallpaper de prueba
 #   * XDG_DATA_HOME temporal: no se ven los plasmoids descargados del host y el
 #     paquete del efecto se instala ahí, no en ~/.local/share
 #   * socket Wayland propio (kube-effect-nested-0)
@@ -52,13 +57,18 @@ cd "$(dirname "$0")/.." || exit 1
 usage() {
     cat <<'EOF'
 uso: scripts/kwin-nested-test.sh [--no-native] [--no-plasma] [--no-apps]
-                      [--no-follow] [--help]
+                      [--no-follow] [--no-test-wallpaper] [--help]
 
   Por defecto: como una INSTALACIÓN LIMPIA de Plasma — kwinrc de fábrica, 3
-  escritorios virtuales, una ventana por cara y plasmashell con el panel y el
-  wallpaper de sistema. Los plasmoids DESCARGADOS no se cargan: el anidado usa
-  XDG_DATA_HOME temporal, así que ni ~/.local/share/plasma/plasmoids (ni sus
-  errores) aparece en la prueba; solo lo que trae el paquete del sistema.
+  escritorios virtuales, una ventana por cara y plasmashell con el panel y un
+  WALLPAPER DE PRUEBA direccional generado al arrancar (IZQ/DER/ARR/ABA en los
+  bordes, flecha centro→ARR, cuadrante magenta en la esquina superior-izquierda
+  y rejilla cada 100 px) más una ventana maximizada E1/E2/E3 por escritorio.
+  Sirve para ver de un vistazo rotaciones y espejos de caras y tapas (ADR-027),
+  por dónde asoma el casco y que la cara k muestra el escritorio k (ADR-004).
+  Los plasmoids DESCARGADOS no se cargan: el anidado usa XDG_DATA_HOME
+  temporal, así que ni ~/.local/share/plasma/plasmoids (ni sus errores)
+  aparece en la prueba; solo lo que trae el paquete del sistema.
 
   --no-native     modo SIN COMPILAR: no compila native/, no sourcea prefix.sh
                   ni lanza kcmshell6. El efecto QML sigue completo.
@@ -69,6 +79,9 @@ uso: scripts/kwin-nested-test.sh [--no-native] [--no-plasma] [--no-apps]
   --all           plasmashell + ventanas (es el defecto desde 2026-11-25)
   --no-follow     no sigue los logs: imprime el resumen y termina (el anidado
                   sigue vivo; se para con el 'kill' que imprime)
+  --no-test-wallpaper  sin wallpaper de prueba: plasmashell conserva el
+                  wallpaper por defecto de Plasma y no se lanzan las etiquetas
+                  E1/E2/E3 (comportamiento anterior a 2026-11-27)
   -h, --help      muestra esta ayuda
 
 Variables de entorno:
@@ -84,6 +97,10 @@ Variables de entorno:
                   queda antes de que la ventana anidada reciba la tecla
   KUBE_NESTED_APPS="konsole dolphin kate"
                   lista de ventanas a repartir entre los escritorios
+  KUBE_NESTED_WALLPAPER=test|system
+                  test (defecto): wallpaper direccional generado + ventanas
+                  E1..EN (solo con plasmashell y KUBE_NESTED_CONFIG=clean)
+                  system: equivale a --no-test-wallpaper
 EOF
 }
 
@@ -92,6 +109,11 @@ FOLLOW=1
 PLASMA=1
 APPS=1
 DESKTOPS=3
+NESTED_WIDTH=1600
+NESTED_HEIGHT=900
+# Empty until decided: --no-test-wallpaper forces 0; otherwise the
+# KUBE_NESTED_WALLPAPER env (default test) picks.
+TEST_WP=""
 for argument in "$@"; do
     case "$argument" in
     --no-native)
@@ -113,6 +135,9 @@ for argument in "$@"; do
     --no-follow)
         FOLLOW=0
         ;;
+    --no-test-wallpaper)
+        TEST_WP=0
+        ;;
     -h | --help)
         usage
         exit 0
@@ -124,6 +149,21 @@ for argument in "$@"; do
         ;;
     esac
 done
+
+if [ -z "$TEST_WP" ]; then
+    case "${KUBE_NESTED_WALLPAPER:-test}" in
+    test)
+        TEST_WP=1
+        ;;
+    system)
+        TEST_WP=0
+        ;;
+    *)
+        echo "error: KUBE_NESTED_WALLPAPER vale '$KUBE_NESTED_WALLPAPER' (test|system)" >&2
+        exit 2
+        ;;
+    esac
+fi
 
 echo "Deten el anterior escritorio anidado"
 SOCK="kube-effect-nested-0"
@@ -369,14 +409,73 @@ kwriteconfig6 --file "$CFG/kglobalshortcutsrc" --group kwin --key "Kube Effect" 
 # Forzar Background=1 (Image) sobre un kwinrc con Background=Video y SkyBox
 # apuntando a un .mp4 dejaba el casco sin pintar y parecía un fallo del efecto.
 
+# 3c. Wallpaper de prueba: un PNG direccional generado por el propio arnés
+#    (sin asset binario en el repo) aplicado al containment de escritorio del
+#    anidado. Plasma 6.8.3 no admite un wallpaper distinto por escritorio
+#    virtual (medido 2026-11-27: sin claves por escritorio en el main.xml del
+#    plugin org.kde.image ni lógica por desktop en el plugin; la petición
+#    upstream sigue abierta: KDE bug 155150), así que el patrón es ÚNICO y
+#    cada escritorio se identifica además con una ventana maximizada E1..EN
+#    (scripts/test-wallpaper-label.py). En modo host y sin plasmashell no se
+#    impone nada: conserva el comportamiento antiguo.
+WP_PNG=""
+WP_STATUS=""
+LABELS_ON=0
+if [ "$TEST_WP" -eq 0 ]; then
+    SAY "wallpaper de prueba desactivado: plasmashell usara el del sistema"
+    WP_STATUS="del sistema (desactivado)"
+elif [ "$CONFIG_MODE" = "host" ]; then
+    SAY "wallpaper de prueba omitido: KUBE_NESTED_CONFIG=host conserva el tuyo"
+    WP_STATUS="del sistema (modo host)"
+elif [ "$PLASMA" -eq 0 ]; then
+    SAY "wallpaper de prueba omitido: sin plasmashell no hay escritorio que vestir"
+    WP_STATUS="sin escritorio (--no-plasma)"
+elif ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import PIL' 2>/dev/null; then
+    SAY "aviso: falta python3 o PIL; el anidado usara el wallpaper del sistema"
+    WP_STATUS="del sistema (falta python3+PIL)"
+else
+    WP_DIR="$HARNESS_ROOT/wallpaper"
+    WP_PNG="$WP_DIR/directional.png"
+    if python3 scripts/make-test-wallpaper.py --output "$WP_PNG" \
+        --width "$NESTED_WIDTH" --height "$NESTED_HEIGHT" >/dev/null; then
+        SAY "wallpaper de prueba generado: $WP_PNG (${NESTED_WIDTH}x${NESTED_HEIGHT})"
+        WP_STATUS="de prueba (direccional): $WP_PNG"
+        if python3 -c 'import PySide6.QtWidgets' 2>/dev/null; then
+            LABELS_ON=1
+        else
+            SAY "aviso: sin PySide6; no se lanzan las ventanas E1..EN (el wallpaper vale igual)"
+        fi
+    else
+        SAY "aviso: el generador del wallpaper fallo; el anidado usara el del sistema"
+        WP_STATUS="del sistema (fallo al generar)"
+        WP_PNG=""
+    fi
+fi
+
+# Undo a wallpaper patch from an earlier run: the config tree is REUSED across
+# launches, so a stale appletsrc would keep pointing at the test PNG even with
+# --no-test-wallpaper. Only files that reference OUR generated wallpaper are
+# removed (plasmashell rebuilds them factory-default on the next start); the
+# rm goes through the anchored helper.
+if [ -z "$WP_PNG" ]; then
+    while IFS= read -r old_appletsrc; do
+        [ -n "$old_appletsrc" ] || continue
+        if grep -qF "$HARNESS_ROOT/wallpaper/" "$old_appletsrc" 2>/dev/null; then
+            nested_harness_rm_rf "$old_appletsrc"
+            SAY "appletsrc previo con wallpaper de prueba borrado: arranca de fabrica"
+        fi
+    done < <(find "$CFG" -maxdepth 1 -name '*appletsrc*' -type f 2>/dev/null)
+fi
+
 # 4. Arrancar el KWin anidado en una ventana 1600x900, bus privado. SOLO
 #    Wayland: sin --xwayland. El proyecto no apunta a X11, y levantar un Xwayland
 #    dentro del anidado abre un bloqueo mutuo con el sondeo HW de ffmpeg (ver el
 #    export QT_FFMPEG_DECODING_HW_DEVICE_TYPES de arriba).
-SAY "arrancando KWin anidado (ventana 1600x900, solo Wayland)..."
+SAY "arrancando KWin anidado (ventana ${NESTED_WIDTH}x${NESTED_HEIGHT}, solo Wayland)..."
 XDG_DATA_HOME="$DATA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" setsid \
     dbus-run-session -- \
-    sh -c 'echo $$ > '"$PIDFILE"'; echo $DBUS_SESSION_BUS_ADDRESS > '"$ADDR"'; exec kwin_wayland --socket '"$SOCK"' --no-lockscreen --width 1600 --height 900' \
+    sh -c 'echo $$ > "$1"; echo "$DBUS_SESSION_BUS_ADDRESS" > "$2"; exec kwin_wayland --socket "$3" --no-lockscreen --width "$4" --height "$5"' _ \
+    "$PIDFILE" "$ADDR" "$SOCK" "$NESTED_WIDTH" "$NESTED_HEIGHT" \
     >"$KWIN_LOG" 2>&1 </dev/null &
 NESTED_PID=$!
 
@@ -395,12 +494,18 @@ fi
 NESTED_PID=$(cat "$PIDFILE" 2>/dev/null || true)
 SAY "nested pid=$NESTED_PID bus=$NBA socket=$SOCK"
 
-# 5. plasmashell dentro del anidado: panel y wallpaper de ESCRITORIO como los
-#    trae el sistema. Con XDG_DATA_HOME temporal no se carga ningún plasmoid
-#    descargado (ni sus errores con Plasma 6.8): solo los de /usr/share. Para
-#    quitarlo: --no-plasma.
-if [ "$PLASMA" -eq 1 ]; then
-    SAY "lanzado plasmashell en el anidado (solo plasmoids de sistema)"
+# 5. plasmashell dentro del anidado: panel y wallpaper. Con XDG_DATA_HOME
+#    temporal no se carga ningún plasmoid descargado (ni sus errores con Plasma
+#    6.8): solo los de /usr/share. Para quitarlo: --no-plasma.
+#    Con wallpaper de prueba el arranque va en DOS ETAPAS: (1) plasmashell
+#    arranca con config limpia y escribe él mismo su appletsrc de fábrica en
+#    $CFG (así no hay que adivinar el id del containment ni el vínculo con la
+#    actividad/pantalla); (2) se para, se le pone el PNG al containment del
+#    escritorio con las claves medidas del host —
+#    [Containments][N] wallpaperplugin=org.kde.image y
+#    [Containments][N][Wallpaper][org.kde.image][General] Image=file://... —
+#    y se relanza leyendo esa config.
+start_plasmashell() {
     # Ruido ajeno al cubo, silenciado SOLO en el shell del anidado: Qt 6.12 avisa
     # "Final member StackingOrder is overridden in class QQmlDMAbstractItemModelData"
     # cada vez que un applet de Plasma monta un delegate sobre el WindowModel de
@@ -409,14 +514,87 @@ if [ "$PLASMA" -eq 1 ]; then
     # puede arreglar desde aquí (es de plasma-workspace/Qt); taparlo en el log del
     # anidado deja legible lo que sí importa (las líneas kube-effect:).
     # Si el usuario trae sus propias QT_LOGGING_RULES se conservan detrás.
-    PLASMA_LOG_RULES="qt.qml.propertyCache.append=false${QT_LOGGING_RULES:+;$QT_LOGGING_RULES}"
+    local rules="qt.qml.propertyCache.append=false${QT_LOGGING_RULES:+;$QT_LOGGING_RULES}"
     DBUS_SESSION_BUS_ADDRESS="$NBA" XDG_DATA_HOME="$DATA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="$SOCK" \
-        QT_LOGGING_RULES="$PLASMA_LOG_RULES" \
-        plasmashell >"$PLASMA_LOG" 2>&1 </dev/null &
-    CHILD_PIDS+=("$!")
+        QT_LOGGING_RULES="$rules" \
+        plasmashell >>"$PLASMA_LOG" 2>&1 </dev/null &
+    PLASMA_PID=$!
+    CHILD_PIDS+=("$PLASMA_PID")
     sleep 6
+}
+
+if [ "$PLASMA" -eq 1 ]; then
+    SAY "lanzado plasmashell en el anidado (solo plasmoids de sistema)"
+    start_plasmashell
+    if [ -n "$WP_PNG" ]; then
+        SAY "wallpaper de prueba: esperando el appletsrc de fábrica (etapa 1)..."
+        APPLETSRC=""
+        for _ in $(seq 1 25); do
+            APPLETSRC=$(find "$CFG" -maxdepth 1 -name '*appletsrc*' -type f -print -quit 2>/dev/null)
+            [ -n "$APPLETSRC" ] && grep -q '^\[Containments\]\[[0-9]*\]$' "$APPLETSRC" && break
+            sleep 1
+        done
+        # El containment de ESCRITORIO es el bloque [Containments][N] con
+        # formfactor=0 (los paneles traen formfactor=2; medido en el host).
+        DESKTOP_CID=""
+        [ -n "$APPLETSRC" ] && DESKTOP_CID=$(
+            awk '
+            /^\[Containments\]\[[0-9]+\]$/ {
+                id = $0
+                sub(/^\[Containments\]\[/, "", id)
+                sub(/\]$/, "", id)
+                next
+            }
+            # Any other section header leaves the containment-root block: a
+            # formfactor=0 inside some applet config must NOT count.
+            /^\[/ { id = "" }
+            /^formfactor=0$/ && id != "" { print id
+            exit }
+            ' "$APPLETSRC"
+        )
+        if [ -n "$DESKTOP_CID" ]; then
+            kill "$PLASMA_PID" 2>/dev/null || true
+            for _ in $(seq 1 20); do
+                kill -0 "$PLASMA_PID" 2>/dev/null || break
+                sleep 0.5
+            done
+            if kwriteconfig6 --file "$APPLETSRC" --group Containments --group "$DESKTOP_CID" \
+                --key wallpaperplugin org.kde.image &&
+                kwriteconfig6 --file "$APPLETSRC" --group Containments --group "$DESKTOP_CID" \
+                    --group Wallpaper --group org.kde.image --group General \
+                    --key Image "file://$WP_PNG" &&
+                [ "$(kreadconfig6 --file "$APPLETSRC" --group Containments --group "$DESKTOP_CID" \
+                    --group Wallpaper --group org.kde.image --group General --key Image)" = "file://$WP_PNG" ]; then
+                SAY "wallpaper de prueba aplicado al containment $DESKTOP_CID de $(basename "$APPLETSRC")"
+            else
+                SAY "aviso: no pude parchear el appletsrc; queda el wallpaper del sistema"
+                WP_STATUS="del sistema (no pude parchear el appletsrc)"
+            fi
+            SAY "relanzando plasmashell con la config parcheada (etapa 2)..."
+            start_plasmashell
+        else
+            SAY "aviso: plasmashell no dejó un containment de escritorio en el appletsrc; wallpaper del sistema"
+            WP_STATUS="del sistema (appletsrc sin containment)"
+        fi
+    fi
 else
     SAY "sin plasmashell en el anidado (--no-plasma): sin panel ni wallpaper de escritorio"
+fi
+
+# 5b. Ventanas etiqueta E1..EN (maximizadas, color distinto por escritorio):
+#     identifican el escritorio de cada cara mientras Plasma no sepa poner un
+#     wallpaper por escritorio virtual. Se reparten igual que las apps del
+#     paso 6: por DBus setCurrentDesktop antes de lanzar cada una.
+if [ "$LABELS_ON" -eq 1 ]; then
+    for desktop in $(seq 1 "$DESKTOPS"); do
+        busctl --address="$NBA" call org.kde.KWin /KWin org.kde.KWin \
+            setCurrentDesktop i "$desktop" >/dev/null 2>&1 || true
+        DBUS_SESSION_BUS_ADDRESS="$NBA" XDG_DATA_HOME="$DATA" XDG_CONFIG_HOME="$CFG" WAYLAND_DISPLAY="$SOCK" \
+            python3 scripts/test-wallpaper-label.py --desktop "$desktop" >/dev/null 2>&1 </dev/null &
+        CHILD_PIDS+=("$!")
+        SAY "etiqueta E$desktop lanzada (maximizada) en el escritorio $desktop"
+        sleep 1
+    done
 fi
 
 # 6. Ventanas: una por escritorio virtual, para que las 3 caras tengan contenido.
@@ -467,7 +645,8 @@ else
         KCM_STATUS="abierto dentro del anidado (log: $KCM_LOG)"
         SAY "lanzando kcmshell6 kcm_kube_effect_plus dentro del anidado"
         (
-            # ECM's prefix.sh expands variables unguarded; the harness runs with
+            # ECM's prefix.sh expands variables unguarded
+            the harness runs with
             # 'set -u', so relax it while sourcing.
             set +u
             # shellcheck source=/dev/null
@@ -514,12 +693,17 @@ cat <<EOF
    3. Configura el efecto DENTRO del anidado (System Settings), o edita
       $CFG/kwinrc  sección [Effect-kube-effect].
    4. Rota los escritorios/fondos y comprueba lo que quieras.
+      Con el wallpaper de prueba: la flecha debe apuntar a ARR y el cuadrante
+      magenta debe quedar en la esquina superior-IZQUIERDA; si el patrón sale
+      espejado o girado, esa cara (o tapa) está mapeando la textura al revés.
+      La ventana E<k> debe verse SOLO en la cara del escritorio k (ADR-004).
 
    KCM nativo 'Kube Effect Plus' (escribe en $CFG/kwinrc): $KCM_STATUS
 
    Engranaje del efecto = menú QML (config.ui), exista o no el nativo.
    'Kube Effect Plus' = KCM nativo, solo en Personalización.
    Modo de este arnés: $NATIVE_LABEL
+   Wallpaper del anidado: $WP_STATUS
 
    Parar el anidado:   $STOP_HINT
    Raíz del arnés:     $HARNESS_ROOT (config, data y logs)

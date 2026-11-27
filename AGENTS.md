@@ -71,7 +71,19 @@ Antes era la fija `/tmp/kube-effect-test-config` + logs fijos en `/tmp`
 host; solo se hereda la sección `[Effect-kube-effect]`, que es lo que se prueba),
 3 escritorios virtuales, **una ventana por cara** (repartida por DBus
 `setCurrentDesktop`, lista en `KUBE_NESTED_APPS`) y **plasmashell con el panel y
-el wallpaper del sistema**. La data dir aislada hace que NO se cargue ningún
+un wallpaper de prueba direccional** generado por el propio arnés
+(`scripts/make-test-wallpaper.py`, dentro de la raíz privada; nada binario se
+commitea): bordes `IZQ/DER/ARR/ABA`, flecha gorda del centro hacia ARR,
+cuadrante magenta en la esquina superior-izquierda y rejilla cada 100 px con
+etiquetas cada 400 px — así rotaciones, espejos (tapas, ADR-027) y por dónde
+asoma el casco se ven de un vistazo, y la rejilla permite medir si la cara
+estira. Como Plasma 6.8.3 **no admite wallpaper por escritorio virtual** (medido
+2026-11-27; bug upstream 155150 abierto), cada escritorio recibe además una
+ventana maximizada `E1/E2/E3` de color distinto (`scripts/test-wallpaper-label.py`)
+para comprobar que la cara k muestra el escritorio k (ADR-004). Se desactiva con
+`--no-test-wallpaper` o `KUBE_NESTED_WALLPAPER=system` (y tampoco se impone con
+`KUBE_NESTED_CONFIG=host` ni con `--no-plasma`): entonces queda el wallpaper del
+sistema, como antes. La data dir aislada hace que NO se cargue ningún
 plasmoid descargado (verificado: con `XDG_DATA_HOME` temporal,
 `Plasma.Flex.Hub`/`Plasma.Control.Hub` no aparecen; sin aislar sí) — verificado
 2026-11-25. `--no-plasma` deja el anidado sin panel ni wallpaper;
