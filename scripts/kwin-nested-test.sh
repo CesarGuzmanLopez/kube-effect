@@ -32,6 +32,10 @@
 #   * XDG_DATA_HOME temporal: no se ven los plasmoids descargados del host y el
 #     paquete del efecto se instala ahí, no en ~/.local/share
 #   * socket Wayland propio (kube-effect-nested-0)
+#   * árbol privado por usuario en ${TMPDIR:-/tmp}/kube-effect-nested-$UID
+#     (0700, dueño verificado, symlinks rechazados): config, data, logs, pid
+#     y addr. Se reusa entre lanzamientos; solo se borra cuando el arnés
+#     detiene su propio anidado (con --no-follow el anidado vive y persiste)
 # Para parar: kill del pid que se imprime al final.
 # se aconseja cerrar el anterior proceso para que no se consuma muchos recursos
 #
@@ -137,7 +141,24 @@ export KUBE_NESTED=1
 # → av_hwdevice_ctx_create → XOpenDisplay → __poll). Vaciar la lista deja el
 # sondeo HW apagado y el MediaPlayer se construye sin tocar X11.
 export QT_FFMPEG_DECODING_HW_DEVICE_TYPES="${QT_FFMPEG_DECODING_HW_DEVICE_TYPES-}"
-CFG="/tmp/kube-effect-test-config"
+RUN="$(id -u)"
+SAY() { echo "[$(date +%H:%M:%S)] $*"; }
+
+# Private per-uid harness root under ${TMPDIR:-/tmp} (0700, owner-verified,
+# symlinks refused): replaces the old fixed /tmp/kube-effect-test-config and
+# the fixed /tmp/kube-effect-nested.{log,pid,addr}, which any local user
+# could pre-create or symlink to hijack the nested config, the logs and the
+# cleanup rm -rf. Reuse across runs is PRESERVED on purpose: the data dir
+# keeps the installed effect package (kpackagetool6 --upgrade stays
+# incremental) and --no-follow leaves a live nested reading $CFG, so the
+# name is deterministic (uid-suffixed) instead of a fresh mktemp -d.
+# shellcheck source=scripts/nested-harness-root.sh
+. scripts/nested-harness-root.sh
+if ! nested_harness_root_prepare; then
+    SAY "error: la ruta del arnés es insegura; aborta"
+    exit 1
+fi
+CFG="$HARNESS_ROOT/config"
 # Data dir propia: una instalación limpia no tiene plasmoids descargados, así que
 # el anidado tampoco debe ver los del host (~/.local/share/plasma/plasmoids).
 # El paquete del efecto se instala aquí: kpackagetool6 respeta XDG_DATA_HOME, y
@@ -146,18 +167,39 @@ CFG="/tmp/kube-effect-test-config"
 # anidado.
 DATA="$CFG/data"
 mkdir -p "$CFG" "$DATA"
-ADDR="/tmp/kube-effect-nested.addr"
-PIDFILE="/tmp/kube-effect-nested.pid"
-KWIN_LOG="/tmp/kube-effect-nested.log"
-PLASMA_LOG="/tmp/kube-effect-nested-plasma.log"
-KCM_LOG="/tmp/kube-effect-nested-kcm.log"
+chmod 700 "$CFG"
+ADDR="$HARNESS_ROOT/nested.addr"
+PIDFILE="$HARNESS_ROOT/nested.pid"
+KWIN_LOG="$HARNESS_ROOT/nested.log"
+PLASMA_LOG="$HARNESS_ROOT/plasma.log"
+KCM_LOG="$HARNESS_ROOT/kcm.log"
+BUILD_LOG="$HARNESS_ROOT/native-build.log"
 CHILD_PIDS=()
-RUN="$(id -u)"
-SAY() { echo "[$(date +%H:%M:%S)] $*"; }
 KUBE_DATA="${XDG_DATA_HOME:-$HOME/.local/share}/kube-effect"
 
-# A pid found in /tmp is only our nested KWin when it is numeric AND its comm is
-# kwin_wayland: a stale pidfile could otherwise name (and kill) any process.
+# Migration notice for the old fixed path from earlier runs: only point at it,
+# never touch it blindly (it could be a symlink or owned by someone else).
+if [ ! -L /tmp/kube-effect-test-config ] && [ -O /tmp/kube-effect-test-config ]; then
+    SAY "aviso: quedó config de lanzamientos viejos en /tmp/kube-effect-test-config; puedes borrarla"
+fi
+
+# Exit cleanup: the tree is removed ONLY when this run stopped its own nested
+# (CLEAN_TREE=1, set by Ctrl+C/TERM and by the "compositor ended" path).
+# With --no-follow the nested stays alive reading $CFG so the tree persists
+# (same contract as before), and on error exits the logs stay for forensics.
+# nested_harness_rm_rf refuses anything not anchored to $HARNESS_ROOT.
+CLEAN_TREE=0
+cleanup_on_exit() {
+    [ "$CLEAN_TREE" -eq 1 ] || return 0
+    if nested_harness_rm_rf "$HARNESS_ROOT"; then
+        SAY "árbol del arnés borrado (config, data y logs): $HARNESS_ROOT"
+    fi
+}
+trap cleanup_on_exit EXIT
+
+# A pid read from the harness pidfile is only our nested KWin when it is
+# numeric AND its comm is kwin_wayland: a stale pidfile could otherwise name
+# (and kill) any process.
 # The pidfile is written by the inner shell right before "exec kwin_wayland", so
 # it holds the compositor itself and not dbus-run-session (killing that one left
 # the old kwin_wayland orphaned).
@@ -196,6 +238,8 @@ kcm_plugin_dir() {
     local plugindir
     plugindir=$(
         set +u
+        # ECM's prefix.sh lives outside the repo; nothing to follow statically.
+        # shellcheck source=/dev/null
         . "$prefix_sh" >/dev/null 2>&1
         printf '%s\n' "${QT_PLUGIN_PATH:-}" | tr ':' '\n' | grep -m1 '^/'
     )
@@ -221,9 +265,9 @@ if [ "$NATIVE" -eq 0 ]; then
     SAY "modo sin compilar: KCM nativo desactivado (--no-native)"
 elif [ -f "native/CMakeLists.txt" ]; then
     SAY "compilando native/ (KCM opcional)..."
-    if ! make native >"/tmp/kube-effect-native-build.log" 2>&1; then
+    if ! make native >"$BUILD_LOG" 2>&1; then
         SAY "error: make native falló; no arranco el anidado"
-        tail -n 20 "/tmp/kube-effect-native-build.log"
+        tail -n 20 "$BUILD_LOG"
         exit 1
     fi
     SAY "native/: compilado e instalado (ver $KUBE_DATA/native-stamp.json)"
@@ -247,7 +291,7 @@ fi
 #    hereda es la sección [Effect-kube-effect], que es lo que se prueba (modo de
 #    fondo, imagen, vídeo, bordes). KUBE_NESTED_CONFIG=host = comportamiento
 #    antiguo: kwinrc completo del host y todos los demás efectos apagados.
-rm -rf "$CFG/kwinrc" "$CFG/kwinrc.tmp"
+nested_harness_rm_rf "$CFG/kwinrc" "$CFG/kwinrc.tmp"
 CONFIG_MODE="${KUBE_NESTED_CONFIG:-clean}"
 
 case "$CONFIG_MODE" in
@@ -478,6 +522,7 @@ cat <<EOF
    Modo de este arnés: $NATIVE_LABEL
 
    Parar el anidado:   $STOP_HINT
+   Raíz del arnés:     $HARNESS_ROOT (config, data y logs)
    Logs:               $KWIN_LOG
                        $PLASMA_LOG
                        $KCM_LOG
@@ -487,7 +532,7 @@ EOF
 # 8. Seguir los logs en vivo. Ctrl+C para todo (deja de seguir y para el
 #    anidado); con --no-follow se sale dejándolo vivo, como antes.
 if [ "$FOLLOW" -eq 1 ] && is_nested_pid "$NESTED_PID"; then
-    trap 'echo; SAY "Ctrl+C: parando el anidado…"; stop_nested; SAY "anidado parado"; exit 0' INT TERM
+    trap 'echo; SAY "Ctrl+C: parando el anidado…"; stop_nested; SAY "anidado parado"; CLEAN_TREE=1; exit 0' INT TERM
     LOGS=("$KWIN_LOG")
     [ -f "$PLASMA_LOG" ] && LOGS+=("$PLASMA_LOG")
     [ -f "$KCM_LOG" ] && LOGS+=("$KCM_LOG")
@@ -507,7 +552,9 @@ if [ "$FOLLOW" -eq 1 ] && is_nested_pid "$NESTED_PID"; then
     else
         SAY "el compositor anidado terminó; limpio lo que lanzó el arnés"
         stop_nested
+        CLEAN_TREE=1
     fi
 elif [ "$FOLLOW" -eq 0 ]; then
     SAY "logs en $KWIN_LOG · $PLASMA_LOG · $KCM_LOG (--no-follow: no los sigo)"
+    SAY "el anidado sigue vivo: $HARNESS_ROOT se conserva (se reusa en el próximo arranque)"
 fi

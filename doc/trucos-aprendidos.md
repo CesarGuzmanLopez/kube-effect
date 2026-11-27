@@ -28,7 +28,7 @@ Arreglo (y por qué el proyecto es **solo Wayland**):
 2. Por seguridad, además `QT_FFMPEG_DECODING_HW_DEVICE_TYPES=""` en el entorno
    del anidado (el sondeo HW por X11 no tiene nada que hacer aquí).
 
-Diagnóstico sin sudo gráfico: `eu-stack -p $(cat /tmp/kube-effect-nested.pid)`
+Diagnóstico sin sudo gráfico: `eu-stack -p $(cat "${TMPDIR:-/tmp}/kube-effect-nested-$(id -u)/nested.pid")`
 (37 pilas) y comprobar si el compositor responde por DBus.
 
 ### ❌ FALSO: `unloadEffect` + `loadEffect` recarga el QML
@@ -379,10 +379,19 @@ en su `config.ui`.
   KWin siempre y **no se pueden apagar**.
 - Verificación por D-Bus del anidado:
   `org.kde.kwin.Effects.isEffectLoaded <id>`, con el bus propio en
-  `/tmp/kube-effect-nested.addr`.
+  `${TMPDIR:-/tmp}/kube-effect-nested-$(id -u)/nested.addr`.
 - El KCM del **host no afecta** al anidado: se configura dentro del anidado
-  (System Settings) o editando `/tmp/kube-effect-test-config/kwinrc`
+  (System Settings) o editando
+  `${TMPDIR:-/tmp}/kube-effect-nested-$(id -u)/config/kwinrc`
   (`[Effect-kube-effect]`).
+- **Raíz del arnés privada (2026-11-26)**: config, data, logs, pid y addr viven
+  en `${TMPDIR:-/tmp}/kube-effect-nested-$UID` (0700, dueño verificado; symlink
+  o ruta ajena = aborta, nunca se sigue). Sustituye a la antigua ruta fija
+  `/tmp/kube-effect-test-config`, que cualquier usuario local podía pre-crear o
+  enlazar para secuestrar la config del anidado o hacer que el `rm -rf` de
+  limpieza borrase a través del symlink. La raíz **se reusa** entre lanzamientos
+  (como antes) y solo se borra cuando el arnés para su propio anidado
+  (`Ctrl+C`); con `--no-follow` el anidado queda vivo y el árbol persiste.
 - El efecto instalado se refresca con
   `kpackagetool6 --type KWin/Effect --upgrade package/` (el arnés ya lo hace).
 - `--no-native` reproduce la experiencia **sin compilar** (nada de `make native`,
@@ -407,8 +416,9 @@ make check                      # qmllint (allowlist) + qmlformat + check-schema
 make lint                       # make check + SonarQube en localhost:9000 (requiere .sonar-token y kkube-sonar)
 kpackagetool6 --type KWin/Effect --upgrade package/   # instala/actualiza el efecto
 ./scripts/kwin-nested-test.sh   # arranca el KWin anidado
-kill $(cat /tmp/kube-effect-nested.pid)               # para el anidado
-DBUS_SESSION_BUS_ADDRESS=$(cat /tmp/kube-effect-nested.addr) \
+ROOT="${TMPDIR:-/tmp}/kube-effect-nested-$(id -u)"   # raíz del arnés (0700)
+kill $(cat "$ROOT/nested.pid")                       # para el anidado
+DBUS_SESSION_BUS_ADDRESS=$(cat "$ROOT/nested.addr") \
   qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.isEffectLoaded kube-effect
 ```
 

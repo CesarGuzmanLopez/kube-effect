@@ -57,6 +57,16 @@ desarrollo no se usa esto
 
 `./scripts/kwin-nested-test.sh` — KWin privado (bus propio,
 `XDG_CONFIG_HOME` y **`XDG_DATA_HOME`** temporales), nunca toca la sesión real.
+Todo lo temporal (config, data, logs, pid y addr) vive en una raíz privada
+`${TMPDIR:-/tmp}/kube-effect-nested-$UID`, creada 0700 y verificada antes de
+escribir (si la ruta existe como symlink o es de otro usuario, el arnés
+**aborta** en vez de seguirla); el `rm -rf` de limpieza solo acepta rutas
+ancladas a esa raíz. La ruta determinista **se reusa** entre lanzamientos (la
+data dir conserva el efecto instalado y los logs quedan hasta el próximo
+arranque, como antes); el árbol solo se borra cuando el arnés detiene su propio
+anidado (`Ctrl+C`), y con `--no-follow` persiste porque el anidado queda vivo.
+Antes era la fija `/tmp/kube-effect-test-config` + logs fijos en `/tmp`
+(compartidos y secuestrables por cualquier usuario local); ya no.
 **Arranca como una instalación limpia**: kwinrc de FÁBRICA (no se copia el del
 host; solo se hereda la sección `[Effect-kube-effect]`, que es lo que se prueba),
 3 escritorios virtuales, **una ventana por cara** (repartida por DBus
