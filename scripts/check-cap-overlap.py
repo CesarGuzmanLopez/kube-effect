@@ -62,6 +62,7 @@ handler, QQuickView) — not a copy of check-cylinder-overlap's.
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -519,85 +520,106 @@ def _scratch_root():
     return base, None
 
 
-def _scratch_selftest():
-    """Regression tests for _scratch_root(), the anti-hijack contract.
+def _st_case(root, name, mode=None, symlink_of=None):
+    """Builds one hostile scratch base and returns (path, cleanup).
 
-    The pixel gate reads a QML stub module and a pattern PNG out of this
-    directory, so a base another local user can write into is code execution
-    as us, not just a broken check. Measured gap this pins: the first version
-    only refused FOREIGN-owned writable bases, so a 0777 directory owned by us
-    passed; now our own base is tightened to 0700 instead.
+    The bases live INSIDE the already validated scratch root, so the test
+    never touches a directory it has not vetted; only the TMPDIR variable
+    points at them, which is exactly what _scratch_root() must survive.
     """
-    failures = []
-    root, why = _scratch_root()
-    if root is None:
-        return ["no usable scratch base on this machine (" + str(why) + ")"]
+    base = root / name
+    if base.is_symlink() or base.exists():
+        if base.is_symlink() or base.is_file():
+            base.unlink()
+        else:
+            shutil.rmtree(base)
+    if symlink_of is not None:
+        base.symlink_to(symlink_of)
+    else:
+        base.mkdir(mode=0o700, parents=True)
+        if mode is not None:
+            os.chmod(base, mode)
+    return base
+
+
+def _st_expect_refuse(label, base, failures):
+    """Runs _scratch_root() with TMPDIR=base and demands a refusal."""
     saved = os.environ.get("TMPDIR")
-    loose = link = victim = None
+    os.environ["TMPDIR"] = str(base)
     try:
-        # 1. ours but group/world writable -> accepted AND tightened to 0700.
-        loose = root / "st-scratch-loose"
-        loose.mkdir(exist_ok=True)
-        os.chmod(loose, 0o777)
-        os.environ["TMPDIR"] = str(loose)
-        got, why2 = _scratch_root()
-        if got is None:
-            failures.append("0777 base of ours was refused (" + str(why2) + ")")
-        elif os.stat(loose).st_mode & 0o077:
-            failures.append(
-                "0777 base stayed loose: " + oct(os.stat(loose).st_mode & 0o777)
-            )
-
-        # 2. a symlink at the base path -> refused, and never followed.
-        victim = root / "st-scratch-victim"
-        victim.mkdir(exist_ok=True)
-        link = root / "st-scratch-link"
-        if link.is_symlink() or link.exists():
-            link.unlink()
-        link.symlink_to(victim)
-        os.environ["TMPDIR"] = str(link)
-        got, why2 = _scratch_root()
-        if got is not None:
-            failures.append("symlink base accepted: " + str(got))
-
-        # 3. a base owned by ANOTHER uid -> refused. Reproducing it for real
-        #    needs a second user (or root), so the uid check itself is
-        #    exercised by pretending we are somebody else: the branch is the
-        #    code under test, not os.stat().
-        real_getuid = os.getuid
-        try:
-            os.getuid = lambda: real_getuid() + 1
-            os.environ["TMPDIR"] = str(victim)
-            got, why2 = _scratch_root()
-            if got is not None:
-                failures.append("foreign-owned base accepted: " + str(got))
-        finally:
-            os.getuid = real_getuid
-
-        # 4. the bare world-writable /tmp -> refused (only asserted when /tmp
-        #    really is world-writable, which is the case on the distros that
-        #    run this gate).
-        if os.stat("/tmp").st_mode & 0o022:
-            os.environ["TMPDIR"] = "/tmp"
-            got, why2 = _scratch_root()
-            if got is not None:
-                failures.append("bare /tmp accepted as scratch base: " + str(got))
+        got, _why = _scratch_root()
     finally:
         if saved is None:
             os.environ.pop("TMPDIR", None)
         else:
             os.environ["TMPDIR"] = saved
-        for stale in (link, loose):
-            if stale is not None:
-                try:
-                    stale.unlink()
-                except OSError:
-                    pass
-        if victim is not None:
-            try:
-                victim.rmdir()
-            except OSError:
-                pass
+    if got is not None:
+        failures.append(f"{label} accepted: {got}")
+    return got
+
+
+def _scratch_selftest():
+    """Regression tests for _scratch_root(), the anti-hijack contract.
+
+    The pixel gate loads a QML stub module and a pattern PNG out of this
+    directory, so a base another local user can write into is code execution
+    as us, not just a broken check. Measured gap that started this: the first
+    version only refused FOREIGN-owned writable bases, so a 0777 directory
+    owned by us passed.
+    """
+    failures = []
+    root, why = _scratch_root()
+    if root is None:
+        return [f"no usable scratch base on this machine ({why})"]
+
+    # 1. ours but group/world writable -> ACCEPTED and tightened to 0700 (the
+    #    nested harness chmods its own root the same way).
+    loose = _st_case(root, "st-scratch-loose", mode=0o777)
+    saved = os.environ.get("TMPDIR")
+    os.environ["TMPDIR"] = str(loose)
+    try:
+        got, _ = _scratch_root()
+    finally:
+        if saved is None:
+            os.environ.pop("TMPDIR", None)
+        else:
+            os.environ["TMPDIR"] = saved
+    if got is None:
+        failures.append("0777 base of ours was refused instead of tightened")
+    elif os.stat(loose).st_mode & 0o077:
+        failures.append(
+            f"0777 base stayed loose: {oct(os.stat(loose).st_mode & 0o777)}"
+        )
+
+    # 2. symlink base -> refused, never followed.
+    victim = _st_case(root, "st-scratch-victim")
+    link = _st_case(root, "st-scratch-link", symlink_of=victim)
+    _st_expect_refuse("symlink base", link, failures)
+
+    # 3. base owned by ANOTHER uid -> refused. A real second user (or root) is
+    #    not available here, so the branch under test is exercised by
+    #    pretending we are somebody else: os.getuid() is what the code
+    #    compares, not os.stat().
+    real_getuid = os.getuid
+    try:
+        os.getuid = lambda: real_getuid() + 1
+        _st_expect_refuse("foreign-owned base", victim, failures)
+    finally:
+        os.getuid = real_getuid
+
+    # 4. the bare world-writable /tmp -> refused (only asserted when /tmp
+    #    really is world-writable, which holds on the distros running this).
+    if os.stat("/tmp").st_mode & 0o022:
+        _st_expect_refuse("bare /tmp", Path("/tmp"), failures)
+
+    for stale in (link, loose, victim):
+        try:
+            if stale.is_symlink() or stale.is_file():
+                stale.unlink()
+            else:
+                shutil.rmtree(stale, ignore_errors=True)
+        except OSError:
+            pass
     return failures
 
 
