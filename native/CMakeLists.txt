@@ -57,6 +57,13 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# clangd/neovim need the real include paths (Qt6, KF6, the KCM source dir
+# added by target_include_directories) or every .cpp under src/ lights up with
+# false errors: "kube_effect_install.h file not found", then QObject, Q_OBJECT,
+# QString... all cascading from that first one. The build itself never needed
+# this flag, so it was easy to miss.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 find_package(ECM 6.0 REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH} ${CMAKE_MODULE_PATH})
 
