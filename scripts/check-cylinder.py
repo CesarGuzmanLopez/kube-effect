@@ -41,58 +41,22 @@ the polygon look there anyway: Cube.qml only loads the mesh in cylinder
 mode, see ADR-025).
 """
 
-import json
 import math
-import os
 import sys
 
-try:
-    from PySide6.QtCore import QUrl, qInstallMessageHandler
-    from PySide6.QtGui import QGuiApplication
-    from PySide6.QtQml import QQmlComponent, QQmlEngine
-except ImportError:  # pragma: no cover - optional dependency
-    print("check-cylinder: skipped (PySide6 is not installed)")
-    sys.exit(0)
+from qml_check_harness import (
+    ROOT,
+    boot_qml,
+    dispatch,
+    mesh_size_problems,
+    qml_problems,
+    read_mesh,
+    require_pyside,
+    selftest_verdict,
+    to_xyz,
+)
 
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent
-
-messages: list[str] = []
-
-
-def collect_errors(_mode, _context, message):
-    if (
-        "TypeError" in message
-        or "ReferenceError" in message
-        or "is not defined" in message
-        or "Cannot assign" in message
-        or "non-existent" in message
-    ):
-        messages.append(message)
-
-
-def _component(value):
-    """QML list items arrive as QVector2D/3D or plain numbers; normalise."""
-    if callable(getattr(value, "x", None)):
-        return value.x(), value.y(), value.z()
-    return float(value[0]), float(value[1]), float(value[2])
-
-
-def _xy(value):
-    if callable(getattr(value, "x", None)):
-        return float(value.x()), float(value.y())
-    return float(value[0]), float(value[1])
-
-
-def read_mesh(mesh, indexes):
-    positions = [_component(v) for v in mesh.property("positions")]
-    normals = [_component(v) for v in mesh.property("normals")]
-    uvs = [_xy(v) for v in mesh.property("uv0s")]
-    # QList<uint> has no Python converter: the harness hands the indexes as
-    # a JSON string (see check-cylinder.qml).
-    index_list = [int(v) for v in json.loads(indexes)]
-    return positions, normals, uvs, index_list
+require_pyside("check-cylinder")
 
 
 def validate(
@@ -106,17 +70,11 @@ def validate(
     def finite(value):
         return math.isfinite(value)
 
-    if len(positions) != vertex_count:
-        problems.append(
-            f"positions: {len(positions)} vertices, expected {vertex_count}"
-        )
+    problems, malformed = mesh_size_problems(
+        positions, normals, uvs, indexes, vertex_count, expected_indexes
+    )
+    if malformed:
         return problems
-    if len(normals) != vertex_count:
-        problems.append(f"normals: {len(normals)}, expected {vertex_count}")
-    if len(uvs) != vertex_count:
-        problems.append(f"uvs: {len(uvs)}, expected {vertex_count}")
-    if len(indexes) != expected_indexes:
-        problems.append(f"indexes: {len(indexes)}, expected {expected_indexes}")
 
     radial_eps = 1e-6 * max(1.0, radius)
     for index, (x, y, z) in enumerate(positions):
@@ -325,38 +283,15 @@ def selftest():
     ]:
         mutation(name, fn)
 
-    print("check-cylinder --selftest:", "OK" if not failures else "FAIL")
-    for failure in failures:
-        print(f" - {failure}")
-    return 0 if not failures else 1
+    return selftest_verdict("check-cylinder", failures)
 
 
 def main():
-    if "--selftest" in sys.argv[1:]:
-        return selftest()
-
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    # Same software-only setup as the other load checks: no GPU, no window.
-    os.environ.setdefault("QT_QUICK_BACKEND", "software")
-    qInstallMessageHandler(collect_errors)
-    application = QGuiApplication(sys.argv)
-
-    engine = QQmlEngine()
-    component = QQmlComponent(engine)
-    component.loadUrl(QUrl.fromLocalFile(str(ROOT / "scripts/check-cylinder.qml")))
-    if component.isError():
-        errors = " ".join(error.toString() for error in component.errors())
-        if "QtQuick3D.Helpers" in errors or "not installed" in errors:
-            print("check-cylinder: skipped (QtQuick3D.Helpers is not installed)")
-            return 0
-        print("check-cylinder: FAIL")
-        for error in component.errors():
-            print(f" - {error}")
-        return 1
-    harness = component.create()
-    if harness is None:
-        print("check-cylinder: FAIL could not create the harness")
-        return 1
+    application, _engine, _component, harness, status = boot_qml(
+        "check-cylinder", ROOT / "scripts/check-cylinder.qml"
+    )
+    if status is not None:
+        return status
     application.processEvents()
 
     problems: list[str] = []
@@ -426,8 +361,8 @@ def main():
     closed = cases[0][2]
     negative = cases[2][2]
     if closed is not None and negative is not None:
-        cp = [_component(v) for v in closed.property("positions")]
-        np_ = [_component(v) for v in negative.property("positions")]
+        cp = [to_xyz(v) for v in closed.property("positions")]
+        np_ = [to_xyz(v) for v in negative.property("positions")]
         if cp != np_:
             problems.append(
                 "negative displacement did NOT clamp: mesh differs from the closed one"
@@ -441,8 +376,7 @@ def main():
     if not bool(harness.property("modelsHaveSourceCleared")):
         problems.append("Model.source was not accepted empty with a custom geometry")
 
-    for message in messages:
-        problems.append(f"qml: {message.strip()}")
+    problems.extend(qml_problems())
 
     print(f"cylinder: N={face_count} W={width} H={height} seg={segments}")
     if problems:
@@ -458,4 +392,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(dispatch(sys.argv, selftest, main))

@@ -49,59 +49,22 @@ unpainted there: Cube.qml only loads the mesh through its own Loader, the
 same isolation as the arc, see ADR-027).
 """
 
-import json
 import math
-import os
 import sys
 import time
 
-try:
-    from PySide6.QtCore import QUrl, qInstallMessageHandler
-    from PySide6.QtGui import QGuiApplication
-    from PySide6.QtQml import QQmlComponent, QQmlEngine
-except ImportError:  # pragma: no cover - optional dependency
-    print("check-cap: skipped (PySide6 is not installed)")
-    sys.exit(0)
+from qml_check_harness import (
+    ROOT,
+    boot_qml,
+    dispatch,
+    mesh_size_problems,
+    qml_problems,
+    read_mesh,
+    require_pyside,
+    selftest_verdict,
+)
 
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent
-
-messages: list[str] = []
-
-
-def collect_errors(_mode, _context, message):
-    if (
-        "TypeError" in message
-        or "ReferenceError" in message
-        or "is not defined" in message
-        or "Cannot assign" in message
-        or "non-existent" in message
-    ):
-        messages.append(message)
-
-
-def _component(value):
-    """QML list items arrive as QVector2D/3D or plain numbers; normalise."""
-    if callable(getattr(value, "x", None)):
-        return value.x(), value.y(), value.z()
-    return float(value[0]), float(value[1]), float(value[2])
-
-
-def _xy(value):
-    if callable(getattr(value, "x", None)):
-        return float(value.x()), float(value.y())
-    return float(value[0]), float(value[1])
-
-
-def read_mesh(mesh, indexes):
-    positions = [_component(v) for v in mesh.property("positions")]
-    normals = [_component(v) for v in mesh.property("normals")]
-    uvs = [_xy(v) for v in mesh.property("uv0s")]
-    # QList<uint> has no Python converter: the harness hands the indexes as
-    # a JSON string (see check-cap.qml).
-    index_list = [int(v) for v in json.loads(indexes)]
-    return positions, normals, uvs, index_list
+require_pyside("check-cap")
 
 
 def _finite(*values):
@@ -247,22 +210,15 @@ def validate(
     The blocks are private helpers (_check_*) so each one stays simple; the
     order of the extends below IS the order of the original checks — every
     problem message is produced by exactly one helper, never re-worded."""
-    problems = []
     vertex_count = half_count + 1
     expected_indexes = half_count * 3
     eps = 1e-6 * max(1.0, r_max)
 
-    if len(positions) != vertex_count:
-        problems.append(
-            f"positions: {len(positions)} vertices, expected {vertex_count}"
-        )
+    problems, malformed = mesh_size_problems(
+        positions, normals, uvs, indexes, vertex_count, expected_indexes
+    )
+    if malformed:
         return problems
-    if len(normals) != vertex_count:
-        problems.append(f"normals: {len(normals)}, expected {vertex_count}")
-    if len(uvs) != vertex_count:
-        problems.append(f"uvs: {len(uvs)}, expected {vertex_count}")
-    if len(indexes) != expected_indexes:
-        problems.append(f"indexes: {len(indexes)}, expected {expected_indexes}")
 
     problems.extend(_check_vertices(positions, r_max, eps))
     problems.extend(_check_normals(normals))
@@ -519,41 +475,7 @@ def selftest():
             else:
                 print(f"  PASS detects {label}: {found[0]}")
 
-    print("check-cap --selftest:", "OK" if not failures else "FAIL")
-    for failure in failures:
-        print(f" - {failure}")
-    return 0 if not failures else 1
-
-
-def _boot_engine():
-    """Start the offscreen QML engine and create the check-cap.qml harness.
-
-    Returns (application, engine, component, harness, status); status is None
-    on success, 0 when QtQuick3D.Helpers is missing (skipped) and 1 on a load
-    or create error. engine/component come back so their lifetime stays exactly
-    what it was when main() held them all."""
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    # Same software-only setup as the other load checks: no GPU, no window.
-    os.environ.setdefault("QT_QUICK_BACKEND", "software")
-    qInstallMessageHandler(collect_errors)
-    application = QGuiApplication(sys.argv)
-    engine = QQmlEngine()
-    component = QQmlComponent(engine)
-    component.loadUrl(QUrl.fromLocalFile(str(ROOT / "scripts/check-cap.qml")))
-    if component.isError():
-        errors = " ".join(error.toString() for error in component.errors())
-        if "QtQuick3D.Helpers" in errors or "not installed" in errors:
-            print("check-cap: skipped (QtQuick3D.Helpers is not installed)")
-            return application, engine, component, None, 0
-        print("check-cap: FAIL")
-        for error in component.errors():
-            print(f" - {error}")
-        return application, engine, component, None, 1
-    harness = component.create()
-    if harness is None:
-        print("check-cap: FAIL could not create the harness")
-        return application, engine, component, None, 1
-    return application, engine, component, harness, None
+    return selftest_verdict("check-cap", failures)
 
 
 def _wait_for_signals(application, harness):
@@ -683,10 +605,9 @@ def _verdict(problems):
 
 
 def main():
-    if "--selftest" in sys.argv[1:]:
-        return selftest()
-
-    application, _engine, _component, harness, status = _boot_engine()
+    application, _engine, _component, harness, status = boot_qml(
+        "check-cap", ROOT / "scripts/check-cap.qml"
+    )
     if status is not None:
         return status
     _wait_for_signals(application, harness)
@@ -698,8 +619,7 @@ def main():
     problems.extend(_check_degenerate(harness))
     problems.extend(_check_cube_pattern(harness))
     problems.extend(_check_cap_instances(harness))
-    for message in messages:
-        problems.append(f"qml: {message.strip()}")
+    problems.extend(qml_problems())
 
     print(
         f"caps: N={sides} W={face_width} g={displacement} a={apothem:.1f} "
@@ -709,4 +629,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(dispatch(sys.argv, selftest, main))
