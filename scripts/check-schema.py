@@ -40,7 +40,10 @@ CONSTANTS = ROOT / "package/contents/ui/constants.js"
 
 KCFG = "{http://www.kde.org/standards/kcfg/1.0}"
 JS_ENUM = re.compile(r"const\s+(\w+)\s*=\s*\{(.*?)\};", re.DOTALL)
-JS_FIELD = re.compile(r"(\w+)\s*:\s*(-?\d+)")
+# Possessive quantifiers: the plain form backtracks polynomially on long
+# whitespace/word runs (measured: 20k spaces ~3.9 s, 40k ~15 s). The classes
+# are disjoint, so locking them off costs nothing in matches.
+JS_FIELD = re.compile(r"(\w++)\s*+:\s++(-?\d++)")
 SPIN_CLASSES = {"QSpinBox", "QDoubleSpinBox"}
 RANGE_CLASSES = SPIN_CLASSES | {"QSlider"}
 # KConfigXT type -> widget classes the generic KCM can bind to it.

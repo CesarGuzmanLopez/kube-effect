@@ -330,7 +330,7 @@ def run_scenario(
                 try:
                     ok = bool(assertion(root))
                     detail = ""
-                except Exception as error:  # noqa: BLE001 - report, do not crash
+                except Exception as error:  # noqa: BLE001  # report, do not crash
                     ok = False
                     detail = f" ({error})"
                 print(f"{'PASS' if ok else 'FAIL'} [n={desktop_count}] {label}{detail}")
@@ -395,7 +395,7 @@ def run_scenario(
             try:
                 ok = bool(assertion(root))
                 detail = ""
-            except Exception as error:  # noqa: BLE001 - report, do not crash
+            except Exception as error:  # noqa: BLE001  # report, do not crash
                 ok = False
                 detail = f" ({error})"
                 failures.append(label)

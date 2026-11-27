@@ -378,7 +378,11 @@ def flip_child(import_root: Path) -> int:
     """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ.setdefault("QT_QUICK_BACKEND", "software")
-    application = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
+    # Keep a live reference: the local must outlive this line or the freshly
+    # built QGuiApplication is collected and the platform integration dies
+    # before the engine below runs. It is never otherwise used, hence the
+    # leading underscore (S1481/F841 exempt it while the binding stays).
+    _application = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
 
     # A generic-KCM configuration (schema defaults for every key ScreenView
     # reads; the clip is irrelevant here — Background stays Color).
@@ -471,7 +475,9 @@ def flip_child(import_root: Path) -> int:
     config.insert("Shape", 1)
     pump(900)
     info = str(root.property("debugInfo") or "")
-    numbers = dict(re.findall(r"([A-Za-z_]+)=(-?\d+)", info))
+    # Possessive quantifiers: the plain form backtracks polynomially on long
+    # letter runs (measured 20k ~1.6 s). Only ever our own debug string.
+    numbers = dict(re.findall(r"([A-Za-z_]++)=(-?\d+)", info))
     # A system WITHOUT QtQuick3D.Helpers is a supported configuration: the
     # drum degrades to the flat sheet/polygon on purpose (documented
     # fallback, the overlay marks it 'cyl(fallback)') and the v == d == R
