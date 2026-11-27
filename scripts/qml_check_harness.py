@@ -39,22 +39,21 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Only these signatures fail a render scenario (the check-constants.py list,
-# mirrored by check-video-dome.py): other qWarnings are legitimate Qt chatter
-# (shader backend, vsync, ...) and must NOT break a gate.
+# Only these signatures fail a render scenario (the check-constants.py list).
+# Other qWarnings are legitimate Qt chatter (shader backend, vsync, ...) and
+# must NOT break a gate. One tuple, defined once: the render gates used to
+# mirror it by hand and drifted.
 QML_ERROR_SIGNATURES = ("TypeError", "ReferenceError", "is not defined")
+# Signatures that additionally sink a QML load/harness run (collect_errors).
+QML_FATAL_EXTRA = ("Cannot assign", "non-existent")
 
 messages: list[str] = []
 
 
 def collect_errors(_mode, _context, message):
     """QML handler: keep only the errors that sink a check run."""
-    if (
-        "TypeError" in message
-        or "ReferenceError" in message
-        or "is not defined" in message
-        or "Cannot assign" in message
-        or "non-existent" in message
+    if any(
+        signature in message for signature in QML_ERROR_SIGNATURES + QML_FATAL_EXTRA
     ):
         messages.append(message)
 
@@ -258,6 +257,7 @@ def dispatch(argv, selftest_main, check_main):
         return selftest_main()
     return check_main()
 
+
 # ------------------------------------------------------------------
 # Stub org.kde.kwin QML module.
 #
@@ -382,10 +382,6 @@ Item {
 BACKGROUND_VIDEO = 3
 # Enough distinct colours to rule out a uniform clear/black frame.
 MIN_COLOURS = 50
-# Only these three signatures fail a scenario (the check-constants.py pattern).
-# Other qWarnings are legitimate Qt chatter (shader backend, vsync, ...) and
-# must NOT break the gate.
-QML_ERROR_SIGNATURES = ("TypeError", "ReferenceError", "is not defined")
 
 
 def write_stub_module(directory):
