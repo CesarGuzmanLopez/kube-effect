@@ -242,6 +242,57 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
 - **Crear capas solo en caras cercanas** (LOD): una capa oculta sigue costando una
   captura por frame.
 
+## 2.5 Tapas (superior e inferior) — cómo se aplicó (ADR-027)
+
+- **Dónde vive la malla**: `CapMesh.qml` (holder `Item` de tamaño cero con un
+  `ProceduralMesh`), en la misma rama del árbol que `CylinderArcMesh.qml`.
+  `Cube.qml` la alcanza SOLO con `Loader` por URL de source
+  (`capMeshLoader`, activo únicamente con alguna tapa encendida y sólido con
+  volumen): así el `import QtQuick3D.Helpers` queda aislado en ese fichero y
+  se compila en runtime (patrón ADR-022/HullRadial/HullVideo). Si el módulo
+  falta, solo ese Loader queda en `Error`: `capMesh` es nulo, las dos tapas
+  no se pintan y el cubo queda intacto, con un único log del motor.
+- **UNA sola malla para las dos tapas**: la geometría es un plano en y = 0
+  generado por los helpers puros de `constants.js`
+  (`capPolygonGeometry`/`capDiscGeometry`). El desplazamiento ±alto/2 lo
+  lleva el NODO del Model (`Cap` superior en `y = +faceSize.height/2`,
+  inferior en `y = -faceSize.height/2` con `eulerRotation.x: 180` — la
+  rotación invierte la normal +Y a -Y y el winding queda consistente visto
+  desde fuera; no existe segunda malla ni copia espejada). Los centroides de ordenación
+  son distintos en Y por tapa → la regla ADR-026 se extiende a ellas:
+  no pueden tapar las caras frontales.
+- **Sin fuente paralela de geometría**: el polígono se genera con apotema =
+  `cube.faceDistance` (el N-gono queda INSCRITO: cada lado cae sobre el plano
+  de una cara; el circunradio es derivado, `apotema/cos(π/N)`), y el disco
+  con radio = `cube.cylinderRadius` (tapa también las cuñas vacías del tambor
+  de 3 slots). Con la hoja 2D (`isSheet`) las tapas se desactivan POR CÓDIGO:
+  el Loader ni se monta. Ninguna propiedad nueva lee `viewRadius` ni la
+  cadena de la hoja, así que no reabre el ciclo ADR-026b.
+- **Contenido sin shaders**: `Cap.qml` es un `Model` con
+  `PrincipledMaterial` (`NoLighting`, `NoCulling`, `alphaMode: Blend` — el
+  contenido lleva alfa por diseño: `CapOpacity` default 80) y
+  `baseColorMap: Texture { sourceItem }` sobre un `Item` de 512×512 que pinta
+  Color (`Rectangle`), Degradado —reutilizando `HullGradient.qml`, cuyo
+  radial mantiene su propio Loader opcional de `QtQuick.Shapes`— o Imagen
+  local con `CapImageFit`. Imagen rota o ausente → `CapColor` y
+  `console.warn` UNA vez (señal `imageUnavailable` filtrada en `Cube` con
+  `capImageWarned`; el aviso de "fuente vacía" va diferido con
+  `Qt.callLater` porque content e imageSource se re-enlazan en el mismo
+  pase).
+- **Config**: claves `CapTop/CapBottom/CapContent/CapColor/CapColor2/
+  CapGradientType/CapGradientStop/CapImage/CapImageFit/CapOpacity` en
+  `main.xml` (Enums como entero, KConfigXT); `config.ui` las agrupa en
+  «Tapas (Caps)» (Appearance) con el patrón de páginas apiladas del fondo
+  (`kcfg_CapContent` → `capContentStack` por `<connections>`); el grupo no se
+  puede encender por "OR" de dos checkboxes en Qt Designer (la última señal
+  gana), así que la ayuda escrita sustituye al gating y el efecto oculta las
+  tapas si ninguna está activa.
+- **Gate**: `scripts/check-cap.py` (+ `--selftest`) instancia el
+  `CapMesh.qml` real offscreen y mide: apotema por punto medio de lado ==
+  `faceDistance`, anillo del disco == `R`, plano y = 0, normales +Y unitarias,
+  UVs centradas en [0,1], fan CCW uniforme, índices en rango, mallas vacías
+  con entradas degeneradas y los dos `Cap` compartiendo la MISMA geometría.
+
 ## 3. Caras: fondo de cara (wallpaper real)
 
 - El fondo de cada cara es el wallpaper REAL del escritorio (el mismo que el

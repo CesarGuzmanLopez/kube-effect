@@ -19,6 +19,11 @@ por fases, pero el spec es entero).
   ventanas de la cara.
 - **Superficie / piel**: NO existe. El sólido es solo caras; entre ellas se ve el
   casco. No hay paredes que "cierren" la forma. en el futuro las paredes tendran colisiones para poder poner efectos dentro pero por lo mientras esto estara asi
+- **Tapa (cap)**: superficie de cierre **superior o inferior** del sólido — un
+  plano (polígono o disco) que tapa un extremo del eje Y, una arriba y otra
+  abajo, habilitables por separado. **Sí** es superficie de cierre (matiza
+  ADR-003: la tapa cierra, la «piel» lateral sigue sin existir); es una pared
+  transversal del sólido, no una cara lateral.
 - **Casco**: el **espacio que rodea al sólido** cuando está activo (fondo /
   entorno). Se ve alrededor y a través de los huecos entre caras. Es configurable
   (color, degradado, vídeo, imagen…). NO es la superficie del sólido.
@@ -288,6 +293,73 @@ Reglas:
   el wallpaper del escritorio se descartan.
 - las ventanas ventanas podrian o no deformarse con el cilindro esto abria que verificar y ser configurable para el usuario tambien en un futuro podria tener colisiones para otros tipos de efecto
 
+## 2.2 Tapas (superior e inferior)
+
+Dos superficies de cierre del sólido: la tapa de **arriba** y la de **abajo**, una
+en cada extremo del eje Y (a `y = ± faceHeight/2`). Cada una se habilita por
+separado y pinta un contenido propio (color, degradado o imagen) con su propia
+transparencia. Cierran el volumen por los extremos, pero **no** son una «piel»
+lateral: entre las caras sigue viéndose el casco (ADR-003 intacto en eso).
+
+| Clave             | Tipo  | Rango                                          | Default    | Requerimiento                                                       |
+| ----------------- | ----- | ---------------------------------------------- | ---------- | ------------------------------------------------------------------- |
+| `CapTop`          | Bool  | —                                              | false      | Habilita la tapa superior                                           |
+| `CapBottom`       | Bool  | —                                              | false      | Habilita la tapa inferior                                           |
+| `CapContent`      | Enum  | Color 0 / Gradient 1 / Image 2                 | 0          | Qué pinta la tapa (color sólido, degradado o imagen)                |
+| `CapColor`        | Color | —                                              | `#1b3fd8`  | Color sólido (y respaldo cuando la imagen falla)                    |
+| `CapColor2`       | Color | —                                              | `#0a1a5e`  | Segundo color del degradado                                         |
+| `CapGradientType` | Enum  | LinearVertical 0 / LinearHorizontal 1 / Radial 2 | 0         | Tipo de degradado                                                   |
+| `CapGradientStop` | Int   | 0–100                                          | 50         | Proporción del degradado (posición del corte: 0 = todo `CapColor2` salvo borde, 100 = transición hasta el final) |
+| `CapImage`        | Url   | —                                              | vacío      | Imagen local de la tapa (solo `file:`/ruta local; nada remoto)      |
+| `CapImageFit`     | Enum  | Cover 0 / Contain 1 / Stretch 2                | 0          | Ajuste de la imagen                                                 |
+| `CapOpacity`      | Int   | 0–100                                          | 80         | Opacidad de la tapa (0 = transparente, 100 = opaca)                 |
+
+Geometría por forma (una sola malla compartida, ver abajo):
+
+- **Polígono** (3+ escritorios): la tapa es un **N-gono regular** con
+  N = `geometryCount` (= max(3, nº escritorios)) cuyo **apotema es la
+  distancia de cara ya calculada** (`faceDistance` = `W/2 / tan(π/N) +
+  CubeFaceDisplacement`). Así cada lado de la tapa cae sobre el plano de una
+  cara: la tapa queda **inscrita** en el prisma y no sobresale de las paredes.
+  El radio circunscrito es `apotema / cos(π/N)`, **derivado** — nunca una
+  segunda fuente de verdad.
+- **Cilindro** (tambor, a cualquier count incluido el tambor de 3 slots con
+  1-2 escritorios): la tapa es un **disco** de radio `R = cylinderRadius`
+  (la misma `R = N·(W+g)/2π` de ADR-025, con `g` del usuario), triangulado en
+  **abanico** con `CYLINDER_SEGMENTS` (64) segmentos. Tapa también las cuñas
+  vacías del tambor. Misma posición `y = ± faceHeight/2`.
+- **Hoja 2D** (`Polygon` con 1-2 escritorios): no hay volumen, así que las
+  tapas quedan **deshabilitadas por código** (no es una opción del usuario),
+  igual que el Interior (§4): una hoja plana no encierra nada que tapar.
+- **Malla compartida**: UNA sola `ProceduralMesh` por forma, reutilizada por las
+  dos tapas (espejadas por rotación), igual que las caras comparten
+  `CylinderArcMesh` (ADR-025). Sin shader: la tapa es un polígono plano (o
+  disco) con la textura de contenido.
+- **Culling / normales**: coherente con las caras → `Material.NoCulling`
+  (ADR-025 punto 12 revertido): la tapa se ve igual desde arriba y desde abajo.
+- **Orden de pintado**: las tapas aportan centroides de ordenación propios en
+  Y (±H/2), así que **no** pueden tapar las caras frontales; la regla de
+  ADR-026 (centroides + `alphaMode` explícito) se extiende a ellas.
+  `alphaMode: Blend` porque el contenido de la tapa tiene alfa (transparencia).
+
+Transparencia y contenido:
+
+- `CapOpacity` es **Int 0–100** (como `DimWhileRotatingAmount`), no Double: un
+  helper de `constants.js` lo pasa a 0..1 (`capOpacity`). Los resolvedores
+  `capContent` / `capGradientType` / `capImageFit` caen a los **defaults de la
+  tabla** cuando el valor guardado está fuera de rango (el patrón
+  `backgroundMode` / `imageFit`).
+- Los Enum se guardan como **entero** en kwinrc (regla KConfigXT: un string
+  rompe el entorno, `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`); grupo
+  `[Effect-kube-effect]`.
+- Imagen **local** obligatoria (mismo filtro que `backgroundImageSource`): el
+  compositor no descarga contenido al activarse. Si la imagen no existe o
+  falla, la tapa cae a `CapColor` y avisa **una vez** (el patrón del vídeo de
+  fondo).
+- **Fuera de alcance (todavía no)**: vídeo como contenido de tapa, figuras
+  animadas. Se recoge en §7.
+
+
 ## 3. Casco (espacio alrededor) — configurable
 
 El casco es la ZONA (el espacio que rodea al sólido). Se pinta de varias formas
@@ -310,6 +382,7 @@ panorámica 360.
 - `BackgroundImageRotate` (Bool, default `true`): solo aplica al mapeo equirect. `true` = entorno 360 que gira con el centro (SkyBox); `false` = capa plana estática fullscreen que no rota al mover la cámara. Compartida por imagen y vídeo.
 - **Vídeo** (`Background=Video`, índice 3): el vídeo se trata **exactamente como una imagen** con otra fuente. `BackgroundVideo` es un Url local (`file:`; una URL de red se ignora) y el mapeo/ajuste/giro son las mismas tres claves de la imagen, en un grupo compartido del KCM («Imagen o vídeo: cómo se muestra»). Reproduce en bucle, sin sonido y **solo con el efecto visible** (pausa al desactivar, reanuda al activar). En la variante 360 el `BackgroundImageFit` **no aplica**: el `VideoOutput` fuerza el fotograma completo (Stretch) porque la esfera es la que envuelve; el ajuste solo manda en la capa plana. Atenuación al girar: velo 2D si va plano, esfera-velo negra si va como 360 (el entorno no puede muestrear un `VideoOutput`: ADR-020). **Dependencia opcional** `QtMultimedia`: si el módulo no está instalado, el vídeo se sustituye por `BackgroundColor` y el efecto sigue funcionando (ver §5.1).
 - Solo se aceptan recursos **locales**: la imagen admite `file:` o `image:`, el vídeo (`BackgroundVideo`) solo `file:`; una URL de red se ignora en ambos casos (el compositor no descarga contenido al activar el efecto).
+- Un camino **sin esquema** debe ser **absoluto**: uno relativo se resolvería contra el directorio de trabajo del compositor, que el efecto no define. Y cualquier segmento `..` descarta el recurso (camino de subida), también dentro de `file:` y de `image:`. Es **defensa en profundidad contra un kwinrc editado a mano, no una frontera de seguridad**: quien escribe `[Effect-kube-effect]` ya controla la sesión, y una ruta absoluta a cualquier fichero legible sigue aceptándose (eso es justo lo que escriben los selectores del KCM). Las reglas viven en `localSource()` (`constants.js`), compartidas por imagen, vídeo y `CapImage`.
 - **KCM genérico con UI dinámica, sin C++**: `kcm_kwin4_genericscripted` solo carga
   `config/main.xml` y `config.ui` con QUiLoader; no hay `config.qml` ni lógica propia y
   `KConfigDialogManager` no admite dependencias entre entries. La pestaña Background usa un combo
@@ -460,6 +533,12 @@ Enum `BackgroundImageLayout`: `Equirect` / `Flat` (sin `Auto`: el usuario elige 
 Enum `BackgroundGradientType`: `LinearVertical` (0, default) / `LinearHorizontal` (1) / `Radial` (2).
 Enum `BackgroundGradientRotation`: `Fixed` (0, default) / `FollowCube` (1) / `FollowCubeInverse` (2); solo el degradado.
 Enum `InteriorObject`: `Off` / `Planets` / `MiniCube` / … (extensible).
+Enum `CapContent`: `Color` (0, default) / `Gradient` (1) / `Image` (2).
+Enum `CapGradientType`: `LinearVertical` (0, default) / `LinearHorizontal` (1) / `Radial` (2).
+Enum `CapImageFit`: `Cover` (0, default) / `Contain` (1) / `Stretch` (2).
+`CapOpacity` es Int 0–100 (no Double); el helper `capOpacity()` de
+`constants.js` lo pasa a 0..1. Los Bool `CapTop` / `CapBottom` (default false)
+habilitan cada tapa por separado.
 
 Las claves exactas y sus defaults para el MVP están en
 `package/contents/config/main.xml`. El config arranca con el del cubo virgen y

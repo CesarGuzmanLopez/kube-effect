@@ -1050,3 +1050,71 @@ configuración soportada y lo cubren los escenarios de `Cube`);
 `check-cylinder-overlap.py` gana el escenario **two-slot** (2 escritorios,
 yaw 0: la fila central es el rojo de la cara del slot 0 — la cara de frente
 también con huecos).
+---
+
+## ADR-027 — Tapas: dos superficies de cierre inscritas en el sólido.
+
+**Decisión**: el sólido gana dos superficies de cierre — la **tapa superior** y
+la **inferior**, una en cada extremo del eje Y (`y = ± faceHeight/2`) —,
+habilitables por separado (`CapTop` / `CapBottom`, Bool, default false). Cada
+tapa pinta un contenido propio con su propia transparencia:
+
+| Clave             | Tipo  | Rango                                          | Default   |
+| ----------------- | ----- | ---------------------------------------------- | --------- |
+| `CapContent`      | Enum  | Color 0 / Gradient 1 / Image 2                 | 0         |
+| `CapColor`        | Color | —                                              | `#1b3fd8` |
+| `CapColor2`       | Color | —                                              | `#0a1a5e` |
+| `CapGradientType` | Enum  | LinearVertical 0 / LinearHorizontal 1 / Radial 2 | 0        |
+| `CapGradientStop` | Int   | 0–100                                          | 50        |
+| `CapImage`        | Url   | —                                              | vacío     |
+| `CapImageFit`     | Enum  | Cover 0 / Contain 1 / Stretch 2                | 0         |
+| `CapOpacity`      | Int   | 0–100                                          | 80        |
+
+La geometría es la del sólido que cierra, sin inventar otra fuente:
+
+- **Polígono** (3+): **N-gono regular** con N = `geometryCount`, apotema =
+  `faceDistance` (`W/2 / tan(π/N) + CubeFaceDisplacement`), de modo que cada
+  lado cae sobre el plano de una cara — la tapa queda **inscrita** en el prisma
+  y no sobresale. El radio circunscrito es `apotema / cos(π/N)`, derivado, no
+  una clave.
+- **Cilindro** (tambor, cualquier count incluido el tambor de 3 slots con 1-2):
+  **disco** de radio `R = cylinderRadius` (`N·(W+g)/2π`), triangulado en abanico
+  con `CYLINDER_SEGMENTS` (64); tapa también las cuñas vacías del tambor.
+- **Hoja 2D** (`Polygon` 1-2): sin volumen → tapas **deshabilitadas por código**
+  (no una opción), igual que el Interior: una hoja no encierra nada.
+
+UNA sola `ProceduralMesh` por forma, compartida por las dos tapas (espejadas
+por rotación), igual que las caras comparten `CylinderArcMesh` (ADR-025). Sin
+shader. Culling `Material.NoCulling` (paridad con las caras, ADR-025 pt.12
+revertido): la tapa se ve igual desde arriba y desde abajo. Las tapas aportan
+centroides de ordenación propios en Y (±H/2), no tapan las caras frontales, y
+extienden la regla de ADR-026 (centroides + `alphaMode` explícito):
+`alphaMode: Blend` porque el contenido tiene alfa.
+
+**Porqué**: el usuario pidió cerrar el sólido por arriba y por abajo con
+superficies cuyo contenido y transparencia se puedan modificar e independientes
+entre sí ("una tapa donde podremos poner una figura, un degradado, una imagen,
+etc."). ADR-003 no se toca en lo que importa: la «piel» lateral sigue sin
+existir; la tapa es una superficie de cierre transversal, no una pared entre
+caras. Reusar `faceDistance` (polígono) y `cylinderRadius` (cilindro) mantiene
+una sola fuente de geometría, y compartir una malla entre las dos tapas sigue el
+patrón de ADR-025 (una malla para las N caras), sin duplicar el upload de
+vértices.
+
+**Descartado (y por qué)**:
+
+- **Disco para el polígono** en vez de N-gono: un disco de radio igual al
+  apotema sobresaldría de las paredes por los vértices; el N-gono inscrito (lado
+  = plano de cara) es el que coincide con la forma.
+- **Radio circunscrito como clave/configuración**: sería una segunda fuente de
+  verdad; se deriva del apotema (`apotema / cos(π/N)`).
+- **Tapa opaca por defecto**: taparía el casco y las caras a través de los
+  huecos; `CapOpacity` default 80 deja ver a través.
+- **`CapOpacity` como Double**: se eligió **Int 0–100** por paridad con
+  `DimWhileRotatingAmount` y el resto de claves 0–100 del KCM; el helper
+  `capOpacity()` traduce a 0..1.
+
+**A medir en la implementación**: coste de las dos mallas por forma y el
+comportamiento visual del disco sobre el tambor de 3 slots (cuñas vacías tapadas
+por el disco); sin métricas previas — se fijan en el anidado.
+
