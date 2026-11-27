@@ -133,10 +133,13 @@ lint-ci: check
 # agujeros de negro, medido en ADR-026); (e/f) tablas medidas del espejo del
 # contenido (PNG asimétrico) y del marcador Flecha (centroide del cuadrante
 # magenta y de la flecha cian por tapa y yaw — el marcador es el default de
-# CapContent desde la enmienda 2). Su --selftest exige que el oráculo rechace
-# escenas sintéticas trucadas (tapa sobre cara, pintura fuera del anillo,
-# hueco abierto, cara ganando a la tapa) y quede mudo en la limpia. Necesita
-# pantalla real y PySide6; sin ellos se salta (exit 0).
+# CapContent desde la enmienda 2). El oráculo geométrico vive aparte, en
+# scripts/cap_overlap_oracle.py (solo math + cap_contract, SIN PySide6), y por
+# eso su --selftest corre también sin pantalla ni GPU: exige que el oráculo
+# rechace escenas sintéticas trucadas (tapa sobre cara, pintura fuera del
+# anillo, hueco abierto, cara ganando a la tapa), quede mudo en la limpia y
+# reporte la fila de control expect=0. Los PÍXELES del driver necesitan pantalla
+# real y PySide6; sin ellos se salta (exit 0).
 # check-video.py instancia HullVideo.qml (el único fichero que importa
 # QtMultimedia) con un motor QML real y comprueba los dos caminos del Loader de
 # ScreenView: módulo presente -> item y VideoOutput creados; módulo ausente y

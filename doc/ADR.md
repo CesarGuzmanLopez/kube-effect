@@ -1289,10 +1289,15 @@ inferior sale, por tanto, **espejado horizontalmente** — consecuencia
 direc­ta del flip de anillo correcto, visible por diseño gracias al cuadrante.
 
 **Puertas.** Gate nuevo `scripts/check-cap-overlap.py/.qml` enganchado a
-`make check` (arranque compartido vía `qml_check_harness.view_boot`; oráculo
-geométrico puro en Python; `--selftest` exige rechazar 5 escenas sintéticas
-trucadas —cap bleed, paint outside, hole open, face wins, y la identidad de
-espejo del propio oráculo— y quedar mudo en la limpia). Contrato de material
+`make check` (arranque compartido vía `qml_check_harness.view_boot`), partido en
+dos ficheros por el tope de 1000 líneas: el **driver** (grabs reales y comparación
+de píxeles) y el **oráculo geométrico** `scripts/cap_overlap_oracle.py`, que solo
+usa `math` + `cap_contract` (sin PySide6). Por eso el `--selftest` del oráculo
+corre **sin pantalla ni GPU** y exige rechazar las escenas sintéticas trucadas
+(cap bleed, paint outside, hole open, face wins, la identidad de espejo del propio
+oráculo y la fila de control `expect=0`, que prueba que el detector no es trivial),
+quedando mudo en la limpia; los píxeles del driver sí necesitan pantalla real y se
+salta con exit 0 sin ella. Contrato de material
 (Mask/Blend por umbral con cutoff clavado) y de wiring (nodos ±H/2, rz=180)
 leídos en vivo del motor. `check-cap.qml` pasa sus Modelos de muestra a Z.
 Tapas apagadas (default del usuario) → render idéntico a 0.0.0.4 (contrato
