@@ -1,128 +1,119 @@
 [
-    {
-        "id": "background-color",
-        "label": "Fondo: color sólido",
-        "requires": [],
-        "native": false,
-        "notes": "Casco de un solo color (Background=Color). Claves: BackgroundColor. No usa QtQuick.Shapes (ADR-022): tras aislar el radial en HullRadial.qml con Loader, el modo Color no depende de ningún módulo opcional.",
-        "status": "stable",
-        "since": "0.0.0.1"
-    },
-    {
-        "id": "background-gradient",
-        "label": "Fondo: degradado",
-        "requires": [],
-        "native": false,
-        "notes": "Degradado vertical y horizontal con Rectangle+Gradient, y radial real con QtQuick.Shapes (ADR-013). Shapes es OPCIONAL (ADR-022): el radial se carga con Loader desde HullRadial.qml; sin el módulo la feature SIGUE FUNCIONANDO con el degradado lineal y avisa una vez, por lo que no va en requires. Claves: BackgroundColor, BackgroundColor2, BackgroundGradientType, BackgroundGradientStop.",
-        "status": "stable",
-        "since": "0.0.0.1"
-    },
-    {
-        "id": "background-gradient-rotation",
-        "label": "Fondo: degradado giratorio",
-        "requires": [],
-        "native": false,
-        "notes": "Orientación del degradado (ADR-017). Clave: BackgroundGradientRotation. Fixed (0, default) deja el degradado quieto; FollowCube (1) lo gira con el yaw del cubo y FollowCubeInverse (2) al revés. La rotación es un transform (no se recrean objetos por frame). En el tipo Radial, girar el degradado centrado no se ve: se desplaza el punto focal sobre un círculo de 0.25*max(w,h). Sin QtQuick.Shapes el radial cae al lineal (ADR-022), que sí gira.",
-        "status": "stable",
-        "since": "0.0.0.2"
-    },
-    {
-        "id": "background-image",
-        "label": "Fondo: imagen / SkyBox",
-        "requires": [],
-        "native": false,
-        "notes": "Imagen equirect (SkyBox 360) o plana; sin Auto, el usuario elige el layout. Claves: SkyBox, BackgroundImageLayout, BackgroundImageFit, BackgroundImageRotate.",
-        "status": "stable",
-        "since": "0.0.0.1"
-    },
-    {
-        "id": "background-video",
-        "label": "Fondo: vídeo",
-        "requires": [
-            "QtMultimedia"
-        ],
-        "native": false,
-        "notes": "Vídeo de fondo (Background=Video), igual que una imagen con otra fuente. Claves: BackgroundVideo más las compartidas BackgroundImageLayout, BackgroundImageFit y BackgroundImageRotate. Equirect + girar con el centro = panorama 360 animado (esfera vista desde dentro con el VideoOutput como baseColorMap; Qt rechaza un Texture.sourceItem como lightProbe, ADR-020). Flat o sin giro = capa plana con el ajuste. Solo reproduce con el efecto visible. Sin QtMultimedia (qt6-multimedia) cae al color de respaldo y avisa una vez.",
-        "status": "stable",
-        "since": "0.0.0.3"
-    },
-    {
-        "id": "advanced-dim",
-        "label": "Advanced: atenuar al girar",
-        "requires": [],
-        "native": false,
-        "notes": "Atenúa el casco solo mientras el cubo gira: velo 2D en color, degradado e imagen plana, SceneEnvironment.probeExposure en el SkyBox 360. Claves: DimWhileRotating, DimWhileRotatingAmount. Solo en la pestaña Advanced (ADR-014).",
-        "status": "stable",
-        "since": "0.0.0.1"
-    },
-    {
-        "id": "advanced-cursor-screen",
-        "label": "Advanced: solo pantalla del cursor",
-        "requires": [],
-        "native": false,
-        "notes": "El cubo se dibuja solo en la pantalla del puntero al activarse (Workspace.cursorPos + screenAt). Clave: CursorScreenOnly. Solo en Advanced (ADR-014).",
-        "status": "stable",
-        "since": "0.0.0.1"
-    },
-    {
-        "id": "face-opacity",
-        "label": "Caras: transparencia al girar",
-        "requires": [],
-        "native": false,
-        "notes": "Opacidad del material de las caras (ADR-021): FaceOpacity en reposo (default 1) y FaceRotationOpacity mientras gira (default 0.7), fundido FaceFadeMs (0-1000, default 120). Mínimo 0.1 para que la cara siga siendo clicable. Prerrequisito del cilindro: se aplica al material, la malla curva lo hereda. Independiente de DimWhileRotating (eso oscurece el casco).",
-        "status": "stable",
-        "since": "0.0.0.3"
-    },
-    {
-        "id": "shape-sheet",
-        "label": "Forma: hoja 2D (1-2 escritorios)",
-        "requires": [],
-        "native": false,
-        "notes": "Con 1-2 escritorios y Polygon la hoja plana es la representación SIEMPRE (ADR-024 intacta: doble cara con 2, simple con giro limitado a ±80° con 1; CubeFaceDisplacement no hace nada aquí). Con Cylinder ya NO hay hoja: hay tambor de tres slots (§shape-cylinder, ADR-026). La hoja es también el destino del fallback Cylinder sin QtQuick3D.Helpers. 2 = doble cara (un quad por escritorio, separación proporcional sheetGap ≥2 unidades, giro completo); 1 = hoja simple con el giro limitado a ±80° (SHEET_AZIMUTH_LIMIT_DEG en constants.js, fijo, sin clave: el dorso con NoCulling se vería espejado). PlaceholderView retirado: KWin siempre tiene >=1 escritorio.",
-        "status": "stable",
-        "since": "0.0.0.3"
-    },
-    {
-        "id": "shape-cylinder",
-        "label": "Forma: cilindro",
-        "requires": [
-            "QtQuick3D.Helpers"
-        ],
-        "native": false,
-        "notes": "Cilindro isométrico sin shader (ADR-025): cada cara es un arco de ProceduralMesh generado por cylinderArcGeometry() en arcGeometry.js (módulo propio, como capGeometry.js). Radio R = N·(W + g)/(2π) con g = max(0, CubeFaceDisplacement): en cilindro la separación entre caras es el hueco LINEAL g medido sobre la superficie, así que los valores negativos se tratan como 0 (no existe el solape). Ángulo de arco θ = W/R, 64 segmentos fijos; la malla se reconstruye solo cuando cambia (W, H, R). Una sola malla compartida por las N caras (cada Model referencia el mismo ProceduralMesh que expone el Loader). La cámara mide close/distant/zoom sobre R (faceDistance = viewRadius = R); desktopAt, ángulo por cara y selección de escritorio no cambian. NoCulling siempre, también aquí (paridad con el polígono, ADR-023): la pared interior de las traseras debe verse por los huecos; el overlap al girar está resuelto en ADR-026: la malla se genera alrededor de cada nodo (el radio vive en la position = rotar(azimut)·(0,0,R), como en el polígono) para que el centroide de sort de la pasada transparente sea distinto por cara, y la cara usa un PrincipledMaterial cuyo alphaMode sale del umbral de opacidad — ≥0.99 Mask en reposo (escribe profundidad; la pared lejana no puede quedar encima y los huecos de la textura siguen dejando ver el fondo: Opaque pintaba negro, medido) y <0.99 Blend al girar (orden atrás-adelante). Antes, el DefaultMaterial con diffuseMap = Texture.sourceItem entraba siempre en la pasada transparente aunque opacity=1 (el grab del item tiene alfa): por eso el overlap se veía con op=1.00. El experimento de BackFaceCulling fuera de 1.05·R sigue retirado (ADR-025 pt.12) y cylinderCullMode queda testeado como semilla documentada; el overlay mantiene blend=0|1 (1 = girando, orden por centroide; 0 = reposo, profundidad). Fijado en su momento por el gate de píxeles retirado por coste (recuperable con `git log --diff-filter=D --name-only -- gate de píxeles de cilindro, retirado por coste (ver doc/trucos-aprendidos.md, sección P)`) (píxeles + estructura). Con 1-2 escritorios Cylinder muestra el tambor de 3 TRES SLOTS (ADR-025 pt.11 re-rectificado + ADR-026): R = 3(W+g)/2π con el hueco g del usuario, tick 120°, caras en los slots 0..count-1 (azimuts 0° y 120°) y slots vacíos sin panel — por ahí se ve el casco, «como si hubiera 3 escritorios». Giro LIBRE a todos los counts (los topes de banda [-60,60]/[-60,180] se retiraron tras probarlos: saltos y falta de fluidez); flechas/estados/desktopAt usan la grid estándar del tambor (un paso puede aparcar frente a un slot vacío: Enter/click allí es el no-op ya guardado; `Cube.faceAzimuth` única fuente). Con 1 escritorio la cara queda SIEMPRE de frente al activar (slot 0, target verbatim). La hoja plana sigue siendo la representación de Polygon 1-2 (ADR-024) y el destino del fallback Cylinder SIN QtQuick3D.Helpers (±80 incluido). QtQuick3D.Helpers es la única dependencia del cilindro y vive aislada en CylinderArcMesh.qml, cargado por Loader: si el módulo falta solo fallan las caras curvas — el sólido cae al rectángulo plano (forma poligonal/hoja) y se avisa una vez.",
-        "status": "stable",
-        "since": "0.0.0.4"
-    },
-    {
-        "id": "shape-caps",
-        "label": "Tapas: superior e inferior",
-        "requires": [
-            "QtQuick3D",
-            "QtQuick3D.Helpers"
-        ],
-        "native": false,
-        "notes": "Tapas (ADR-027): superficies de cierre superior e inferior del sólido, habilitables por separado (CapTop/CapBottom, default apagados). Contenido propio por tapa: color (CapColor, también respaldo), degradado (CapColor2, CapGradientType, CapGradientStop — reusa HullGradient, radial opcional vía QtQuick.Shapes) o imagen local (CapImage, CapImageFit; rota/ausente -> CapColor y avisa una vez), con transparencia compartida CapOpacity (Int 0-100, helper capOpacity). Geometría sin fuente paralela: polígono = anillo acotado a las ESQUINAS de cara (ADR-027 enmendado): N-gono inscrito con separación ≤ 0 (circunradio derivado) y 2N esquinas con cuerdas rectas de hueco con separación > 0, ningún vértice fuera del prisma ni de la esquina de su cara; cilindro = disco de radio cylinderRadius (tapa las cuñas vacías del tambor de 3 slots); hoja 2D = deshabilitadas por código. UNA sola ProceduralMesh compartida por las dos tapas (la inferior girada 180° sobre Z — el único eje que preserva el anillo de esquinas; sobre X giraba medio tick y la tapa atravesaba las caras, ADR-027 enmienda 2), cargada con Loader aislado (si falta QtQuick3D.Helpers las tapas no se pintan y el cubo queda intacto). Contenido con marcador de orientación Arrow (3) como DEFAULT (añadido al final del enum): CapArrow.qml (flecha cian hacia +z local = azimut de la cara 0 + cuadrante magenta para distinguir espejo de giro) tras su propio Loader — sin QtQuick.Shapes degrada a CapColor y avisa una vez; DebugOverlay fuerza Arrow. Material: Mask con alphaCutoff 0.5 desde CapOpacity 99 (escribe profundidad) / Blend por debajo (regla ADR-026 extendida). Fijado por scripts/check-cap.py (malla) y gate de píxeles de tapas, retirado por coste (ver doc/trucos-aprendidos.md, sección P) (píxeles: orden, silueta, espejo v3-vs-v4, marcador).",
-        "status": "stable",
-        "since": "0.0.0.5"
-    },
-    {
-        "id": "interior",
-        "label": "Interior: objetos decorativos",
-        "requires": [
-            "QtQuick3D"
-        ],
-        "native": false,
-        "notes": "Objetos dentro del sólido (planetas + mini-cubo al arrancar). Solo con 3+ escritorios.",
-        "status": "planned",
-        "since": "0.0.0.1"
-    },
-    {
-        "id": "window-layering",
-        "label": "Ventanas: capas 3D (z-index)",
-        "requires": [],
-        "native": false,
-        "notes": "Cada ventana como quad empujado hacia dentro según su z-index, tope de 150 px. Claves: WindowLayering, WindowLayerGap, WindowLayerLodFaces, WindowLayerPlateOpacity.",
-        "status": "planned",
-        "since": "0.0.0.1"
-    }
+  {
+    "id": "background-color",
+    "label": "Fondo: color sólido",
+    "requires": [],
+    "native": false,
+    "notes": "Casco de un solo color (Background=Color). Claves: BackgroundColor. No usa QtQuick.Shapes (ADR-022): tras aislar el radial en HullRadial.qml con Loader, el modo Color no depende de ningún módulo opcional.",
+    "status": "stable",
+    "since": "0.0.0.1"
+  },
+  {
+    "id": "background-gradient",
+    "label": "Fondo: degradado",
+    "requires": [],
+    "native": false,
+    "notes": "Degradado vertical y horizontal con Rectangle+Gradient, y radial real con QtQuick.Shapes (ADR-013). Shapes es OPCIONAL (ADR-022): el radial se carga con Loader desde HullRadial.qml; sin el módulo la feature SIGUE FUNCIONANDO con el degradado lineal y avisa una vez, por lo que no va en requires. Claves: BackgroundColor, BackgroundColor2, BackgroundGradientType, BackgroundGradientStop.",
+    "status": "stable",
+    "since": "0.0.0.1"
+  },
+  {
+    "id": "background-gradient-rotation",
+    "label": "Fondo: degradado giratorio",
+    "requires": [],
+    "native": false,
+    "notes": "Orientación del degradado (ADR-017). Clave: BackgroundGradientRotation. Fixed (0, default) deja el degradado quieto; FollowCube (1) lo gira con el yaw del cubo y FollowCubeInverse (2) al revés. La rotación es un transform (no se recrean objetos por frame). En el tipo Radial, girar el degradado centrado no se ve: se desplaza el punto focal sobre un círculo de 0.25*max(w,h). Sin QtQuick.Shapes el radial cae al lineal (ADR-022), que sí gira.",
+    "status": "stable",
+    "since": "0.0.0.2"
+  },
+  {
+    "id": "background-image",
+    "label": "Fondo: imagen / SkyBox",
+    "requires": [],
+    "native": false,
+    "notes": "Imagen equirect (SkyBox 360) o plana; sin Auto, el usuario elige el layout. Claves: SkyBox, BackgroundImageLayout, BackgroundImageFit, BackgroundImageRotate.",
+    "status": "stable",
+    "since": "0.0.0.1"
+  },
+  {
+    "id": "background-video",
+    "label": "Fondo: vídeo",
+    "requires": ["QtMultimedia"],
+    "native": false,
+    "notes": "Vídeo de fondo (Background=Video), igual que una imagen con otra fuente. Claves: BackgroundVideo más las compartidas BackgroundImageLayout, BackgroundImageFit y BackgroundImageRotate. Equirect + girar con el centro = panorama 360 animado (esfera vista desde dentro con el VideoOutput como baseColorMap; Qt rechaza un Texture.sourceItem como lightProbe, ADR-020). Flat o sin giro = capa plana con el ajuste. Solo reproduce con el efecto visible. Sin QtMultimedia (qt6-multimedia) cae al color de respaldo y avisa una vez.",
+    "status": "stable",
+    "since": "0.0.0.3"
+  },
+  {
+    "id": "advanced-dim",
+    "label": "Advanced: atenuar al girar",
+    "requires": [],
+    "native": false,
+    "notes": "Atenúa el casco solo mientras el cubo gira: velo 2D en color, degradado e imagen plana, SceneEnvironment.probeExposure en el SkyBox 360. Claves: DimWhileRotating, DimWhileRotatingAmount. Solo en la pestaña Advanced (ADR-014).",
+    "status": "stable",
+    "since": "0.0.0.1"
+  },
+  {
+    "id": "advanced-cursor-screen",
+    "label": "Advanced: solo pantalla del cursor",
+    "requires": [],
+    "native": false,
+    "notes": "El cubo se dibuja solo en la pantalla del puntero al activarse (Workspace.cursorPos + screenAt). Clave: CursorScreenOnly. Solo en Advanced (ADR-014).",
+    "status": "stable",
+    "since": "0.0.0.1"
+  },
+  {
+    "id": "face-opacity",
+    "label": "Caras: transparencia al girar",
+    "requires": [],
+    "native": false,
+    "notes": "Opacidad del material de las caras (ADR-021): FaceOpacity en reposo (default 1) y FaceRotationOpacity mientras gira (default 0.7), fundido FaceFadeMs (0-1000, default 120). Mínimo 0.1 para que la cara siga siendo clicable. Prerrequisito del cilindro: se aplica al material, la malla curva lo hereda. Independiente de DimWhileRotating (eso oscurece el casco).",
+    "status": "stable",
+    "since": "0.0.0.3"
+  },
+  {
+    "id": "shape-sheet",
+    "label": "Forma: hoja 2D (1-2 escritorios)",
+    "requires": [],
+    "native": false,
+    "notes": "Con 1-2 escritorios y Polygon la hoja plana es la representación SIEMPRE (ADR-024 intacta: doble cara con 2, simple con giro limitado a ±80° con 1; CubeFaceDisplacement no hace nada aquí). Con Cylinder ya NO hay hoja: hay tambor de tres slots (§shape-cylinder, ADR-026). La hoja es también el destino del fallback Cylinder sin QtQuick3D.Helpers. 2 = doble cara (un quad por escritorio, separación proporcional sheetGap ≥2 unidades, giro completo); 1 = hoja simple con el giro limitado a ±80° (SHEET_AZIMUTH_LIMIT_DEG en constants.js, fijo, sin clave: el dorso con NoCulling se vería espejado). PlaceholderView retirado: KWin siempre tiene >=1 escritorio.",
+    "status": "stable",
+    "since": "0.0.0.3"
+  },
+  {
+    "id": "shape-cylinder",
+    "label": "Forma: cilindro",
+    "requires": ["QtQuick3D.Helpers"],
+    "native": false,
+    "notes": "Cilindro isométrico sin shader (ADR-025): cada cara es un arco de ProceduralMesh generado por cylinderArcGeometry() en arcGeometry.js (módulo propio, como capGeometry.js). Radio R = N·(W + g)/(2π) con g = max(0, CubeFaceDisplacement): en cilindro la separación entre caras es el hueco LINEAL g medido sobre la superficie, así que los valores negativos se tratan como 0 (no existe el solape). Ángulo de arco θ = W/R, 64 segmentos fijos; la malla se reconstruye solo cuando cambia (W, H, R). Una sola malla compartida por las N caras (cada Model referencia el mismo ProceduralMesh que expone el Loader). La cámara mide close/distant/zoom sobre R (faceDistance = viewRadius = R); desktopAt, ángulo por cara y selección de escritorio no cambian. NoCulling siempre, también aquí (paridad con el polígono, ADR-023): la pared interior de las traseras debe verse por los huecos; el overlap al girar está resuelto en ADR-026: la malla se genera alrededor de cada nodo (el radio vive en la position = rotar(azimut)·(0,0,R), como en el polígono) para que el centroide de sort de la pasada transparente sea distinto por cara, y la cara usa un PrincipledMaterial cuyo alphaMode sale del umbral de opacidad — ≥0.99 Mask en reposo (escribe profundidad; la pared lejana no puede quedar encima y los huecos de la textura siguen dejando ver el fondo: Opaque pintaba negro, medido) y <0.99 Blend al girar (orden atrás-adelante). Antes, el DefaultMaterial con diffuseMap = Texture.sourceItem entraba siempre en la pasada transparente aunque opacity=1 (el grab del item tiene alfa): por eso el overlap se veía con op=1.00. El experimento de BackFaceCulling fuera de 1.05·R sigue retirado (ADR-025 pt.12) y cylinderCullMode queda testeado como semilla documentada; el overlay mantiene blend=0|1 (1 = girando, orden por centroide; 0 = reposo, profundidad). Fijado en su momento por el gate de píxeles retirado por coste (recuperable con `git log --diff-filter=D --name-only -- gate de píxeles de cilindro, retirado por coste (ver doc/trucos-aprendidos.md, sección P)`) (píxeles + estructura). Con 1-2 escritorios Cylinder muestra el tambor de 3 TRES SLOTS (ADR-025 pt.11 re-rectificado + ADR-026): R = 3(W+g)/2π con el hueco g del usuario, tick 120°, caras en los slots 0..count-1 (azimuts 0° y 120°) y slots vacíos sin panel — por ahí se ve el casco, «como si hubiera 3 escritorios». Giro LIBRE a todos los counts (los topes de banda [-60,60]/[-60,180] se retiraron tras probarlos: saltos y falta de fluidez); flechas/estados/desktopAt usan la grid estándar del tambor (un paso puede aparcar frente a un slot vacío: Enter/click allí es el no-op ya guardado; `Cube.faceAzimuth` única fuente). Con 1 escritorio la cara queda SIEMPRE de frente al activar (slot 0, target verbatim). La hoja plana sigue siendo la representación de Polygon 1-2 (ADR-024) y el destino del fallback Cylinder SIN QtQuick3D.Helpers (±80 incluido). QtQuick3D.Helpers es la única dependencia del cilindro y vive aislada en CylinderArcMesh.qml, cargado por Loader: si el módulo falta solo fallan las caras curvas — el sólido cae al rectángulo plano (forma poligonal/hoja) y se avisa una vez.",
+    "status": "stable",
+    "since": "0.0.0.4"
+  },
+  {
+    "id": "shape-caps",
+    "label": "Tapas: superior e inferior",
+    "requires": ["QtQuick3D", "QtQuick3D.Helpers"],
+    "native": false,
+    "notes": "Tapas (ADR-027): superficies de cierre superior e inferior del sólido, habilitables por separado (CapTop/CapBottom, default apagados). Contenido propio por tapa: color (CapColor, también respaldo), degradado (CapColor2, CapGradientType, CapGradientStop — reusa HullGradient, radial opcional vía QtQuick.Shapes) o imagen local (CapImage, CapImageFit; rota/ausente -> CapColor y avisa una vez), con transparencia compartida CapOpacity (Int 0-100, helper capOpacity). Geometría sin fuente paralela: polígono = anillo acotado a las ESQUINAS de cara (ADR-027 enmendado): N-gono inscrito con separación ≤ 0 (circunradio derivado) y 2N esquinas con cuerdas rectas de hueco con separación > 0, ningún vértice fuera del prisma ni de la esquina de su cara; cilindro = disco de radio cylinderRadius (tapa las cuñas vacías del tambor de 3 slots); hoja 2D = deshabilitadas por código. UNA sola ProceduralMesh compartida por las dos tapas (la inferior girada 180° sobre Z — el único eje que preserva el anillo de esquinas; sobre X giraba medio tick y la tapa atravesaba las caras, ADR-027 enmienda 2), cargada con Loader aislado (si falta QtQuick3D.Helpers las tapas no se pintan y el cubo queda intacto). Contenido con marcador de orientación Arrow (3) como DEFAULT (añadido al final del enum): CapArrow.qml (flecha cian hacia +z local = azimut de la cara 0 + cuadrante magenta para distinguir espejo de giro) tras su propio Loader — sin QtQuick.Shapes degrada a CapColor y avisa una vez; DebugOverlay fuerza Arrow. Material: Mask con alphaCutoff 0.5 desde CapOpacity 99 (escribe profundidad) / Blend por debajo (regla ADR-026 extendida). Fijado por scripts/check-cap.py (malla) y gate de píxeles de tapas, retirado por coste (ver doc/trucos-aprendidos.md, sección P) (píxeles: orden, silueta, espejo v3-vs-v4, marcador).",
+    "status": "stable",
+    "since": "0.0.0.5"
+  },
+  {
+    "id": "interior",
+    "label": "Interior: objetos decorativos",
+    "requires": ["QtQuick3D"],
+    "native": false,
+    "notes": "Objetos dentro del sólido (planetas + mini-cubo al arrancar). Solo con 3+ escritorios.",
+    "status": "planned",
+    "since": "0.0.0.1"
+  },
+  {
+    "id": "window-layering",
+    "label": "Ventanas: capas 3D (z-index)",
+    "requires": [],
+    "native": false,
+    "notes": "Cada ventana como quad empujado hacia dentro según su z-index, tope de 150 px. Claves: WindowLayering, WindowLayerGap, WindowLayerLodFaces, WindowLayerPlateOpacity.",
+    "status": "planned",
+    "since": "0.0.0.1"
+  }
 ]

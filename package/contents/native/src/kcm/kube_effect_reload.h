@@ -19,27 +19,27 @@
  */
 namespace KubeReload
 {
-/**
- * True when the KCM runs inside the nested test compositor
- * (scripts/kwin-nested-test.sh uses the Wayland socket "kube-effect-nested-0").
- * The button refuses to offer anything there: that compositor belongs to the
- * script.
- */
-bool isNestedSession(const QProcessEnvironment &environment);
+  /**
+   * True when the KCM runs inside the nested test compositor
+   * (scripts/kwin-nested-test.sh uses the Wayland socket "kube-effect-nested-0").
+   * The button refuses to offer anything there: that compositor belongs to the
+   * script.
+   */
+  bool isNestedSession(const QProcessEnvironment &environment);
 
-/**
- * systemd unit that, when restarted by hand from a TTY, drops the compiled QML
- * cache: a new kwin_wayland process. It exists on Plasma 6 (plasma-workspace)
- * and is the one running the session; kwin_wayland --replace is not used (it
- * fights systemd). Restarting it from inside the session kills every Wayland
- * client, so the KCM only shows it.
- */
-QString serviceUnit();
+  /**
+   * systemd unit that, when restarted by hand from a TTY, drops the compiled QML
+   * cache: a new kwin_wayland process. It exists on Plasma 6 (plasma-workspace)
+   * and is the one running the session; kwin_wayland --replace is not used (it
+   * fights systemd). Restarting it from inside the session kills every Wayland
+   * client, so the KCM only shows it.
+   */
+  QString serviceUnit();
 
-/**
- * systemctl argv for a full restart, i.e. {"systemctl", "--user", "restart",
- * serviceUnit()}. Shown to the user for a manual, TTY-only run: the KCM never
- * executes it.
- */
-QStringList restartCommand();
+  /**
+   * systemctl argv for a full restart, i.e. {"systemctl", "--user", "restart",
+   * serviceUnit()}. Shown to the user for a manual, TTY-only run: the KCM never
+   * executes it.
+   */
+  QStringList restartCommand();
 } // namespace KubeReload

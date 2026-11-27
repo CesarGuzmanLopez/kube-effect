@@ -26,9 +26,9 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # (contents/native) there is neither, so the source is this folder itself.
 PARENT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 if [ -f "$PARENT_DIR/Makefile" ] && [ -f "$PARENT_DIR/package/metadata.json" ]; then
-    SOURCE_DIR="$PARENT_DIR"
+  SOURCE_DIR="$PARENT_DIR"
 else
-    SOURCE_DIR="$SCRIPT_DIR"
+  SOURCE_DIR="$SCRIPT_DIR"
 fi
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kube-effect"
 STAMP="$DATA_DIR/native-stamp.json"
@@ -39,76 +39,76 @@ clean=0
 system=0
 
 usage() {
-    sed -n '3,10p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '3,10p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
-    case "$1" in
-    --clean) clean=1 ;;
-    --system) system=1 ;;
-    --prefix)
-        shift
-        prefix="${1:?--prefix needs a directory}"
-        ;;
-    --prefix=*) prefix="${1#--prefix=}" ;;
-    -h | --help)
-        usage
-        exit 0
-        ;;
-    *)
-        echo "build.sh: unknown argument: $1" >&2
-        exit 2
-        ;;
-    esac
+  case "$1" in
+  --clean) clean=1 ;;
+  --system) system=1 ;;
+  --prefix)
     shift
+    prefix="${1:?--prefix needs a directory}"
+    ;;
+  --prefix=*) prefix="${1#--prefix=}" ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "build.sh: unknown argument: $1" >&2
+    exit 2
+    ;;
+  esac
+  shift
 done
 
 # --system keeps an explicit KUBE_PREFIX if the caller set one.
 if [ "$system" = 1 ] && [ -z "${KUBE_PREFIX:-}" ]; then
-    prefix="/usr"
+  prefix="/usr"
 fi
 
 # Separate build trees: a system install must not reuse a private-prefix cache
 # (the install paths are baked into the config).
 if [ "$prefix" = "/usr" ]; then
-    build_dir="$SCRIPT_DIR/build-system"
+  build_dir="$SCRIPT_DIR/build-system"
 else
-    build_dir="$SCRIPT_DIR/build"
+  build_dir="$SCRIPT_DIR/build"
 fi
 
 if [ "$clean" = 1 ]; then
-    rm -rf "$build_dir"
+  rm -rf "$build_dir"
 fi
 
 echo "kube-effect native: prefix=$prefix build=$build_dir"
 cmake -S "$SCRIPT_DIR" -B "$build_dir" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX="$prefix"
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX="$prefix"
 cmake --build "$build_dir" --parallel
 
 # The KCM is what installs into ~/.local: run its tests (smoke test + the pure
 # restart helpers) before installing, so a broken module never lands there.
 # KUBE_SKIP_TESTS=1 opts out for environments without kcmshell6.
 if [ "${KUBE_SKIP_TESTS:-0}" != 1 ]; then
-    ctest --test-dir "$build_dir" --output-on-failure
+  ctest --test-dir "$build_dir" --output-on-failure
 fi
 
 if [ "$system" = 1 ]; then
-    sudo cmake --install "$build_dir"
+  sudo cmake --install "$build_dir"
 else
-    cmake --install "$build_dir"
+  cmake --install "$build_dir"
 fi
 
 # The compiled versions come from CMake at configure time, so the stamp cannot
 # disagree with what the .so was actually built against.
 info="$build_dir/kube-native-info.json"
 if [ ! -f "$info" ]; then
-    echo "build.sh: missing $info (configure failed?)" >&2
-    exit 1
+  echo "build.sh: missing $info (configure failed?)" >&2
+  exit 1
 fi
 
 json_field() {
-    python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$info" "$1"
+  python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$info" "$1"
 }
 
 plasma=$(json_field plasma)
@@ -143,18 +143,18 @@ PY
 # prefix (QT_PLUGIN_PATH, XDG_DATA_DIRS, ...). Keep a copy next to the stamp so
 # the nested harness and the user can source a stable path.
 if [ ! -f "$build_dir/prefix.sh" ]; then
-    echo "build.sh: missing $build_dir/prefix.sh (ECM did not generate it?)" >&2
-    exit 1
+  echo "build.sh: missing $build_dir/prefix.sh (ECM did not generate it?)" >&2
+  exit 1
 fi
 install -m 0644 "$build_dir/prefix.sh" "$PREFIX_SH"
 # ECM writes unguarded $VAR expansions; sourcing the copy with 'set -u' aborts.
 # Guard them so the harness (set -u) and user shells can source it safely.
 sed -i \
-    -e 's/\$QT_PLUGIN_PATH/\${QT_PLUGIN_PATH:-}/g' \
-    -e 's/\$QML2_IMPORT_PATH/\${QML2_IMPORT_PATH:-}/g' \
-    -e 's/\$QT_QUICK_CONTROLS_STYLE_PATH/\${QT_QUICK_CONTROLS_STYLE_PATH:-}/g' \
-    -e 's/\$PYTHONPATH/\${PYTHONPATH:-}/g' \
-    "$PREFIX_SH"
+  -e 's/\$QT_PLUGIN_PATH/\${QT_PLUGIN_PATH:-}/g' \
+  -e 's/\$QML2_IMPORT_PATH/\${QML2_IMPORT_PATH:-}/g' \
+  -e 's/\$QT_QUICK_CONTROLS_STYLE_PATH/\${QT_QUICK_CONTROLS_STYLE_PATH:-}/g' \
+  -e 's/\$PYTHONPATH/\${PYTHONPATH:-}/g' \
+  "$PREFIX_SH"
 
 echo
 echo "kube-effect native: installed (Plasma $plasma, Qt $qt, package $pkg)"

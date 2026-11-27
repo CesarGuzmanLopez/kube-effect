@@ -126,7 +126,7 @@ Cómo está implementado:
   ADR-026)**: con `Shape = Cylinder` y 1-2 escritorios NO hay rama especial:
   `cylinderActive = isCylinder && mesh` a cualquier count y el tambor corre
   con su fórmula fijando el suelo de slots en 3 (`geometryCount =
-  max(3, faces)`): `R = 3(W + g)/2π` — **el hueco g del usuario aplica**
+max(3, faces)`): `R = 3(W + g)/2π` — **el hueco g del usuario aplica**
   (el 3W/2π fijo del segmento murió con él) —, tick 120° por la grid
   estándar `angleTick·index`, caras en los slots 0..count-1 y slots vacíos
   **sin delegate** (se ve el casco: «como si hubiera 3 escritorios, con las
@@ -143,7 +143,7 @@ Cómo está implementado:
   banda (`cylinderArcRadius`, `cylinderSegmentAzimuth`,
   `cylinderAzimuthRange`, `cylinderSegmentDesktopAt`,
   `CYLINDER_SEGMENT_DEG`) fueron RETIRADOS de `constants.js`. `faceDistance
-  = viewRadius = R`; close llena la pantalla en vertical — en horizontal
+= viewRadius = R`; close llena la pantalla en vertical — en horizontal
   la cuerda del arco mide ≈ 0.826·W con g = 0 (los bordes curvos dejan
   ~8-9 % de casco a cada lado; es la proyección, no un bug). Con `Polygon`,
   1-2 sigue siendo §2.3 sin tocar.
@@ -311,7 +311,7 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
   `Qt.callLater` porque content e imageSource se re-enlazan en el mismo
   pase).
 - **Config**: claves `CapTop/CapBottom/CapContent/CapColor/CapColor2/
-  CapGradientType/CapGradientStop/CapImage/CapImageFit/CapOpacity` en
+CapGradientType/CapGradientStop/CapImage/CapImageFit/CapOpacity` en
   `main.xml` (Enums como entero, KConfigXT; `CapContent` = Color 0 /
   Gradient 1 / Image 2 / **Arrow 3 — el default**, añadido al final para no
   mover los índices guardados; los valores desconocidos siguen cayendo a
@@ -376,57 +376,57 @@ El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 
 ## 4. Casco: espacio alrededor
 
 - Es el fondo de la escena (no la superficie del sólido). Modos:
-    - **Color**: un `Rectangle` de color sólido DENTRO de la escena, detrás del
-      `View3D` (nunca `window.color`, que pinta la superficie de la ventana; ver
-      trucos).
-    - **Degradado** lineal (arriba→abajo u horizontal): un `Rectangle` con
-      `Gradient` DENTRO de la escena. `Radial` es **real** con
-      `QtQuick.Shapes.RadialGradient` (expone `centerX/centerY/centerRadius/focal*`
-      y `stops` en Qt 6.12); no cae a vertical. Sin shaders ni C++. **Opcional**
-      (ADR-022): vive en `HullRadial.qml` cargado con `Loader`; si falta el
-      módulo, cae al lineal y avisa una vez (antes el import hacía de
-      `QtQuick.Shapes` dependencia dura de todo el efecto).
-    - **Imagen / SkyBox**: si el mapeo es `Equirect` (panorámica 360) se usa
-      `SceneEnvironment { backgroundMode: SkyBox; lightProbe: Texture { source } }`
-      → **SkyBox**: entorno que envuelve la escena y gira con el centro. Un solo
-      `SceneEnvironment` inline del `View3D` (sin `Loaders`, ADR-022): alterna
-      `SkyBox`/`Transparent` con `backgroundMode` sin recrear el entorno en cada
-      cambio de modo. El `source` del `lightProbe` se gatea por `skyBoxImageReady`
-      (la sonda solo decodifica con el efecto visible). Limite honesto: KWin
-      destruye el SceneView en cada desactivación (`QuickSceneEffect::stopInternal`,
-      view caching off y no expuesto a QML), así que el panorama **re-decodifica
-      por activación** desde QML; evitarlo exige caching de views en C++, fuera
-      del contrato. En multi-monitor el `source` del probe solo se crea en la pantalla donde
-      se pinta (`drawOnThisScreen`). Si es
-      `Flat`, se pinta como **quad plano** (fondo fijo), con `BackgroundImageFit`
-      (`Cover`/`Contain`/`Stretch`, default `Cover`) para decidir cómo encaja
-      la imagen plana. Ya no hay `Auto`: el usuario elige explícitamente
-      (`BackgroundImageLayout`: `Equirect`/`Flat`).
-    - **Vídeo** (`Background=Video`): el clip se pinta **igual que una imagen**,
-      con dos caminos. `Equirect` + `BackgroundImageRotate` = 360: una esfera
-      vista desde dentro con `baseColorMap: Texture { sourceItem: videoOutput }`
-      (ADR-020; Qt rechaza el `sourceItem` como `lightProbe`). Ahí el
-      `VideoOutput` fuerza `fillMode: Stretch` (`HullVideo.dome`): la esfera
-      envuelve el fotograma completo; el fit del usuario recortaba cielo y
-      suelo (Cover) o metía barras negras en los polos (Contain). Si no, capa
-      plana fullscreen detrás del `View3D` con `BackgroundImageFit` en el
-      `VideoOutput.fillMode` (`Cover`/`Contain`/`Stretch`).
-      **El import de QtMultimedia está aislado** en `package/contents/ui/HullVideo.qml`,
-      que `ScreenView.qml` carga con un `Loader`: si el módulo opcional no está,
-      solo ese item queda en `Loader.Error` (aviso `qWarning` una vez) y el
-      color de respaldo sigue pintando el casco. Un import de QtMultimedia en
-      `ScreenView.qml` habría roto **todo** el efecto.
-      El `MediaPlayer` (bucle infinito, `AudioOutput { muted: true }` —en Qt 6.12
-      `MediaPlayer` no tiene `muted`) solo reproduce con `effect.visible`:
-      `playing` está ligado a esa propiedad, y el item no se crea hasta la
-      primera activación, así que no consume CPU en segundo plano. En
-      multi-monitor el `Loader` del vídeo se crea solo en la pantalla que pinta
-      (`active: videoActive && drawOnThisScreen`, ADR-022 segunda revisión):
-      KWin genera un SceneView por salida y un Loader activo decodificaría en
-      cada una. Cambiar de clip o de modo con el `Loader` ya montado rearma el
-      temporizador de diagnóstico (si no, un clip nuevo roto quedaría mudo).
-      Atenuación al girar: capa plana → velo 2D `hullDim`; 360 → esfera-velo
-      negra dentro de la cúpula (ADR-020; `probeExposure` es solo para la imagen).
+  - **Color**: un `Rectangle` de color sólido DENTRO de la escena, detrás del
+    `View3D` (nunca `window.color`, que pinta la superficie de la ventana; ver
+    trucos).
+  - **Degradado** lineal (arriba→abajo u horizontal): un `Rectangle` con
+    `Gradient` DENTRO de la escena. `Radial` es **real** con
+    `QtQuick.Shapes.RadialGradient` (expone `centerX/centerY/centerRadius/focal*`
+    y `stops` en Qt 6.12); no cae a vertical. Sin shaders ni C++. **Opcional**
+    (ADR-022): vive en `HullRadial.qml` cargado con `Loader`; si falta el
+    módulo, cae al lineal y avisa una vez (antes el import hacía de
+    `QtQuick.Shapes` dependencia dura de todo el efecto).
+  - **Imagen / SkyBox**: si el mapeo es `Equirect` (panorámica 360) se usa
+    `SceneEnvironment { backgroundMode: SkyBox; lightProbe: Texture { source } }`
+    → **SkyBox**: entorno que envuelve la escena y gira con el centro. Un solo
+    `SceneEnvironment` inline del `View3D` (sin `Loaders`, ADR-022): alterna
+    `SkyBox`/`Transparent` con `backgroundMode` sin recrear el entorno en cada
+    cambio de modo. El `source` del `lightProbe` se gatea por `skyBoxImageReady`
+    (la sonda solo decodifica con el efecto visible). Limite honesto: KWin
+    destruye el SceneView en cada desactivación (`QuickSceneEffect::stopInternal`,
+    view caching off y no expuesto a QML), así que el panorama **re-decodifica
+    por activación** desde QML; evitarlo exige caching de views en C++, fuera
+    del contrato. En multi-monitor el `source` del probe solo se crea en la pantalla donde
+    se pinta (`drawOnThisScreen`). Si es
+    `Flat`, se pinta como **quad plano** (fondo fijo), con `BackgroundImageFit`
+    (`Cover`/`Contain`/`Stretch`, default `Cover`) para decidir cómo encaja
+    la imagen plana. Ya no hay `Auto`: el usuario elige explícitamente
+    (`BackgroundImageLayout`: `Equirect`/`Flat`).
+  - **Vídeo** (`Background=Video`): el clip se pinta **igual que una imagen**,
+    con dos caminos. `Equirect` + `BackgroundImageRotate` = 360: una esfera
+    vista desde dentro con `baseColorMap: Texture { sourceItem: videoOutput }`
+    (ADR-020; Qt rechaza el `sourceItem` como `lightProbe`). Ahí el
+    `VideoOutput` fuerza `fillMode: Stretch` (`HullVideo.dome`): la esfera
+    envuelve el fotograma completo; el fit del usuario recortaba cielo y
+    suelo (Cover) o metía barras negras en los polos (Contain). Si no, capa
+    plana fullscreen detrás del `View3D` con `BackgroundImageFit` en el
+    `VideoOutput.fillMode` (`Cover`/`Contain`/`Stretch`).
+    **El import de QtMultimedia está aislado** en `package/contents/ui/HullVideo.qml`,
+    que `ScreenView.qml` carga con un `Loader`: si el módulo opcional no está,
+    solo ese item queda en `Loader.Error` (aviso `qWarning` una vez) y el
+    color de respaldo sigue pintando el casco. Un import de QtMultimedia en
+    `ScreenView.qml` habría roto **todo** el efecto.
+    El `MediaPlayer` (bucle infinito, `AudioOutput { muted: true }` —en Qt 6.12
+    `MediaPlayer` no tiene `muted`) solo reproduce con `effect.visible`:
+    `playing` está ligado a esa propiedad, y el item no se crea hasta la
+    primera activación, así que no consume CPU en segundo plano. En
+    multi-monitor el `Loader` del vídeo se crea solo en la pantalla que pinta
+    (`active: videoActive && drawOnThisScreen`, ADR-022 segunda revisión):
+    KWin genera un SceneView por salida y un Loader activo decodificaría en
+    cada una. Cambiar de clip o de modo con el `Loader` ya montado rearma el
+    temporizador de diagnóstico (si no, un clip nuevo roto quedaría mudo).
+    Atenuación al girar: capa plana → velo 2D `hullDim`; 360 → esfera-velo
+    negra dentro de la cúpula (ADR-020; `probeExposure` es solo para la imagen).
 - **Orientación del degradado** (`BackgroundGradientRotation`, ADR-017; solo el
   casco degradado). `ScreenView.qml` pasa el yaw de la cámara
   (`cameraController.rotation.toEulerAngles().y`) como propiedad `yaw` a
@@ -548,48 +548,48 @@ native/
   sobre los Qt plugin paths es todo el registro.
 - Contenido (solo lo que QML no puede hacer):
   a. Versiones compiladas (`KUBE_PLASMA_VERSION`, `KUBE_QT_VERSION`,
-     `KUBE_PKG_VERSION`), inyectadas con `add_compile_definitions`.
-     Plasma se detecta con `find_package(KWin)` (`KWin_VERSION`, autoritativo);
-     si no hay paquete CMake de KWin se ejecuta `kwin_wayland --version` en
-     configure time. `KWindowSystem` no sirve: da la versión del framework KF6.
+  `KUBE_PKG_VERSION`), inyectadas con `add_compile_definitions`.
+  Plasma se detecta con `find_package(KWin)` (`KWin_VERSION`, autoritativo);
+  si no hay paquete CMake de KWin se ejecuta `kwin_wayland --version` en
+  configure time. `KWindowSystem` no sirve: da la versión del framework KF6.
   b. Estado del stamp `~/.local/share/kube-effect/native-stamp.json`: si la
-     versión de Plasma/Qt no coincide con la compilada, aviso destacado con
-     «compilado para X, tienes Y → recompila» (etiqueta resaltada, sin diálogos).
+  versión de Plasma/Qt no coincide con la compilada, aviso destacado con
+  «compilado para X, tienes Y → recompila» (etiqueta resaltada, sin diálogos).
   c. Dependencias de `features.json`: lee
-     `kwin/effects/kube-effect/contents/config/features.json` con
-     `QStandardPaths::locate(GenericDataLocation, …)` y pinta palomita/cruz por
-     `requires` (mismos sondeos que `scripts/check-features.py`) + `notes` de las
-     features que no cumplen.
+  `kwin/effects/kube-effect/contents/config/features.json` con
+  `QStandardPaths::locate(GenericDataLocation, …)` y pinta palomita/cruz por
+  `requires` (mismos sondeos que `scripts/check-features.py`) + `notes` de las
+  features que no cumplen.
   d. Aviso en negrita si `Background` (modo) no concuerda con los medios de
-     kwinrc: modo Color con `SkyBox`/`BackgroundVideo` puesto (imagen que no se
-     pinta, típico de kwinrc previo al rename del enum) o modo Imagen/Vídeo sin
-     medio. Es el único diagnóstico que lee kwinrc directamente.
+  kwinrc: modo Color con `SkyBox`/`BackgroundVideo` puesto (imagen que no se
+  pinta, típico de kwinrc previo al rename del enum) o modo Imagen/Vídeo sin
+  medio. Es el único diagnóstico que lee kwinrc directamente.
   e. Dos botones, con una línea que explica cuándo usar cada uno
-     («Reconfigurar efecto: cambios de ajustes. Recargar compositor: cambios de
-     código (KWin guarda el QML en caché).»):
-     - **«Reconfigurar efecto»** → D-Bus
-       `org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect("kube-effect")`,
-       con el fallo visible en una etiqueta. Solo re-lee la config: **no**
-       recompila QML. **Asíncrono** (ADR-022): `QDBusConnection::asyncCall()` +
-       `QDBusPendingCallWatcher`; antes el `call` síncrono congelaba el hilo GUI
-       hasta 25 s si KWin no respondía (el aviso «en curso…» se muestra antes de
-       lanzar la llamada y la etiqueta recoge el resultado al terminar).
-     - **«Aplicar cambios de código»** → cierra la sesión, no reinicia KWin
-       (2026-11-25, medido: el restart mata la sesión Wayland y el escritorio
-       queda muerto). `KMessageDialog` de aviso con tres salidas: «Cerrar
-       sesión» → `org.kde.Shutdown /Shutdown org.kde.Shutdown.logout` (la misma
-       llamada del menú de Plasma: las apps reciben su cierre normal y SDDM
-       autologin devuelve la sesión); «Copiar comando» → deja `systemctl --user
-       restart plasma-kwin_wayland.service` en el portapapeles para un TTY;
-       Cancelar no hace nada. No se usa `reconfigureEffect` (solo re-lee la
-       config) ni `kwin_wayland --replace` (X11; en Wayland empeora). **Una
-       guarda**: si `WAYLAND_DISPLAY` contiene `kube-effect-nested` o
-       `KUBE_NESTED=1` (el arnés exporta ese flag y usa ese socket; KCM abierto
-       dentro de `scripts/kwin-nested-test.sh`) se niega y responde «No
-       disponible en el compositor de pruebas: reinícialo cerrando y volviendo
-       a lanzar el script.».
-  f. El comando `bash native/build.sh` solo se muestra con
-     `-DKUBE_SHOW_BUILD_COMMAND=ON` (default OFF, ver ADR-015).
+  («Reconfigurar efecto: cambios de ajustes. Recargar compositor: cambios de
+  código (KWin guarda el QML en caché).»):
+  - **«Reconfigurar efecto»** → D-Bus
+    `org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect("kube-effect")`,
+    con el fallo visible en una etiqueta. Solo re-lee la config: **no**
+    recompila QML. **Asíncrono** (ADR-022): `QDBusConnection::asyncCall()` +
+    `QDBusPendingCallWatcher`; antes el `call` síncrono congelaba el hilo GUI
+    hasta 25 s si KWin no respondía (el aviso «en curso…» se muestra antes de
+    lanzar la llamada y la etiqueta recoge el resultado al terminar).
+  - **«Aplicar cambios de código»** → cierra la sesión, no reinicia KWin
+    (2026-11-25, medido: el restart mata la sesión Wayland y el escritorio
+    queda muerto). `KMessageDialog` de aviso con tres salidas: «Cerrar
+    sesión» → `org.kde.Shutdown /Shutdown org.kde.Shutdown.logout` (la misma
+    llamada del menú de Plasma: las apps reciben su cierre normal y SDDM
+    autologin devuelve la sesión); «Copiar comando» → deja `systemctl --user
+restart plasma-kwin_wayland.service` en el portapapeles para un TTY;
+    Cancelar no hace nada. No se usa `reconfigureEffect` (solo re-lee la
+    config) ni `kwin_wayland --replace` (X11; en Wayland empeora). **Una
+    guarda**: si `WAYLAND_DISPLAY` contiene `kube-effect-nested` o
+    `KUBE_NESTED=1` (el arnés exporta ese flag y usa ese socket; KCM abierto
+    dentro de `scripts/kwin-nested-test.sh`) se niega y responde «No
+    disponible en el compositor de pruebas: reinícialo cerrando y volviendo
+    a lanzar el script.».
+    f. El comando `bash native/build.sh` solo se muestra con
+    `-DKUBE_SHOW_BUILD_COMMAND=ON` (default OFF, ver ADR-015).
 - **Dos instalaciones del mismo KCM**, con comportamientos distintos:
   1. **De sistema** (`make native-install`, prefijo `/usr`): el `.so` queda
      en `/usr/lib/qt6/plugins/plasma/kcms/systemsettings/kcm_kube_effect_plus.so`,
@@ -603,9 +603,9 @@ native/
      `prefix.sh` **no se descubre**: `~/.local/lib/plugins` no está en los Qt
      plugin paths de la sesión, así que Preferencias no lo enseña y hay que
      abrirlo con `prefix.sh` + `kcmshell6`/`systemsettings`.
-  `KDE_INSTALL_USE_QT_SYS_PATHS` solo se fuerza cuando el prefijo es `/usr`; los
-  QTPLUGINDIR absolutos de Qt exigen root y ADR-012 lo prohíbe para la
-  instalación por defecto.
+     `KDE_INSTALL_USE_QT_SYS_PATHS` solo se fuerza cuando el prefijo es `/usr`; los
+     QTPLUGINDIR absolutos de Qt exigen root y ADR-012 lo prohíbe para la
+     instalación por defecto.
 - El KCM dice en qué caso está: la sección «Instalación nativa» muestra siempre
   la línea de instalación de sistema y, solo si `metaData().fileName()` **no**
   empieza por `/usr` (`KubeInstall::isSystemInstall`, /usr cubre /usr/local),
@@ -613,16 +613,16 @@ native/
   Preferencias. Debajo, la sección **«Comandos»** ofrece un bloque
   `QPlainTextEdit` read-only (fuente fija, sin `wordWrap`) con dos variantes
   según el campo `source` del stamp: desde el repo, `cd <repo>` + `make native`
-  + `make native-install` + `make native-status`; desde la copia del paquete,
-  `cd ~/.local/share/kwin/effects/kube-effect/contents/native` + `./build.sh` +
-  `./build.sh --system` + `./build.sh --clean`. El botón **«Copiar comandos»**
-  (`QApplication::clipboard()`) pega la secuencia sin escribir rutas. Si el
-  stamp es antiguo y no tiene `source`, se imprime la ruta de la copia instalada
-  con un aviso de que hay que ajustarla. La ruta del stamp se **entrecomilla**
-  para la shell (`shellQuote()` en `kube_effect_install.*`, ADR-022: `cd %1` a
-  pelo permitía inyectar comandos con una ruta con `'` del stamp) y solo se
-  acepta si es absoluta; el `commandsBlock()` es función pura testeada con
-  ctest.
+  - `make native-install` + `make native-status`; desde la copia del paquete,
+    `cd ~/.local/share/kwin/effects/kube-effect/contents/native` + `./build.sh` +
+    `./build.sh --system` + `./build.sh --clean`. El botón **«Copiar comandos»**
+    (`QApplication::clipboard()`) pega la secuencia sin escribir rutas. Si el
+    stamp es antiguo y no tiene `source`, se imprime la ruta de la copia instalada
+    con un aviso de que hay que ajustarla. La ruta del stamp se **entrecomilla**
+    para la shell (`shellQuote()` en `kube_effect_install.*`, ADR-022: `cd %1` a
+    pelo permitía inyectar comandos con una ruta con `'` del stamp) y solo se
+    acepta si es absoluta; el `commandsBlock()` es función pura testeada con
+    ctest.
 - `native-stamp.json` (`plasma`, `qt`, `pkg`, `built`, `prefix`, `source`) lo
   escribe `build.sh` con las versiones que CMake registró en
   `kube-native-info.json`, no con una consulta posterior: el stamp no puede

@@ -201,6 +201,7 @@ que exista una feature que QML no pueda hacer (ADR-011).
 ## ADR-018 — «Kube Effect Plus»: nombre, fuentes en el paquete y Advanced en lenguaje llano.
 
 **Decisión**:
+
 1. El módulo nativo pasa a llamarse **Kube Effect Plus**: id de plugin
    `kcm_kube_effect_plus`, nombre visible «Kube Effect Plus». El directorio
    sigue siendo `native/` y los targets `make native*` no cambian.
@@ -236,6 +237,7 @@ comprueba que la intensidad empieza deshabilitada, que sigue a su casilla, que
 ## ADR-019 — El vídeo es una imagen con otra fuente; dependencia opcional declarada.
 
 **Decisión**:
+
 1. `Background` gana `Video` como **cuarto** valor (índice 3, al final): los
    valores guardados 0/1/2 siguen significando Color/Image/Gradient. La clave nueva
    `BackgroundVideo` (Url) guarda el clip; se aceptan solo ficheros locales
@@ -261,13 +263,13 @@ comprueba que la intensidad empieza deshabilitada, que sigue a su casilla, que
    más allá del nombre del paquete (`qt6-multimedia`), y el KCM agrupa las tres
    claves compartidas fuera del stack («Imagen o vídeo: cómo se muestra») porque un
    `kcfg_` = un widget.
-**Porqué**: el usuario quiere el vídeo con la misma libertad que la imagen (360 o
-fijo, girable o no) sin duplicar opciones ni convertir una dependencia opcional en
-obligatoria. Declararla en el catálogo deja que `make deps` y el KCM de Plus
-digan si falta, y el fallback a color mantiene el cubo usable en cualquier sistema.
-**Verificación**: `scripts/check-video.py` instancia `HullVideo.qml` en un motor
-QML real (item y `VideoOutput` creados; módulo ausente y fuente rota → `Loader.Error`
-sin llevarse la escena).
+   **Porqué**: el usuario quiere el vídeo con la misma libertad que la imagen (360 o
+   fijo, girable o no) sin duplicar opciones ni convertir una dependencia opcional en
+   obligatoria. Declararla en el catálogo deja que `make deps` y el KCM de Plus
+   digan si falta, y el fallback a color mantiene el cubo usable en cualquier sistema.
+   **Verificación**: `scripts/check-video.py` instancia `HullVideo.qml` en un motor
+   QML real (item y `VideoOutput` creados; módulo ausente y fuente rota → `Loader.Error`
+   sin llevarse la escena).
 
 ## ADR-020 — El vídeo 360 se pinta en una cúpula, no en el SkyBox.
 
@@ -302,8 +304,6 @@ capa plana; la esfera hace el envoltorio. Medido con un clip 608×304.
 Equirect, girar) y exige un frame con muchos colores distintos; cargar sin error
 no basta, porque el fallo anterior cargaba bien y pintaba negro. Necesita
 pantalla real, así que en CI se salta.
-
-
 
 ## ADR-021 — Transparencia de caras antes del cilindro.
 
@@ -484,7 +484,7 @@ la realidad: KWin siempre tiene al menos un escritorio virtual.
      +80 a −80 al envolver. Sin límite (hoja-2, polígono) se conserva el
      `% 360` histórico.
    - **Flechas y estados close/distant**: `Constants.clampSheetAzimuth
-     (azimuth, limit)` normaliza a (-180,180] solo cuando el límite es real;
+(azimuth, limit)` normaliza a (-180,180] solo cuando el límite es real;
      con limit ≥ 360 (o basura) devuelve el ángulo **tal cual**, paridad
      exacta con el código pre-hoja (cuaterniones de signo opuesto harían
      slerpear el Behavior por el lado largo).
@@ -551,7 +551,7 @@ N arcos**, con estas reglas:
    y ADR-026). `constants.js` espeja la tabla y la resuelve con
    `shape(value)` (desconocido → Polygon, el patrón de `backgroundMode`).
 2. **Radio por hueco LINEAL sobre la superficie**: `g = max(0,
-   CubeFaceDisplacement)` y
+CubeFaceDisplacement)` y
 
    ```
    R = N·(W + g) / (2π)          θ_arco = W / R          hueco angular = 2π/N − θ
@@ -562,6 +562,7 @@ N arcos**, con estas reglas:
    cada hueco angular mide g/R radianes → g px. Con `g = 0` los arcos se tocan:
    cilindro cerrado **sin piel** (ADR-003 intacto — entre arcos se ve el casco
    SOLO si g > 0).
+
 3. **Negativo clampeado a 0**. En el polígono un displacement negativo encoje
    el radio (caras solapadas); en el cilindro es geométricamente imposible: el
    arco tiene que medir W o la textura se comprime (la isometría K=0 es el
@@ -573,7 +574,7 @@ N arcos**, con estas reglas:
    `constants.js` — posiciones `P(s,t) = (R·sin φ, t − H/2, R·cos φ)` con
    `φ = (s − W/2)/R` (arco centrado en +Z; **rectificado en ADR-026**:
    `R·cos φ − R`, el arco pasa a envolver el propio nodo), normales `x = sin φ, y = 0,
-   z = cos φ` (radiales salientes), UVs `u = s/W`, `v = t/H` con la misma
+z = cos φ` (radiales salientes), UVs `u = s/W`, `v = t/H` con la misma
    convención del `#Rectangle` nativo — medida sobre `Rectangle.mesh` de Qt
    6.12: la fila inferior lleva `v = 0` y la superior `v = 1`, lo que hace
    la dirección del eje Y — y triángulos con winding **CCW visto desde fuera**
@@ -633,132 +634,132 @@ N arcos**, con estas reglas:
    import ausente en el log.
    Con `Shape=Polygon` el `Loader` ni se crea: coste cero.
 10. **Hoja plana y polígono intactos**: ni la rama poligonal de `Cube`, ni
-   la hoja (ADR-024, que sigue siendo la representación con
-   `Shape = Polygon`), ni `CubeCameraController` cambian de comportamiento;
-   el cilindro es una rama nueva en la geometría de `Cube` y una geometría
-   opcional en `CubeFace`.
+    la hoja (ADR-024, que sigue siendo la representación con
+    `Shape = Polygon`), ni `CubeCameraController` cambian de comportamiento;
+    el cilindro es una rama nueva en la geometría de `Cube` y una geometría
+    opcional en `CubeFace`.
 11. **Tambor de tres slots con 1-2 escritorios** (rectificación FINAL del
-   usuario tras probar las dos intentonas de banda; sustituye por completo al
-   «segmento curvo» que este punto describía): 1 o 2 arcos no cierran un
-   cilindro, pero la forma curva NO cae a la hoja plana ni se encierra en una
-   banda con topes: el sólido es un **tambor de 3 slots** — la fórmula del
-   tambor corriendo con N = 3, con las caras en los slots que existen y los
-   slots sin escritorio **vacíos** (no se crea delegate: por ahí se ve el
-   casco, «cara vacía» sin panel, ADR-003):
+    usuario tras probar las dos intentonas de banda; sustituye por completo al
+    «segmento curvo» que este punto describía): 1 o 2 arcos no cierran un
+    cilindro, pero la forma curva NO cae a la hoja plana ni se encierra en una
+    banda con topes: el sólido es un **tambor de 3 slots** — la fórmula del
+    tambor corriendo con N = 3, con las caras en los slots que existen y los
+    slots sin escritorio **vacíos** (no se crea delegate: por ahí se ve el
+    casco, «cara vacía» sin panel, ADR-003):
 
-   ```
-   slots  = 3 (geometría fija, el count solo pone caras en 0..count-1)
-   R      = 3·(W + g) / (2π)   (cylinderRadius(3, W, g) — el hueco LINEAL g
-                               del usuario SÍ aplica, ya no hay radio fijo)
-   tick   = 360/3 = 120°       (slot 0 en 0°, slot 1 en 120°, slot 2 en 240°)
-   rango  = ABIERTO a todos los counts (giro libre, sin topes)
-   ```
+```
+slots  = 3 (geometría fija, el count solo pone caras en 0..count-1)
+R      = 3·(W + g) / (2π)   (cylinderRadius(3, W, g) — el hueco LINEAL g
+                            del usuario SÍ aplica, ya no hay radio fijo)
+tick   = 360/3 = 120°       (slot 0 en 0°, slot 1 en 120°, slot 2 en 240°)
+rango  = ABIERTO a todos los counts (giro libre, sin topes)
+```
 
-   **Por qué se retiró la banda**: las dos versiones de topes que se probaron
-   en el anidado — la primera simétrica (±80 con uno, ±120 con dos) y la
-   rectificada asimétrica ([-60, 60] con uno, [-60, 180] con dos) — eran lo
-   que «hacía saltos raros y se sentía poco fluido»: el clamp mordía el
-   arrastre en los bordes de banda y las flechas/normalizaciones producían
-   giros en espejo. Con giro libre el tambor de 3 slots es exactamente la
-   experiencia del tambor real: la cara de frente es la que hay, aparcar
-   frente a un slot vacío enseña el casco (vista válida), y el dorso espejado
-   se tolera por los huecos y cantos igual que en el tambor de 3+ (ADR-023;
-   el culling sigue retirado, pt.12). Con 1 escritorio el slot 0 está en
-   azimut 0 y el target de los estados es verbatim sobre rango abierto →
-   **la cara queda SIEMPRE de frente al activar** (guard verificado por
-   `check-cylinder-wiring.py` y por el escenario `single` de
-   el gate de píxeles de cilindro, retirado: sección P de `doc/trucos-aprendidos.md`).
+**Por qué se retiró la banda**: las dos versiones de topes que se probaron
+en el anidado — la primera simétrica (±80 con uno, ±120 con dos) y la
+rectificada asimétrica ([-60, 60] con uno, [-60, 180] con dos) — eran lo
+que «hacía saltos raros y se sentía poco fluido»: el clamp mordía el
+arrastre en los bordes de banda y las flechas/normalizaciones producían
+giros en espejo. Con giro libre el tambor de 3 slots es exactamente la
+experiencia del tambor real: la cara de frente es la que hay, aparcar
+frente a un slot vacío enseña el casco (vista válida), y el dorso espejado
+se tolera por los huecos y cantos igual que en el tambor de 3+ (ADR-023;
+el culling sigue retirado, pt.12). Con 1 escritorio el slot 0 está en
+azimut 0 y el target de los estados es verbatim sobre rango abierto →
+**la cara queda SIEMPRE de frente al activar** (guard verificado por
+`check-cylinder-wiring.py` y por el escenario `single` de
+el gate de píxeles de cilindro, retirado: sección P de `doc/trucos-aprendidos.md`).
 
-   Consecuencia en helpers: `cylinderArcRadius`, `cylinderSegmentAzimuth`,
-   `cylinderAzimuthRange` y `cylinderSegmentDesktopAt` **mueren** — el azimut
-   es la grid `angleTick·index` con `angleTick = 360/max(3, count)`, la
-   selección es el `desktopAt` estándar del tambor (slot vacío → delegate
-   ausente → `null` → `switchTo` no-op, guarda ya existente) y el rango lo da
-   `azimuthRangeFor` (ADR-026): Cylinder con malla → `[null, null]`. La
-   **hoja plana no cambia** (ADR-024 intacto: ±80 con uno, libre con dos,
-   `flatAzimuthRange` + `clampAzimuthRange` + arrastre crudo sin normalizar);
-   Cylinder **sin** malla (QtQuick3D.Helpers ausente) degrada a la hoja con
-   sus topes, como antes. El DebugOverlay marca el caso con `shape=cyl R=…
+Consecuencia en helpers: `cylinderArcRadius`, `cylinderSegmentAzimuth`,
+`cylinderAzimuthRange` y `cylinderSegmentDesktopAt` **mueren** — el azimut
+es la grid `angleTick·index` con `angleTick = 360/max(3, count)`, la
+selección es el `desktopAt` estándar del tambor (slot vacío → delegate
+ausente → `null` → `switchTo` no-op, guarda ya existente) y el rango lo da
+`azimuthRangeFor` (ADR-026): Cylinder con malla → `[null, null]`. La
+**hoja plana no cambia** (ADR-024 intacto: ±80 con uno, libre con dos,
+`flatAzimuthRange` + `clampAzimuthRange` + arrastre crudo sin normalizar);
+Cylinder **sin** malla (QtQuick3D.Helpers ausente) degrada a la hoja con
+sus topes, como antes. El DebugOverlay marca el caso con `shape=cyl R=…
    g_eff=… slots=1/3` (o `2/3`) y `lim=none`. Con `Shape = Polygon` 1-2
-   sigue siendo la hoja plana exacta de ADR-024.
-12. **Culling dinámico RETIRADO del runtime (rectificación del usuario)**:
-   la primera lectura del problema medido en el anidado (caras traseras con
-   `f1:-0.99/f2:-0.99` cuya **pared interior espejada** aparecía por encima
-   y entre los arcos, tapando las frontales) llevó a `BackFaceCulling` con
-   cámara fuera de 1.05·R. El usuario aclaró el requisito real: **ver la
-   pared interior por los huecos y cantos es paridad con el polígono y se
-   conserva (ADR-023)**; lo que no debe pasar es que esa pared se **dibuje
-   encima** de las frontales (overlap), sobre todo al girar. Culling ≠ fix:
-   suprimía las dos cosas. El runtime vuelve a `Material.NoCulling`
-   siempre — tambor (a todos los counts), polígono y hoja, idéntico entre sí (en
-   `Cube.faceCullMode` queda la property fija en NoCulling con un TODO que
-   apunta al fix real). `cylinderCullMode` (tokens 1/0, nunca ints del enum
-   — medido en Qt 6.12.1: Back=1, Front=2, None=3, un hardcode de 2 habría
-   dado FrontFaceCulling, el efecto opuesto) **NO se borra** de
-   `constants.js`: queda documentado como sin-uso en runtime y testeado,
-   como semilla del fix real. El fix real es de **orden de pintado**, no de
-   geometría: con `faceOpacity < 0.99` las caras entran en la pasada
-   transparente de QtQuick3D, que ordena por **centroide** del objeto — en
-   el tambor los centroides de los arcos se apilan distinto que en el
-   polígono (la malla curva separa el centro del quad del volumen que
-   ocupa), y ahí es donde una trasera puede pintarse encima de una frontal
-   viva. Con `op = 1.00` en cambio el overlap sería un bug de **profundidad**
-   (dos Models sobre la misma geometría compartida / winding), caso
-   distinto. Para separar los dos diagnósticos el overlay añade
-   `blend=0|1` (1 = las caras están en pasada transparente): la captura del
-   momento "encima" con `op` y `blend` juntos dice cual de los dos es. El
-   campo `cull=` desaparece (siempre sería none); `shape=cyl(fallback)` se
-   mantiene.
-   **Resuelto en ADR-026**: el fix no fue culling ni profundidad de malla,
-   sino orden de pintado — centroide de sort por cara (colocación tipo
-   polígono) más `alphaMode` explícito en el material (`Mask` en reposo /
-   `Blend` al girar).
-13. **Flechas: siguiente cara real, no múltiplo crudo de tick** (rectificado
-   tras el re-review; traza medida en el segmento de 2 caras, banda
-   [-60, 180], tick 120: LEFT desde 0 → -120 → clamp -60 — el borde de
-   banda donde solo se ve casco; LEFT otra vez → delta 0, NO-op permanente:
-   el escritorio 2 (120°) era inalcanzable a la izquierda; RIGHT desde 120 →
-   240 → normalizado -120 → clamp -60 — un giro de -180° hacia atrás. Con
-   los topes simétricos viejos (±80/±120) el caso no aparecía porque los
-   múltiplos de tick caían dentro del rango por simetría; la banda
-   asimétrica separa "múltiplo de tick" de "cara existente").
+sigue siendo la hoja plana exacta de ADR-024. 12. **Culling dinámico RETIRADO del runtime (rectificación del usuario)**:
+la primera lectura del problema medido en el anidado (caras traseras con
+`f1:-0.99/f2:-0.99` cuya **pared interior espejada** aparecía por encima
+y entre los arcos, tapando las frontales) llevó a `BackFaceCulling` con
+cámara fuera de 1.05·R. El usuario aclaró el requisito real: **ver la
+pared interior por los huecos y cantos es paridad con el polígono y se
+conserva (ADR-023)**; lo que no debe pasar es que esa pared se **dibuje
+encima** de las frontales (overlap), sobre todo al girar. Culling ≠ fix:
+suprimía las dos cosas. El runtime vuelve a `Material.NoCulling`
+siempre — tambor (a todos los counts), polígono y hoja, idéntico entre sí (en
+`Cube.faceCullMode` queda la property fija en NoCulling con un TODO que
+apunta al fix real). `cylinderCullMode` (tokens 1/0, nunca ints del enum
+— medido en Qt 6.12.1: Back=1, Front=2, None=3, un hardcode de 2 habría
+dado FrontFaceCulling, el efecto opuesto) **NO se borra** de
+`constants.js`: queda documentado como sin-uso en runtime y testeado,
+como semilla del fix real. El fix real es de **orden de pintado**, no de
+geometría: con `faceOpacity < 0.99` las caras entran en la pasada
+transparente de QtQuick3D, que ordena por **centroide** del objeto — en
+el tambor los centroides de los arcos se apilan distinto que en el
+polígono (la malla curva separa el centro del quad del volumen que
+ocupa), y ahí es donde una trasera puede pintarse encima de una frontal
+viva. Con `op = 1.00` en cambio el overlap sería un bug de **profundidad**
+(dos Models sobre la misma geometría compartida / winding), caso
+distinto. Para separar los dos diagnósticos el overlay añade
+`blend=0|1` (1 = las caras están en pasada transparente): la captura del
+momento "encima" con `op` y `blend` juntos dice cual de los dos es. El
+campo `cull=` desaparece (siempre sería none); `shape=cyl(fallback)` se
+mantiene.
+**Resuelto en ADR-026**: el fix no fue culling ni profundidad de malla,
+sino orden de pintado — centroide de sort por cara (colocación tipo
+polígono) más `alphaMode` explícito en el material (`Mask` en reposo /
+`Blend` al girar). 13. **Flechas: siguiente cara real, no múltiplo crudo de tick** (rectificado
+tras el re-review; traza medida en el segmento de 2 caras, banda
+[-60, 180], tick 120: LEFT desde 0 → -120 → clamp -60 — el borde de
+banda donde solo se ve casco; LEFT otra vez → delta 0, NO-op permanente:
+el escritorio 2 (120°) era inalcanzable a la izquierda; RIGHT desde 120 →
+240 → normalizado -120 → clamp -60 — un giro de -180° hacia atrás. Con
+los topes simétricos viejos (±80/±120) el caso no aparecía porque los
+múltiplos de tick caían dentro del rango por simetría; la banda
+asimétrica separa "múltiplo de tick" de "cara existente").
 
-   Helper puro `arrowAzimuth(current, direction, tick, min, max,
+Helper puro `arrowAzimuth(current, direction, tick, min, max,
    faceAzimuths)` en `constants.js`:
-   - rango abierto → la cuenta actual idéntica (floor/ceil + umbral
-     0.05·tick + avanzar, verbatim: paridad polígono, tambor y hoja-2, con
-     359→450 y -1→-90 incluidos);
-   - rango con lista de caras → la SIGUIENTE CARA real en la dirección
-     pedida (azimut normalizado a (-180,180]; si el current pisa una cara
-     dentro del umbral se salta esa cara; sin cara en la dirección,
-     envolver dentro de la banda: la más alta para LEFT, la más baja para
-     RIGHT). Traza: RIGHT 0→120, LEFT 0→120 (envuelve), RIGHT 120→0 (sin
-     -180 hacia atrás), LEFT 120→0;
-   - una sola cara (hoja-1 [-80,80] y segmento-1 [-60,60]) → envolver
-     devuelve la misma cara → delta 0, sin salto: la hoja-1 queda quieta
-     en flechas (hoy el clamp ya normaliza ±360→0 y termina igual; paridad
-     exacta, fijada en el test);
-   - basura: current NaN → 0; tick inválido con rango abierto → current;
-     lista vacía/no-array → la cuenta abierta; lista vacía con rango real
-     → current (no-op seguro).
 
-   **Nota ADR-026 (tambor de 3 slots)**: la banda asimétrica [-60, 180] que
-   motivó este punto se retiró (giro libre en cilindro); la rama limitada del
-   helper sigue viva para la hoja-1 ([-80, 80], una sola cara → la flecha no
-   mueve nada) y la rama abierta es ahora también el camino del tambor de
-   1-2 slots (tick 120 verbatim, aparcar en slot vacío es válido).
+- rango abierto → la cuenta actual idéntica (floor/ceil + umbral
+  0.05·tick + avanzar, verbatim: paridad polígono, tambor y hoja-2, con
+  359→450 y -1→-90 incluidos);
+- rango con lista de caras → la SIGUIENTE CARA real en la dirección
+  pedida (azimut normalizado a (-180,180]; si el current pisa una cara
+  dentro del umbral se salta esa cara; sin cara en la dirección,
+  envolver dentro de la banda: la más alta para LEFT, la más baja para
+  RIGHT). Traza: RIGHT 0→120, LEFT 0→120 (envuelve), RIGHT 120→0 (sin
+  -180 hacia atrás), LEFT 120→0;
+- una sola cara (hoja-1 [-80,80] y segmento-1 [-60,60]) → envolver
+  devuelve la misma cara → delta 0, sin salto: la hoja-1 queda quieta
+  en flechas (hoy el clamp ya normaliza ±360→0 y termina igual; paridad
+  exacta, fijada en el test);
+- basura: current NaN → 0; tick inválido con rango abierto → current;
+  lista vacía/no-array → la cuenta abierta; lista vacía con rango real
+  → current (no-op seguro).
+
+**Nota ADR-026 (tambor de 3 slots)**: la banda asimétrica [-60, 180] que
+motivó este punto se retiró (giro libre en cilindro); la rama limitada del
+helper sigue viva para la hoja-1 ([-80, 80], una sola cara → la flecha no
+mueve nada) y la rama abierta es ahora también el camino del tambor de
+1-2 slots (tick 120 verbatim, aparcar en slot vacío es válido).
 
       `Cube.faceAzimuth(index)` es la ÚNICA fuente de los azimuts de cara (el
-   propio delegate la usa para colocarse: tambor —a cualquier count, con el
-   suelo de 3 slots— y polígono → tick·index; hoja plana → index·180; el
-   helper `cylinderSegmentAzimuth` del segmento murió con la banda). En el
-   tambor una flecha SÍ puede apuntar a un azimut sin cara — el slot vacío
-   del tambor de 1-2, decisión del addendum: aparcar ahí enseña el casco y
-   seleccionar es no-op; en los rangos limitados (hoja) sigue imposible.
-   `targetAzimuth()` (estados close/distant) consume `desktopAzimuth`
-   (cara real) + `clampAzimuthRange` — revisado, no tick crudo. El
-   arrastre no cambia: su clamp raw entre [min,max] define bordes de
-   banda, no caras, y sigue siendo correcto.
+
+propio delegate la usa para colocarse: tambor —a cualquier count, con el
+suelo de 3 slots— y polígono → tick·index; hoja plana → index·180; el
+helper `cylinderSegmentAzimuth` del segmento murió con la banda). En el
+tambor una flecha SÍ puede apuntar a un azimut sin cara — el slot vacío
+del tambor de 1-2, decisión del addendum: aparcar ahí enseña el casco y
+seleccionar es no-op; en los rangos limitados (hoja) sigue imposible.
+`targetAzimuth()` (estados close/distant) consume `desktopAzimuth`
+(cara real) + `clampAzimuthRange` — revisado, no tick crudo. El
+arrastre no cambia: su clamp raw entre [min,max] define bordes de
+banda, no caras, y sigue siendo correcto.
 
 **Porqué**: ADR-001/002/003 ya fijaron el contrato (dos formas, cilindro
 desarrollable sin shader, sin piel); esta ADR aterriza las decisiones que
@@ -895,7 +896,7 @@ quedaron fijados por `scripts/check-cylinder-overlap.py` (retirado por coste; se
    del item capturado tiene canal alfa (`prepareImage`, caso `Type::Diffuse`; el
    grab de un `DesktopView` lo tiene siempre) — aunque el `opacity` enlazado valga
    1. Con `PrincipledMaterial` la pasada deja de ser un efecto colateral del
-   contenido y pasa a ser lo que el umbral dice:
+      contenido y pasa a ser lo que el umbral dice:
    - **reposo (Mask)**: los fragmentos con alpha ≥ `alphaCutoff` (0.5) se pintan
      opacos y **escriben profundidad** → una arco lejano no puede quedar
      encima del cuerpo de uno cercano ni aunque el orden falle; los fragmentos
@@ -911,7 +912,7 @@ quedaron fijados por `scripts/check-cylinder-overlap.py` (retirado por coste; se
    distintos, ADR-022) y su look virgen manda (ADR-023) — un `Mask` allí
    recortaría sombras y AA de las ventanas y endurecería las semitransparentes
    (alfa < 0.5, paneles con blur) sin beneficio demostrado. `alphaCutoff:
-   0.5` queda **explícito** (no depende del default de Qt: un cambio de
+0.5` queda **explícito** (no depende del default de Qt: un cambio de
    motor no puede mover el borde duro/suave de los huecos). El check nuevo
    lo fija: el escenario `poly` afirma `Blend` en reposo con malla nula, y
    el assert de `alphaMode` del tambor se condiciona a la malla.
@@ -1015,21 +1016,18 @@ escritorios que ningún check del gate detectó:
    ciclo); cuando la malla entra en juego dentro de ese pase, Qt corta el
    ciclo y deja
    `viewRadius` **congelado en `sheetGap` ≈ max(1, 0.005·R) ≈ 4`** mientras
-   `faceDistance` se recupera solo a R (de ahí `d=776 v=4` simultáneos). El
-   log del motor lo confesaba: `QML Cube: Binding loop detected for property
-   "viewRadius"` — reproducido fuera de KWin instanciando el `ScreenView.qml`
-   real offscreen (polígono-hoja con 2 escritorios y switch a Cylinder:
-   mismo `d=776 v=4 r=786`). Con 3+ escritorios `isSheet` nunca es true, el
-   ciclo no se cierra, y por eso el tambor de 3 funcionaba. Fix: la rama de
-   cilindro sale ANTES de tocar la cadena de hoja —
-   `viewRadius: cylinderActive ? cylinderRadius : isSheet ? 0.5 * faceSize.width : faceDistance`
-   — así con `cylinderActive` el valor es `R` estructuralmente (`viewRadius ===
-   faceDistance === cylinderRadius` para cualquier count) y el grafo queda
-   acíclico en las tres ramas (hoja: `viewRadius` no lee `faceDistance`;
-   polígono: `faceDistance` no lee `sheetGap`; cilindro: ninguna lee la cadena
-   de la otra). Consecuencia fijada por test: close/distant y los topes de
-   rueda miden contra R — con 1 escritorio `r=32`/`r=28` son imposibles
-   (`minRadius = 0.6·R`).
+`faceDistance`se recupera solo a R (de ahí`d=776 v=4`simultáneos). El
+log del motor lo confesaba:`QML Cube: Binding loop detected for property
+   "viewRadius"`— reproducido fuera de KWin instanciando el`ScreenView.qml`real offscreen (polígono-hoja con 2 escritorios y switch a Cylinder:
+mismo`d=776 v=4 r=786`). Con 3+ escritorios `isSheet`nunca es true, el
+ciclo no se cierra, y por eso el tambor de 3 funcionaba. Fix: la rama de
+cilindro sale ANTES de tocar la cadena de hoja —`viewRadius: cylinderActive ? cylinderRadius : isSheet ? 0.5 * faceSize.width : faceDistance`— así con`cylinderActive`el valor es`R` estructuralmente (`viewRadius ===
+   faceDistance === cylinderRadius`para cualquier count) y el grafo queda
+acíclico en las tres ramas (hoja:`viewRadius`no lee`faceDistance`;
+polígono: `faceDistance`no lee`sheetGap`; cilindro: ninguna lee la cadena
+de la otra). Consecuencia fijada por test: close/distant y los topes de
+rueda miden contra R — con 1 escritorio `r=32`/`r=28` son imposibles
+(`minRadius = 0.6·R`).
 2. **Flechas que aparcan en el slot vacío.** Con 2 escritorios la grid de 3
    slots tiene un hueco (240°): la aritmética ±tick verbatim del rango abierto
    paseaba la cámara `0 → 120 → 240`, y en 240 no hay delegate — Enter/click
@@ -1073,16 +1071,16 @@ la **inferior**, una en cada extremo del eje Y (`y = ± faceHeight/2`) —,
 habilitables por separado (`CapTop` / `CapBottom`, Bool, default false). Cada
 tapa pinta un contenido propio con su propia transparencia:
 
-| Clave             | Tipo  | Rango                                          | Default   |
-| ----------------- | ----- | ---------------------------------------------- | --------- |
-| `CapContent`      | Enum  | Color 0 / Gradient 1 / Image 2                 | 0         |
-| `CapColor`        | Color | —                                              | `#1b3fd8` |
-| `CapColor2`       | Color | —                                              | `#0a1a5e` |
-| `CapGradientType` | Enum  | LinearVertical 0 / LinearHorizontal 1 / Radial 2 | 0        |
-| `CapGradientStop` | Int   | 0–100                                          | 50        |
-| `CapImage`        | Url   | —                                              | vacío     |
-| `CapImageFit`     | Enum  | Cover 0 / Contain 1 / Stretch 2                | 0         |
-| `CapOpacity`      | Int   | 0–100                                          | 80        |
+| Clave             | Tipo  | Rango                                            | Default   |
+| ----------------- | ----- | ------------------------------------------------ | --------- |
+| `CapContent`      | Enum  | Color 0 / Gradient 1 / Image 2                   | 0         |
+| `CapColor`        | Color | —                                                | `#1b3fd8` |
+| `CapColor2`       | Color | —                                                | `#0a1a5e` |
+| `CapGradientType` | Enum  | LinearVertical 0 / LinearHorizontal 1 / Radial 2 | 0         |
+| `CapGradientStop` | Int   | 0–100                                            | 50        |
+| `CapImage`        | Url   | —                                                | vacío     |
+| `CapImageFit`     | Enum  | Cover 0 / Contain 1 / Stretch 2                  | 0         |
+| `CapOpacity`      | Int   | 0–100                                            | 80        |
 
 La geometría es la del sólido que cierra, sin inventar otra fuente:
 
@@ -1141,13 +1139,13 @@ Eso coincide con la esquina de cara solo mientras las caras se tocan
 la tapa sacaba puntas tangenciales fuera de la esquina (medido con W = 2560, la
 protrusión `rc·sin(π/N) − W/2`):
 
-| N | d | rc | lateral del vértice | sobresale |
-| - | - | -- | ------------------- | --------- |
-| 3 | 0 | 1478.0 | 1280.0 | 0.0 px |
-| 3 | 100 | 1678.0 | 1453.2 | **+173.2 px (6.8 % de W)** |
-| 3 | 300 | 2078.0 | 1799.6 | **+519.6 px (20.3 % de W)** |
-| 4 | 100 | 1951.6 | 1380.0 | **+100.0 px** |
-| 5 | 100 | 2301.3 | 1352.7 | **+72.7 px** |
+| N   | d   | rc     | lateral del vértice | sobresale                   |
+| --- | --- | ------ | ------------------- | --------------------------- |
+| 3   | 0   | 1478.0 | 1280.0              | 0.0 px                      |
+| 3   | 100 | 1678.0 | 1453.2              | **+173.2 px (6.8 % de W)**  |
+| 3   | 300 | 2078.0 | 1799.6              | **+519.6 px (20.3 % de W)** |
+| 4   | 100 | 1951.6 | 1380.0              | **+100.0 px**               |
+| 5   | 100 | 2301.3 | 1352.7              | **+72.7 px**                |
 
 El gate de la época (check-cap: punto medio del lado contra plano + rejilla de
 azimut + rejilla de la hoja) no podía verlo: los vértices bugeados caen EXACTAMENTE
@@ -1216,14 +1214,13 @@ pre-fix bajo d > 0, esquina deslizada más allá de W/2 manteniendo plano/normal
 coherentes, y vértice fuera del plano) + 4 sondas de aislamiento que mantienen cada
 rama de `_edge_problems` y ambas aserciones nuevas independientemente matables.
 
-
 ### Enmienda 2 (2026-11-27) — el eje de giro de la tapa inferior era WRONG; el material sigue la regla ADR-026; Arrow (3) es el contenido por defecto
 
 **Qué reportó el usuario** (anidado 1600×900, overlay
 `shape=poly n=3 tick=120.0 d=472 v=472 pitch=30.0 yaw=154.3`, ambas tapas,
 contenido Color azul, opacidad 80): la tapa «se dibuja por encima de las caras y
-ventanas, cruzando el sólido», «no tapa el hueco», y la pista decisiva: *«el
-error pareciera que está 180° volteado»*.
+ventanas, cruzando el sólido», «no tapa el hueco», y la pista decisiva: _«el
+error pareciera que está 180° volteado»_.
 
 **La premisa del descarte inicial era falsa (refutada con píxeles).** Se había
 argumentado que `eulerRotation.x: 180` «manda α → −α» y que el conjunto de

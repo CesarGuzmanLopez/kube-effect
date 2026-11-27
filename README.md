@@ -57,7 +57,7 @@ sesión real. Ver `AGENTS.md`.
 > El KCM compilado es **Preferencias → Gestión de ventanas → «Kube Effect Plus»**.
 > Solo aparece ahí si está instalado en el sistema (`make native-install`). Con el prefijo
 > privado (`make native`) hay que abrir Preferencias con `prefix.sh`, porque System Settings
-> busca los módulos en los *Qt plugin paths*: `~/.local/lib/plugins` no se escanea solo.
+> busca los módulos en los _Qt plugin paths_: `~/.local/lib/plugins` no se escanea solo.
 > (nativo opcional)
 
 Sin compilar nada, el efecto es completo en QML (menú de configuración incluido:

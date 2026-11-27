@@ -1,53 +1,50 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
-                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
-    <kcfgfile name=""/>
-    <group name="">
-        <entry name="CubeFaceDisplacement" type="Double">
-            <default>100</default>
-            <min>-500</min>
-            <max>500</max>
-        </entry>
-        <entry name="DistanceFactor" type="Double">
-            <default>1.75</default>
-        </entry>
-        <entry name="BorderActivate" type="String">
-            <default></default>
-        </entry>
-        <entry name="TouchBorderActivate" type="String">
-            <default></default>
-        </entry>
-        <entry name="MouseInvertedX" type="Bool">
-            <default>false</default>
-        </entry>
-        <entry name="MouseInvertedY" type="Bool">
-            <default>false</default>
-        </entry>
-        <entry name="SkyBox" type="Url" />
-        <entry name="BackgroundVideo" type="Url">
-            <!-- Background == Video only: a local clip (file:). It is painted
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0                           http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="">
+    <entry name="CubeFaceDisplacement" type="Double">
+      <default>100</default>
+      <min>-500</min>
+      <max>500</max>
+    </entry>
+    <entry name="DistanceFactor" type="Double">
+      <default>1.75</default>
+    </entry>
+    <entry name="BorderActivate" type="String">
+      <default/>
+    </entry>
+    <entry name="TouchBorderActivate" type="String">
+      <default/>
+    </entry>
+    <entry name="MouseInvertedX" type="Bool">
+      <default>false</default>
+    </entry>
+    <entry name="MouseInvertedY" type="Bool">
+      <default>false</default>
+    </entry>
+    <entry name="SkyBox" type="Url"/>
+    <entry name="BackgroundVideo" type="Url">
+      <!-- Background == Video only: a local clip (file:). It is painted
                  exactly like an image, so it reuses BackgroundImageLayout,
                  BackgroundImageFit and BackgroundImageRotate below. Requires
                  the optional QtMultimedia module (package qt6-multimedia);
                  without it the colour fallback is painted instead. -->
-            <default></default>
-        </entry>
-        <entry name="Background" type="Enum">
-            <default>Color</default>
-            <choices>
-                <!-- Index 1 keeps its kwinrc value: it used to be named SkyBox.
+      <default/>
+    </entry>
+    <entry name="Background" type="Enum">
+      <default>Color</default>
+      <choices>
+        <!-- Index 1 keeps its kwinrc value: it used to be named SkyBox.
                      Video is APPENDED as index 3 so the stored 0/1/2 keep
                      meaning Color/Image/Gradient. -->
-                <choice name="Color" />
-                <choice name="Image" />
-                <choice name="Gradient" />
-                <choice name="Video" />
-            </choices>
-        </entry>
-        <entry name="BackgroundImageLayout" type="Enum">
-            <!-- How the picture wraps the scene (ADR-013). Auto was removed
+        <choice name="Color"/>
+        <choice name="Image"/>
+        <choice name="Gradient"/>
+        <choice name="Video"/>
+      </choices>
+    </entry>
+    <entry name="BackgroundImageLayout" type="Enum">
+      <!-- How the picture wraps the scene (ADR-013). Auto was removed
                  because QML cannot probe the image ratio without decoding it.
                  The KEY is new on purpose: kwinrc stores the index, so an old
                  BackgroundImageMapping=1 (Equirect under the former
@@ -56,95 +53,95 @@
                  untouched in kwinrc; constants.js treats any unknown value as
                  Equirect. Shared by the image and the video (Video wraps the
                  scene the same way: 360 panorama or flat clip). -->
-            <default>Equirect</default>
-            <choices>
-                <choice name="Equirect" />
-                <choice name="Flat" />
-            </choices>
-        </entry>
-        <entry name="BackgroundImageFit" type="Enum">
-            <!-- Only used by the Flat mapping: how the picture or clip fills the
+      <default>Equirect</default>
+      <choices>
+        <choice name="Equirect"/>
+        <choice name="Flat"/>
+      </choices>
+    </entry>
+    <entry name="BackgroundImageFit" type="Enum">
+      <!-- Only used by the Flat mapping: how the picture or clip fills the
                  screen (the video uses it too). -->
-            <default>Cover</default>
-            <choices>
-                <choice name="Cover" />
-                <choice name="Contain" />
-                <choice name="Stretch" />
-            </choices>
-        </entry>
-        <entry name="BackgroundImageRotate" type="Bool">
-            <!-- Equirect only: true wraps the scene (SkyBox) and turns with the
+      <default>Cover</default>
+      <choices>
+        <choice name="Cover"/>
+        <choice name="Contain"/>
+        <choice name="Stretch"/>
+      </choices>
+    </entry>
+    <entry name="BackgroundImageRotate" type="Bool">
+      <!-- Equirect only: true wraps the scene (SkyBox) and turns with the
                  centre, false paints it flat. Shared by the image and the video. -->
-            <default>true</default>
-        </entry>
-        <entry name="BackgroundColor" type="Color">
-            <default>#1b3fd8</default>
-        </entry>
-        <entry name="BackgroundColor2" type="Color">
-            <default>#ff8a00</default>
-        </entry>
-        <entry name="BackgroundGradientType" type="Enum">
-            <default>LinearVertical</default>
-            <choices>
-                <choice name="LinearVertical" />
-                <choice name="LinearHorizontal" />
-                <choice name="Radial" />
-            </choices>
-        </entry>
-        <entry name="BackgroundGradientStop" type="Int">
-            <default>50</default>
-            <min>0</min>
-            <max>100</max>
-        </entry>
-        <entry name="BackgroundGradientRotation" type="Enum">
-            <!-- Only the Gradient hull uses this (ADR-017): whether the
+      <default>true</default>
+    </entry>
+    <entry name="BackgroundColor" type="Color">
+      <default>#1b3fd8</default>
+    </entry>
+    <entry name="BackgroundColor2" type="Color">
+      <default>#ff8a00</default>
+    </entry>
+    <entry name="BackgroundGradientType" type="Enum">
+      <default>LinearVertical</default>
+      <choices>
+        <choice name="LinearVertical"/>
+        <choice name="LinearHorizontal"/>
+        <choice name="Radial"/>
+      </choices>
+    </entry>
+    <entry name="BackgroundGradientStop" type="Int">
+      <default>50</default>
+      <min>0</min>
+      <max>100</max>
+    </entry>
+    <entry name="BackgroundGradientRotation" type="Enum">
+      <!-- Only the Gradient hull uses this (ADR-017): whether the
                  gradient turns with the cube (Fixed keeps it still). The
                  radial variant cannot turn around its centre, so it moves the
                  focal point instead (see HullGradient.qml). -->
-            <default>Fixed</default>
-            <choices>
-                <choice name="Fixed" />
-                <choice name="FollowCube" />
-                <choice name="FollowCubeInverse" />
-            </choices>
-        </entry>
-        <!-- Face transparency (ADR-021): material opacity of every face, so
+      <default>Fixed</default>
+      <choices>
+        <choice name="Fixed"/>
+        <choice name="FollowCube"/>
+        <choice name="FollowCubeInverse"/>
+      </choices>
+    </entry>
+    <!-- Face transparency (ADR-021): material opacity of every face, so
              the future cylinder mesh inherits it unchanged. 0.1 floor: an
              invisible face cannot be picked or clicked. -->
-        <entry name="FaceOpacity" type="Double">
-            <default>1</default>
-            <min>0.1</min>
-            <max>1</max>
-        </entry>
-        <entry name="FaceRotationOpacity" type="Double">
-            <default>0.7</default>
-            <min>0.1</min>
-            <max>1</max>
-        </entry>
-        <entry name="FaceFadeMs" type="Int">
-            <default>120</default>
-            <min>0</min>
-            <max>1000</max>
-        </entry>
-        <!-- Advanced tab only (ADR-014): these keys do not appear anywhere else. -->
-        <entry name="DimWhileRotating" type="Bool">
-            <default>false</default>
-        </entry>
-        <entry name="DimWhileRotatingAmount" type="Int">
-            <default>40</default>
-            <min>0</min>
-            <max>100</max>
-        </entry>
-        <entry name="CursorScreenOnly" type="Bool">
-            <default>false</default>
-        </entry>
-        <!-- DebugOverlay (ADR-023): on-screen diagnostic text. console.log and
+    <entry name="FaceOpacity" type="Double">
+      <default>1</default>
+      <min>0.1</min>
+      <max>1</max>
+    </entry>
+    <entry name="FaceRotationOpacity" type="Double">
+      <default>0.7</default>
+      <min>0.1</min>
+      <max>1</max>
+    </entry>
+    <entry name="FaceFadeMs" type="Int">
+      <default>120</default>
+      <min>0</min>
+      <max>1000</max>
+    </entry>
+    <!-- Advanced tab only (ADR-014): these keys do not appear anywhere else. -->
+    <entry name="DimWhileRotating" type="Bool">
+      <default>false</default>
+    </entry>
+    <entry name="DimWhileRotatingAmount" type="Int">
+      <default>40</default>
+      <min>0</min>
+      <max>100</max>
+    </entry>
+    <entry name="CursorScreenOnly" type="Bool">
+      <default>false</default>
+    </entry>
+    <!-- DebugOverlay (ADR-023): on-screen diagnostic text. console.log and
              supportInformation never reach a visible place in this KWin
              (doc/trucos-aprendidos.md section D), so the state is painted. -->
-        <entry name="DebugOverlay" type="Bool">
-            <default>false</default>
-        </entry>
-        <!-- Shape (ADR-025/ADR-026): Polygon = flat faces on an N-gon;
+    <entry name="DebugOverlay" type="Bool">
+      <default>false</default>
+    </entry>
+    <!-- Shape (ADR-025/ADR-026): Polygon = flat faces on an N-gon;
              Cylinder = the same faces as arcs on a cylinder (drum
              R = N(W+g)/2pi, theta = W/R, 64 segments). With 1-2 desktops
              Polygon keeps the flat sheet (ADR-024); Cylinder shows the
@@ -156,14 +153,14 @@
              integer index in kwinrc. Appended last: the convention for
              new entries, so the stored indexes of existing keys never
              move. -->
-        <entry name="Shape" type="Enum">
-            <default>Polygon</default>
-            <choices>
-                <choice name="Polygon" />
-                <choice name="Cylinder" />
-            </choices>
-        </entry>
-        <!-- Caps (ADR-027): the top and bottom closing surfaces of the solid,
+    <entry name="Shape" type="Enum">
+      <default>Polygon</default>
+      <choices>
+        <choice name="Polygon"/>
+        <choice name="Cylinder"/>
+      </choices>
+    </entry>
+    <!-- Caps (ADR-027): the top and bottom closing surfaces of the solid,
              enabled separately. Enums are stored as INTEGER indexes in kwinrc
              (a string value breaks the KCM environment); CapOpacity is an Int
              0-100 like DimWhileRotatingAmount, constants.js capOpacity()
@@ -175,13 +172,13 @@
              there is no parallel radius key here. Appended last: the
              convention for new entries, so the stored indexes of existing
              keys never move. -->
-        <entry name="CapTop" type="Bool">
-            <default>false</default>
-        </entry>
-        <entry name="CapBottom" type="Bool">
-            <default>false</default>
-        </entry>
-        <!-- Arrow (3) is the DEFAULT because a uniform colour cannot show
+    <entry name="CapTop" type="Bool">
+      <default>false</default>
+    </entry>
+    <entry name="CapBottom" type="Bool">
+      <default>false</default>
+    </entry>
+    <!-- Arrow (3) is the DEFAULT because a uniform colour cannot show
              orientation: with a flat cap the user cannot tell "the cap is
              turned" from "the cap paints over the faces" (ADR-027
              amendment 2). The asymmetric marker (arrow + magenta corner
@@ -191,52 +188,52 @@
              choices: KConfigXT stores the integer index, so existing keys
              never move (the project's enum rule). Unknown kwinrc values
              still fall back to Color through constants.js capContent(). -->
-        <entry name="CapContent" type="Enum">
-            <default>Arrow</default>
-            <choices>
-                <choice name="Color" />
-                <choice name="Gradient" />
-                <choice name="Image" />
-                <choice name="Arrow" />
-            </choices>
-        </entry>
-        <entry name="CapColor" type="Color">
-            <!-- Also the fallback when the cap image is missing or broken. -->
-            <default>#1b3fd8</default>
-        </entry>
-        <entry name="CapColor2" type="Color">
-            <default>#0a1a5e</default>
-        </entry>
-        <entry name="CapGradientType" type="Enum">
-            <default>LinearVertical</default>
-            <choices>
-                <choice name="LinearVertical" />
-                <choice name="LinearHorizontal" />
-                <choice name="Radial" />
-            </choices>
-        </entry>
-        <entry name="CapGradientStop" type="Int">
-            <default>50</default>
-            <min>0</min>
-            <max>100</max>
-        </entry>
-        <entry name="CapImage" type="Url">
-            <!-- Local file only (file: or a bare path); remote URLs are
+    <entry name="CapContent" type="Enum">
+      <default>Arrow</default>
+      <choices>
+        <choice name="Color"/>
+        <choice name="Gradient"/>
+        <choice name="Image"/>
+        <choice name="Arrow"/>
+      </choices>
+    </entry>
+    <entry name="CapColor" type="Color">
+      <!-- Also the fallback when the cap image is missing or broken. -->
+      <default>#1b3fd8</default>
+    </entry>
+    <entry name="CapColor2" type="Color">
+      <default>#0a1a5e</default>
+    </entry>
+    <entry name="CapGradientType" type="Enum">
+      <default>LinearVertical</default>
+      <choices>
+        <choice name="LinearVertical"/>
+        <choice name="LinearHorizontal"/>
+        <choice name="Radial"/>
+      </choices>
+    </entry>
+    <entry name="CapGradientStop" type="Int">
+      <default>50</default>
+      <min>0</min>
+      <max>100</max>
+    </entry>
+    <entry name="CapImage" type="Url">
+      <!-- Local file only (file: or a bare path); remote URLs are
                  dropped by constants.js capImageSource(). -->
-            <default></default>
-        </entry>
-        <entry name="CapImageFit" type="Enum">
-            <default>Cover</default>
-            <choices>
-                <choice name="Cover" />
-                <choice name="Contain" />
-                <choice name="Stretch" />
-            </choices>
-        </entry>
-        <entry name="CapOpacity" type="Int">
-            <default>80</default>
-            <min>0</min>
-            <max>100</max>
-        </entry>
-    </group>
+      <default/>
+    </entry>
+    <entry name="CapImageFit" type="Enum">
+      <default>Cover</default>
+      <choices>
+        <choice name="Cover"/>
+        <choice name="Contain"/>
+        <choice name="Stretch"/>
+      </choices>
+    </entry>
+    <entry name="CapOpacity" type="Int">
+      <default>80</default>
+      <min>0</min>
+      <max>100</max>
+    </entry>
+  </group>
 </kcfg>

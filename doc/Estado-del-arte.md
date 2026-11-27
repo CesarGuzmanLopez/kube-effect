@@ -8,13 +8,13 @@ aprendió y qué se puede trasladar a un efecto KWin en QML puro.
 
 ## 1. Ubicaciones en esta máquina
 
-| Referencia | Ruta | Notas |
-|---|---|---|
-| Cubo oficial KDE (vivo) | `../kdeplasma-addons/kwin/effects/cube/` | Fuente de `DesktopView.qml`, `Cube.qml`, `ScreenView.qml`. Versión 6.8.1 copiada en `_referencias/cube-upstream-6.8.1/` |
-| Cubo oficial KDE (copia) | `_referencias/cube-upstream-6.8.1/` | Base del reset a "cubo virgen" |
-| Cubo C++ de zzag | `../kwin-effects-cube/` | Referencia C++ (zzag), no QML; útil para leer la geometría |
-| Compiz (fuente) | `../_referencias/compiz-experimental/` | Árbol de fuentes de Compiz. Plugins: `plugins/cube/`, `plugins/cubeaddon/`, `plugins/rotate/`, `plugins/deformation/`, `plugins/reflection/` |
-| Wayfire (fuente) | **NO clonado** | Clonar desde `https://github.com/WayfireWM/wayfire`, ruta `plugins/cube/` (`cube.cpp`, `cubemap.cpp`) |
+| Referencia               | Ruta                                     | Notas                                                                                                                                        |
+| ------------------------ | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cubo oficial KDE (vivo)  | `../kdeplasma-addons/kwin/effects/cube/` | Fuente de `DesktopView.qml`, `Cube.qml`, `ScreenView.qml`. Versión 6.8.1 copiada en `_referencias/cube-upstream-6.8.1/`                      |
+| Cubo oficial KDE (copia) | `_referencias/cube-upstream-6.8.1/`      | Base del reset a "cubo virgen"                                                                                                               |
+| Cubo C++ de zzag         | `../kwin-effects-cube/`                  | Referencia C++ (zzag), no QML; útil para leer la geometría                                                                                   |
+| Compiz (fuente)          | `../_referencias/compiz-experimental/`   | Árbol de fuentes de Compiz. Plugins: `plugins/cube/`, `plugins/cubeaddon/`, `plugins/rotate/`, `plugins/deformation/`, `plugins/reflection/` |
+| Wayfire (fuente)         | **NO clonado**                           | Clonar desde `https://github.com/WayfireWM/wayfire`, ruta `plugins/cube/` (`cube.cpp`, `cubemap.cpp`)                                        |
 
 Si se clona Wayfire: `git clone --depth 1 https://github.com/WayfireWM/wayfire ../_referencias/wayfire`
 (y quedará en `../_referencias/wayfire/plugins/cube/`).
@@ -22,6 +22,7 @@ Si se clona Wayfire: `git clone --depth 1 https://github.com/WayfireWM/wayfire .
 ## 2. Cómo está montado cada cubo
 
 ### Compiz (X11, arquitectura de plugins)
+
 - `cube`: geometría del prisma, fondo (skydome/color), transparencia mientras gira.
 - `rotate`: el giro (input, inercia, snap a escritorio).
 - `cubeaddon`: extensiones — tapas superior/inferior (caps), unfold.
@@ -30,10 +31,11 @@ Si se clona Wayfire: `git clone --depth 1 https://github.com/WayfireWM/wayfire .
 - `reflection`: reflejo espejado bajo el cubo.
 - `skydome`: una imagen panorámica envolvente que gira con el cubo.
 
-Separaba *estado* (ángulos, zoom) del *mecanismo que lo muta* (input/IPC). Ese
+Separaba _estado_ (ángulos, zoom) del _mecanismo que lo muta_ (input/IPC). Ese
 patrón es el correcto y se mantiene hoy.
 
 ### Wayfire (Wayland, plugin único por-output)
+
 - Una instancia **independiente por monitor** (`per_output_plugin_instance_t`):
   cada salida tiene su cámara y su animación.
 - **Workspace stream**: cada workspace se renderiza a un framebuffer offscreen
@@ -47,6 +49,7 @@ patrón es el correcto y se mantiene hoy.
   en shader (nivel 30/50).
 
 ### KDE (KWin, efecto QML `declarativescript`)
+
 - Cubo de caras planas: N escritorios en un polígono regular. Sin casco, sin
   deformación. Giro por ratón (drag) y teclado.
 - Cada cara muestra su escritorio vía `DesktopView`/`WindowThumbnail`.
@@ -54,22 +57,22 @@ patrón es el correcto y se mantiene hoy.
 
 ## 3. Qué se puede aplicar en QML puro (y qué no)
 
-| Feature | Compiz/Wayfire | ¿Viable en KWin QML? | Motivo |
-|---|---|---|---|
-| Caras planas en polígono (N escritorios) | Ambos | **SÍ** | Ya es el cubo base de KDE |
-| Giro por ratón + zoom por rueda | Ambos | **SÍ** | `CubeCameraController` |
-| Transparencia al girar | Compiz | **SÍ** | Atenuar (opacidad) el sólido (caras) o el casco mientras se gira |
-| Skydome (entorno envolvente) | Ambos | **SÍ** | `SceneEnvironment.SkyBox` + `lightProbe` (panorámica 2:1) |
-| Cubemap (6 texturas) | Wayfire | **SÍ (coste medio)** | Un `Texture` con `mappingMode: Environment`; 6 assets |
-| Caps superior/inferior (tapas) | Compiz | **SÍ** | Quads horizontales en los extremos del prisma |
-| Unfold (desplegar a plano) | Compiz/Wayfire | **SÍ** | Rotar cada cara sobre su arista al cambiar escritorio |
-| Reflexión de suelo (silueta) | Compiz | **SÍ (parcial)** | Nodo espejado `scale.y = -1` + velo; duplica overdraw (2x) |
-| Zoom dedicado del cubo (≠ cámara) | Compiz | **SÍ** | Escalar el nodo raíz de la forma, no la cámara |
-| Rotation inertia | Compiz | **Parcial** | Hay easing OutCubic; falta continuar el giro tras soltar |
-| Workspace stream (FBO por escritorio) | Wayfire | **NO** | KWin no expone un framebuffer por workspace; solo `WindowThumbnail` por ventana |
+| Feature                                     | Compiz/Wayfire | ¿Viable en KWin QML? | Motivo                                                                                     |
+| ------------------------------------------- | -------------- | -------------------- | ------------------------------------------------------------------------------------------ |
+| Caras planas en polígono (N escritorios)    | Ambos          | **SÍ**               | Ya es el cubo base de KDE                                                                  |
+| Giro por ratón + zoom por rueda             | Ambos          | **SÍ**               | `CubeCameraController`                                                                     |
+| Transparencia al girar                      | Compiz         | **SÍ**               | Atenuar (opacidad) el sólido (caras) o el casco mientras se gira                           |
+| Skydome (entorno envolvente)                | Ambos          | **SÍ**               | `SceneEnvironment.SkyBox` + `lightProbe` (panorámica 2:1)                                  |
+| Cubemap (6 texturas)                        | Wayfire        | **SÍ (coste medio)** | Un `Texture` con `mappingMode: Environment`; 6 assets                                      |
+| Caps superior/inferior (tapas)              | Compiz         | **SÍ**               | Quads horizontales en los extremos del prisma                                              |
+| Unfold (desplegar a plano)                  | Compiz/Wayfire | **SÍ**               | Rotar cada cara sobre su arista al cambiar escritorio                                      |
+| Reflexión de suelo (silueta)                | Compiz         | **SÍ (parcial)**     | Nodo espejado `scale.y = -1` + velo; duplica overdraw (2x)                                 |
+| Zoom dedicado del cubo (≠ cámara)           | Compiz         | **SÍ**               | Escalar el nodo raíz de la forma, no la cámara                                             |
+| Rotation inertia                            | Compiz         | **Parcial**          | Hay easing OutCubic; falta continuar el giro tras soltar                                   |
+| Workspace stream (FBO por escritorio)       | Wayfire        | **NO**               | KWin no expone un framebuffer por workspace; solo `WindowThumbnail` por ventana            |
 | Deformación de CONTENIDO (curvar pantallas) | Compiz/Wayfire | **NO (en QML puro)** | `CustomMaterial` no tesela un `#Rectangle`; deformar degrada el texto. Requiere shader/C++ |
-| Reflexión REAL de ventanas | Compiz | **NO (en QML puro)** | No hay nodo "espejo" de contenido sin shader |
-| Dos pasadas traseras→frontales | Wayfire | **Parcial** | Ordenar caras a mano con `alphaMode: Blend` si hay artefactos |
+| Reflexión REAL de ventanas                  | Compiz         | **NO (en QML puro)** | No hay nodo "espejo" de contenido sin shader                                               |
+| Dos pasadas traseras→frontales              | Wayfire        | **Parcial**          | Ordenar caras a mano con `alphaMode: Blend` si hay artefactos                              |
 
 ## 4. Lecciones clave (resumen)
 

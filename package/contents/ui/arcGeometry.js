@@ -26,7 +26,7 @@
 // exactly as the global isFinite did; the local Number() coercion is kept
 // inside this one place so no call site has to remember the difference.
 function isFiniteNumber(value) {
-    return Number.isFinite(Number(value));
+  return Number.isFinite(Number(value));
 }
 
 // Fallback segment count for a garbage `segments` argument: kept in sync
@@ -65,45 +65,55 @@ const FALLBACK_SEGMENTS = 64;
 // possible while the model syncs) answers EMPTY arrays: a ProceduralMesh
 // with no positions renders nothing, which is the safe mid-sync state.
 function cylinderArcGeometry(faceWidth, faceHeight, radius, segments) {
-    const width = Number(faceWidth);
-    const height = Number(faceHeight);
-    const r = Number(radius);
-    if (!isFiniteNumber(width) || !isFiniteNumber(height) || !isFiniteNumber(r)
-        || width <= 0 || height <= 0 || r <= 0) {
-        return { positions: [], normals: [], uvs: [], indexes: [] };
-    }
-    const rawSegments = Number(segments);
-    const segs = isFiniteNumber(rawSegments) ? Math.max(1, Math.floor(rawSegments)) : FALLBACK_SEGMENTS;
+  const width = Number(faceWidth);
+  const height = Number(faceHeight);
+  const r = Number(radius);
+  if (
+    !isFiniteNumber(width) ||
+    !isFiniteNumber(height) ||
+    !isFiniteNumber(r) ||
+    width <= 0 ||
+    height <= 0 ||
+    r <= 0
+  ) {
+    return { positions: [], normals: [], uvs: [], indexes: [] };
+  }
+  const rawSegments = Number(segments);
+  const segs = isFiniteNumber(rawSegments)
+    ? Math.max(1, Math.floor(rawSegments))
+    : FALLBACK_SEGMENTS;
 
-    const positions = [];
-    const normals = [];
-    const uvs = [];
-    const indexes = [];
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indexes = [];
 
-    for (let i = 0; i <= segs; ++i) {
-        // Column i sits at arc-length s = W*i/segs, centred: phi runs from
-        // -theta/2 to +theta/2 with theta = W/R.
-        const phi = (width * i / segs - width / 2) / r;
-        const sine = Math.sin(phi);
-        const cosine = Math.cos(phi);
-        // Two vertices per column: bottom (v = 0) then top (v = 1), so the
-        // indexes of a column are (2i, 2i + 1).
-        positions.push(Qt.vector3d(r * sine, -height / 2, r * cosine - r),
-                       Qt.vector3d(r * sine, height / 2, r * cosine - r));
-        normals.push(Qt.vector3d(sine, 0, cosine), Qt.vector3d(sine, 0, cosine));
-        uvs.push(Qt.vector2d(i / segs, 0), Qt.vector2d(i / segs, 1));
-    }
+  for (let i = 0; i <= segs; ++i) {
+    // Column i sits at arc-length s = W*i/segs, centred: phi runs from
+    // -theta/2 to +theta/2 with theta = W/R.
+    const phi = ((width * i) / segs - width / 2) / r;
+    const sine = Math.sin(phi);
+    const cosine = Math.cos(phi);
+    // Two vertices per column: bottom (v = 0) then top (v = 1), so the
+    // indexes of a column are (2i, 2i + 1).
+    positions.push(
+      Qt.vector3d(r * sine, -height / 2, r * cosine - r),
+      Qt.vector3d(r * sine, height / 2, r * cosine - r),
+    );
+    normals.push(Qt.vector3d(sine, 0, cosine), Qt.vector3d(sine, 0, cosine));
+    uvs.push(Qt.vector2d(i / segs, 0), Qt.vector2d(i / segs, 1));
+  }
 
-    for (let i = 0; i < segs; ++i) {
-        const a = 2 * i; //     bottom, column i
-        const b = a + 1; //     top,    column i
-        const c = a + 2; //     bottom, column i + 1
-        const d = a + 3; //     top,    column i + 1
-        // Cross products of both triangles point along the radial (outward)
-        // normal: seen from OUTSIDE the cylinder each triangle runs
-        // counter-clockwise, the same convention as #Rectangle's mesh.
-        indexes.push(a, c, b, b, c, d);
-    }
+  for (let i = 0; i < segs; ++i) {
+    const a = 2 * i; //     bottom, column i
+    const b = a + 1; //     top,    column i
+    const c = a + 2; //     bottom, column i + 1
+    const d = a + 3; //     top,    column i + 1
+    // Cross products of both triangles point along the radial (outward)
+    // normal: seen from OUTSIDE the cylinder each triangle runs
+    // counter-clockwise, the same convention as #Rectangle's mesh.
+    indexes.push(a, c, b, b, c, d);
+  }
 
-    return { positions: positions, normals: normals, uvs: uvs, indexes: indexes };
+  return { positions: positions, normals: normals, uvs: uvs, indexes: indexes };
 }

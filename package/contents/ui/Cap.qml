@@ -37,151 +37,151 @@ import "constants.js" as Constants
 // QtQuick.Shapes degrades the arrow the same way (surfaceDegraded, the
 // HullRadial pattern of ADR-022).
 Model {
-    id: cap
+  id: cap
 
-    // Shared geometry from Cube.capMesh (null = no QtQuick3D.Helpers or the
-    // loader is not ready: the cap must not render, exactly like the arc).
-    property Geometry mesh: null
-    // Content, already resolved by Cube through the constants.js helpers
-    // (capContent / capGradientType / capImageFit / capOpacity /
-    // capImageSource), so an unvalidated kwinrc can never reach the paint.
-    property int content: Constants.CapContent.Color
-    property color color1: "#1b3fd8"
-    property color color2: "#0a1a5e"
-    property int gradientType: Constants.CapGradientType.LinearVertical
-    property int gradientStop: 50
-    property string imageSource: ""
-    property int imageFit: Constants.CapImageFit.Cover
-    // Material opacity in 0..1 (Constants.capOpacity of the Int 0..100 key).
-    property real opacityValue: 0.8
-    // Edge of the square surface grabbed as the texture: the mesh UVs map it
-    // onto the cap's bounding square, centred (u = 0.5 + x/(2r)). Static
-    // content, so it is grabbed once per change, not per frame; 512 keeps a
-    // close-up cap readable without taxing the compositor.
-    property int surfaceSize: 512
+  // Shared geometry from Cube.capMesh (null = no QtQuick3D.Helpers or the
+  // loader is not ready: the cap must not render, exactly like the arc).
+  property Geometry mesh: null
+  // Content, already resolved by Cube through the constants.js helpers
+  // (capContent / capGradientType / capImageFit / capOpacity /
+  // capImageSource), so an unvalidated kwinrc can never reach the paint.
+  property int content: Constants.CapContent.Color
+  property color color1: "#1b3fd8"
+  property color color2: "#0a1a5e"
+  property int gradientType: Constants.CapGradientType.LinearVertical
+  property int gradientStop: 50
+  property string imageSource: ""
+  property int imageFit: Constants.CapImageFit.Cover
+  // Material opacity in 0..1 (Constants.capOpacity of the Int 0..100 key).
+  property real opacityValue: 0.8
+  // Edge of the square surface grabbed as the texture: the mesh UVs map it
+  // onto the cap's bounding square, centred (u = 0.5 + x/(2r)). Static
+  // content, so it is grabbed once per change, not per frame; 512 keeps a
+  // close-up cap readable without taxing the compositor.
+  property int surfaceSize: 512
 
-    // Emitted when the Image content is missing or failed to load; Cube
-    // turns it into a single console.warn for the whole effect (both caps
-    // share one image, two Models must not log twice).
-    signal imageUnavailable(string reason)
-    // Emitted once when the Arrow content cannot paint (QtQuick.Shapes
-    // missing -> CapArrow.qml's Loader is in Error): the cap keeps its
-    // CapColor background, exactly the HullRadial degradation of ADR-022.
-    // The SAME one-line budget applies (Cube dedupes with capImageWarned).
-    signal surfaceDegraded(string reason)
+  // Emitted when the Image content is missing or failed to load; Cube
+  // turns it into a single console.warn for the whole effect (both caps
+  // share one image, two Models must not log twice).
+  signal imageUnavailable(string reason)
+  // Emitted once when the Arrow content cannot paint (QtQuick.Shapes
+  // missing -> CapArrow.qml's Loader is in Error): the cap keeps its
+  // CapColor background, exactly the HullRadial degradation of ADR-022.
+  // The SAME one-line budget applies (Cube dedupes with capImageWarned).
+  signal surfaceDegraded(string reason)
 
-    // One report per instance is the cap's own budget; Cube still filters
-    // the global duplicate (the radialWarned pattern of HullGradient).
-    property bool reported: false
-    property bool degradedReported: false
+  // One report per instance is the cap's own budget; Cube still filters
+  // the global duplicate (the radialWarned pattern of HullGradient).
+  property bool reported: false
+  property bool degradedReported: false
 
-    readonly property bool imageReady: capImage.status === Image.Ready
-    readonly property bool imageUsable: cap.imageSource.length > 0 && cap.imageReady
-    readonly property bool paintColor: cap.content === Constants.CapContent.Color || (cap.content === Constants.CapContent.Image && !cap.imageUsable)
-    readonly property bool paintImage: cap.content === Constants.CapContent.Image && cap.imageUsable
-    // CapContent Arrow (the schema default): the orientation marker of
-    // CapArrow.qml. Its Loader's Error state feeds back into paintColor, so
-    // without QtQuick.Shapes the cap degrades to a plain CapColor surface.
-    readonly property bool paintArrow: cap.content === Constants.CapContent.Arrow
+  readonly property bool imageReady: capImage.status === Image.Ready
+  readonly property bool imageUsable: cap.imageSource.length > 0 && cap.imageReady
+  readonly property bool paintColor: cap.content === Constants.CapContent.Color || (cap.content === Constants.CapContent.Image && !cap.imageUsable)
+  readonly property bool paintImage: cap.content === Constants.CapContent.Image && cap.imageUsable
+  // CapContent Arrow (the schema default): the orientation marker of
+  // CapArrow.qml. Its Loader's Error state feeds back into paintColor, so
+  // without QtQuick.Shapes the cap degrades to a plain CapColor surface.
+  readonly property bool paintArrow: cap.content === Constants.CapContent.Arrow
 
-    function report(reason) {
-        if (cap.reported) {
-            return;
-        }
-        cap.reported = true;
-        cap.imageUnavailable(reason);
+  function report(reason) {
+    if (cap.reported) {
+      return;
     }
+    cap.reported = true;
+    cap.imageUnavailable(reason);
+  }
 
-    source: cap.mesh === null ? "#Rectangle" : ""
-    geometry: cap.mesh
-    materials: [
-        PrincipledMaterial {
-            lighting: PrincipledMaterial.NoLighting
-            cullMode: Material.NoCulling
-            alphaMode: cap.opacityValue >= 0.99 ? PrincipledMaterial.Mask : PrincipledMaterial.Blend
-            alphaCutoff: 0.5
-            opacity: cap.opacityValue
-            baseColorMap: Texture {
-                // Surface item (grabbed, never laid into the scene graph):
-                // the colour shows through whenever the image is not ready,
-                // so a broken source degrades to CapColor without a flash.
-                // The explicit sourceItem assignment is the CubeFace pattern.
-                sourceItem: Item {
-                    id: surface
+  source: cap.mesh === null ? "#Rectangle" : ""
+  geometry: cap.mesh
+  materials: [
+    PrincipledMaterial {
+      lighting: PrincipledMaterial.NoLighting
+      cullMode: Material.NoCulling
+      alphaMode: cap.opacityValue >= 0.99 ? PrincipledMaterial.Mask : PrincipledMaterial.Blend
+      alphaCutoff: 0.5
+      opacity: cap.opacityValue
+      baseColorMap: Texture {
+        // Surface item (grabbed, never laid into the scene graph):
+        // the colour shows through whenever the image is not ready,
+        // so a broken source degrades to CapColor without a flash.
+        // The explicit sourceItem assignment is the CubeFace pattern.
+        sourceItem: Item {
+          id: surface
 
-                    width: cap.surfaceSize
-                    height: cap.surfaceSize
+          width: cap.surfaceSize
+          height: cap.surfaceSize
 
-                    Rectangle {
-                        anchors.fill: parent
-                        // Also the Arrow fallback: when CapArrow.qml cannot
-                        // load (no QtQuick.Shapes) the plain colour holds.
-                        visible: cap.paintColor || (cap.paintArrow && arrowLoader.status === Loader.Error)
-                        color: cap.color1
-                    }
+          Rectangle {
+            anchors.fill: parent
+            // Also the Arrow fallback: when CapArrow.qml cannot
+            // load (no QtQuick.Shapes) the plain colour holds.
+            visible: cap.paintColor || (cap.paintArrow && arrowLoader.status === Loader.Error)
+            color: cap.color1
+          }
 
-                    Loader {
-                        id: arrowLoader
-                        anchors.fill: parent
-                        visible: cap.paintArrow && status === Loader.Ready
-                        // Isolated behind a Loader (the HullRadial / HullVideo
-                        // pattern): CapArrow.qml is the ONLY cap file that
-                        // imports QtQuick.Shapes, so a system without the
-                        // module only errors HERE — the cap falls back to the
-                        // CapColor Rectangle above and warns once.
-                        active: cap.paintArrow
-                        source: "CapArrow.qml"
-                        onStatusChanged: {
-                            if (status === Loader.Error && !cap.degradedReported) {
-                                cap.degradedReported = true;
-                                cap.surfaceDegraded("QtQuick.Shapes unavailable; the cap marker cannot paint");
-                            }
-                        }
-                        onLoaded: {
-                            item.color1 = Qt.binding(() => cap.color1);
-                        }
-                    }
-
-                    HullGradient {
-                        anchors.fill: parent
-                        visible: cap.content === Constants.CapContent.Gradient
-                        firstColor: cap.color1
-                        secondColor: cap.color2
-                        // CapGradientType mirrors BackgroundGradientType in
-                        // index and meaning (main.xml); HullGradient resolves
-                        // Radial through its own optional-Shapes Loader.
-                        gradientType: cap.gradientType
-                        gradientStop: cap.gradientStop
-                    }
-
-                    Image {
-                        id: capImage
-                        anchors.fill: parent
-                        visible: cap.paintImage
-                        source: cap.content === Constants.CapContent.Image ? cap.imageSource : ""
-                        fillMode: cap.imageFit === Constants.CapImageFit.Contain ? Image.PreserveAspectFit : (cap.imageFit === Constants.CapImageFit.Stretch ? Image.Stretch : Image.PreserveAspectCrop)
-                        asynchronous: true
-                        onStatusChanged: {
-                            if (status === Image.Error && cap.content === Constants.CapContent.Image) {
-                                cap.report("cap image failed to load: " + cap.imageSource);
-                            }
-                        }
-                    }
-                }
+          Loader {
+            id: arrowLoader
+            anchors.fill: parent
+            visible: cap.paintArrow && status === Loader.Ready
+            // Isolated behind a Loader (the HullRadial / HullVideo
+            // pattern): CapArrow.qml is the ONLY cap file that
+            // imports QtQuick.Shapes, so a system without the
+            // module only errors HERE — the cap falls back to the
+            // CapColor Rectangle above and warns once.
+            active: cap.paintArrow
+            source: "CapArrow.qml"
+            onStatusChanged: {
+              if (status === Loader.Error && !cap.degradedReported) {
+                cap.degradedReported = true;
+                cap.surfaceDegraded("QtQuick.Shapes unavailable; the cap marker cannot paint");
+              }
             }
-        }
-    ]
+            onLoaded: {
+              item.color1 = Qt.binding(() => cap.color1);
+            }
+          }
 
-    // An Image of an empty source never reaches Error (it stays Null), so the
-    // "absent" half of the fallback is checked on the content switch too.
-    // Deferred with callLater: when the KCM value arrives, the content and the
-    // source bindings update in the SAME pass, and the content handler would
-    // otherwise see the not-yet-rebound empty source of a configured image.
-    function checkAbsent() {
-        if (cap.content === Constants.CapContent.Image && cap.imageSource.length === 0) {
-            cap.report("no cap image configured");
+          HullGradient {
+            anchors.fill: parent
+            visible: cap.content === Constants.CapContent.Gradient
+            firstColor: cap.color1
+            secondColor: cap.color2
+            // CapGradientType mirrors BackgroundGradientType in
+            // index and meaning (main.xml); HullGradient resolves
+            // Radial through its own optional-Shapes Loader.
+            gradientType: cap.gradientType
+            gradientStop: cap.gradientStop
+          }
+
+          Image {
+            id: capImage
+            anchors.fill: parent
+            visible: cap.paintImage
+            source: cap.content === Constants.CapContent.Image ? cap.imageSource : ""
+            fillMode: cap.imageFit === Constants.CapImageFit.Contain ? Image.PreserveAspectFit : (cap.imageFit === Constants.CapImageFit.Stretch ? Image.Stretch : Image.PreserveAspectCrop)
+            asynchronous: true
+            onStatusChanged: {
+              if (status === Image.Error && cap.content === Constants.CapContent.Image) {
+                cap.report("cap image failed to load: " + cap.imageSource);
+              }
+            }
+          }
         }
+      }
     }
-    onContentChanged: Qt.callLater(cap.checkAbsent)
-    onImageSourceChanged: Qt.callLater(cap.checkAbsent)
+  ]
+
+  // An Image of an empty source never reaches Error (it stays Null), so the
+  // "absent" half of the fallback is checked on the content switch too.
+  // Deferred with callLater: when the KCM value arrives, the content and the
+  // source bindings update in the SAME pass, and the content handler would
+  // otherwise see the not-yet-rebound empty source of a configured image.
+  function checkAbsent() {
+    if (cap.content === Constants.CapContent.Image && cap.imageSource.length === 0) {
+      cap.report("no cap image configured");
+    }
+  }
+  onContentChanged: Qt.callLater(cap.checkAbsent)
+  onImageSourceChanged: Qt.callLater(cap.checkAbsent)
 }

@@ -18,12 +18,12 @@ import sys
 import time
 
 try:
-    from PySide6.QtCore import QUrl, qInstallMessageHandler
-    from PySide6.QtGui import QGuiApplication
-    from PySide6.QtQml import QQmlComponent, QQmlEngine
+  from PySide6.QtCore import QUrl, qInstallMessageHandler
+  from PySide6.QtGui import QGuiApplication
+  from PySide6.QtQml import QQmlComponent, QQmlEngine
 except ImportError:  # pragma: no cover - optional dependency
-    print("check-scene-environment: skipped (PySide6 is not installed)")
-    sys.exit(0)
+  print("check-scene-environment: skipped (PySide6 is not installed)")
+  sys.exit(0)
 
 from pathlib import Path
 
@@ -35,23 +35,23 @@ messages: list[str] = []
 
 
 def collect_filetells(_mode, _context, message):
-    if (
-        "TypeError" in message
-        or "ReferenceError" in message
-        or "is not defined" in message
-        or "Cannot assign" in message
-        or "non-existent" in message
-    ):
-        messages.append(message)
+  if (
+    "TypeError" in message
+    or "ReferenceError" in message
+    or "is not defined" in message
+    or "Cannot assign" in message
+    or "non-existent" in message
+  ):
+    messages.append(message)
 
 
 def settle(application, milliseconds):
-    """Run the event loop until the property animation has finished."""
-    deadline = time.monotonic() + milliseconds / 1000.0
-    while time.monotonic() < deadline:
-        application.processEvents()
-        time.sleep(0.005)
+  """Run the event loop until the property animation has finished."""
+  deadline = time.monotonic() + milliseconds / 1000.0
+  while time.monotonic() < deadline:
     application.processEvents()
+    time.sleep(0.005)
+  application.processEvents()
 
 
 # Negative control: an environment property that does not exist must make the
@@ -77,114 +77,114 @@ SceneEnvironment {
 
 
 def selftest(engine):
-    """The harness must reject an unknown property and accept a real one."""
-    failures = []
-    bad = QQmlComponent(engine)
-    bad.setData(SELFTEST_BAD, QUrl("qrc:/selftest-bad.qml"))
-    if not bad.isError():
-        failures.append("an unknown SceneEnvironment property did not fail")
-    good = QQmlComponent(engine)
-    good.setData(SELFTEST_GOOD, QUrl("qrc:/selftest-good.qml"))
-    if good.isError():
-        failures.append("a valid SceneEnvironment fragment failed")
-    return failures
+  """The harness must reject an unknown property and accept a real one."""
+  failures = []
+  bad = QQmlComponent(engine)
+  bad.setData(SELFTEST_BAD, QUrl("qrc:/selftest-bad.qml"))
+  if not bad.isError():
+    failures.append("an unknown SceneEnvironment property did not fail")
+  good = QQmlComponent(engine)
+  good.setData(SELFTEST_GOOD, QUrl("qrc:/selftest-good.qml"))
+  if good.isError():
+    failures.append("a valid SceneEnvironment fragment failed")
+  return failures
 
 
 def _probe_exposure(application, harness, environment, log, name, target, expected):
-    """One exposure probe: set the harness value (None leaves it), let the
-    Behavior settle, and check probeExposure back. True on PASS; the PASS/
-    FAIL texts mirror the original gate output verbatim."""
-    if target is not None:
-        harness.setProperty("exposure", target)
-        settle(application, 400)
-    value = environment.property("probeExposure")
-    if abs(float(value) - expected) <= 1e-5:
-        log.append(f"PASS exposure({name}) = {expected:g}")
-        return True
-    log.append(f"FAIL exposure({name}) = {value} (expected {expected:g})")
-    return False
+  """One exposure probe: set the harness value (None leaves it), let the
+  Behavior settle, and check probeExposure back. True on PASS; the PASS/
+  FAIL texts mirror the original gate output verbatim."""
+  if target is not None:
+    harness.setProperty("exposure", target)
+    settle(application, 400)
+  value = environment.property("probeExposure")
+  if abs(float(value) - expected) <= 1e-5:
+    log.append(f"PASS exposure({name}) = {expected:g}")
+    return True
+  log.append(f"FAIL exposure({name}) = {value} (expected {expected:g})")
+  return False
 
 
 def _load_harness(engine, application):
-    """Load check-scene-environment.qml offscreen. Returns (harness,
-    component, status): a non-None status is the caller's exit code. The
-    component travels with the harness on purpose — when the local were
-    dropped here PySide would GC it and delete the created object (the
-    original kept both alive in main's frame)."""
-    component = QQmlComponent(engine)
-    component.loadUrl(
-        QUrl.fromLocalFile(str(ROOT / "scripts/check-scene-environment.qml"))
-    )
-    if component.isError():
-        print("check-scene-environment: FAIL")
-        for error in component.errors():
-            print(f" - {error.toString()}")
-        return None, None, 1
-    harness = component.create()
-    if harness is None:
-        print("check-scene-environment: FAIL could not create the QML harness")
-        return None, None, 1
-    application.processEvents()
-    return harness, component, None
+  """Load check-scene-environment.qml offscreen. Returns (harness,
+  component, status): a non-None status is the caller's exit code. The
+  component travels with the harness on purpose — when the local were
+  dropped here PySide would GC it and delete the created object (the
+  original kept both alive in main's frame)."""
+  component = QQmlComponent(engine)
+  component.loadUrl(
+    QUrl.fromLocalFile(str(ROOT / "scripts/check-scene-environment.qml"))
+  )
+  if component.isError():
+    print("check-scene-environment: FAIL")
+    for error in component.errors():
+      print(f" - {error.toString()}")
+    return None, None, 1
+  harness = component.create()
+  if harness is None:
+    print("check-scene-environment: FAIL could not create the QML harness")
+    return None, None, 1
+  application.processEvents()
+  return harness, component, None
 
 
 def _selftest_verdict(failures):
-    """Print every detection and the OK/FAIL line (the harness of the
-    property-missing probe: an unknown SceneEnvironment property MUST
-    fail, or the gate is blind)."""
-    for failure in failures:
-        print(f"FAIL {failure}")
-    print("check-scene-environment --selftest:", "OK" if not failures else "FAIL")
-    return 0 if not failures else 1
+  """Print every detection and the OK/FAIL line (the harness of the
+  property-missing probe: an unknown SceneEnvironment property MUST
+  fail, or the gate is blind)."""
+  for failure in failures:
+    print(f"FAIL {failure}")
+  print("check-scene-environment --selftest:", "OK" if not failures else "FAIL")
+  return 0 if not failures else 1
 
 
 def main():
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    # Same software-only setup: no GPU and no window surface is needed.
-    os.environ.setdefault("QT_QUICK_BACKEND", "software")
-    qInstallMessageHandler(collect_filetells)
-    application = QGuiApplication(sys.argv)
+  os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+  # Same software-only setup: no GPU and no window surface is needed.
+  os.environ.setdefault("QT_QUICK_BACKEND", "software")
+  qInstallMessageHandler(collect_filetells)
+  application = QGuiApplication(sys.argv)
 
-    engine = QQmlEngine()
-    if "--selftest" in sys.argv[1:]:
-        return _selftest_verdict(selftest(engine))
-    harness, _component, status = _load_harness(engine, application)
-    if status is not None:
-        return status
+  engine = QQmlEngine()
+  if "--selftest" in sys.argv[1:]:
+    return _selftest_verdict(selftest(engine))
+  harness, _component, status = _load_harness(engine, application)
+  if status is not None:
+    return status
 
-    log = [harness.property("log") or ""]
-    ok = bool(harness.property("ok"))
-    environment = harness.property("environment")
-    if environment is None:
-        print("\n".join(log))
-        print("check-scene-environment: FAIL (no SceneEnvironment)")
-        return 1
-
-    # Still cube: base exposure, untouched by the dim amount.
-    if not _probe_exposure(application, harness, environment, log, "still", None, 1.0):
-        ok = False
-
-    # Rotating with a 40 % dim: 1.0 - 0.4, reached through the Behavior.
-    if not _probe_exposure(
-        application, harness, environment, log, "rotating 40%", 0.4, 0.4
-    ):
-        ok = False
-
-    # Back to the base value: the same binding must still be alive.
-    if not _probe_exposure(
-        application, harness, environment, log, "still again", 1.0, 1.0
-    ):
-        ok = False
-
-    if messages:
-        ok = False
-        for message in messages:
-            log.append(f"FAIL qml: {message.strip()}")
-
+  log = [harness.property("log") or ""]
+  ok = bool(harness.property("ok"))
+  environment = harness.property("environment")
+  if environment is None:
     print("\n".join(log))
-    print("check-scene-environment:", "OK" if ok else "FAIL")
-    return 0 if ok else 1
+    print("check-scene-environment: FAIL (no SceneEnvironment)")
+    return 1
+
+  # Still cube: base exposure, untouched by the dim amount.
+  if not _probe_exposure(application, harness, environment, log, "still", None, 1.0):
+    ok = False
+
+  # Rotating with a 40 % dim: 1.0 - 0.4, reached through the Behavior.
+  if not _probe_exposure(
+    application, harness, environment, log, "rotating 40%", 0.4, 0.4
+  ):
+    ok = False
+
+  # Back to the base value: the same binding must still be alive.
+  if not _probe_exposure(
+    application, harness, environment, log, "still again", 1.0, 1.0
+  ):
+    ok = False
+
+  if messages:
+    ok = False
+    for message in messages:
+      log.append(f"FAIL qml: {message.strip()}")
+
+  print("\n".join(log))
+  print("check-scene-environment:", "OK" if ok else "FAIL")
+  return 0 if ok else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+  sys.exit(main())

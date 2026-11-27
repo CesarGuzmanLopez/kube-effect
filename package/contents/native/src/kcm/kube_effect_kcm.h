@@ -6,7 +6,6 @@
 #pragma once
 
 #include <KCModule>
-
 #include <QString>
 
 class QLabel;
@@ -27,24 +26,24 @@ class QPushButton;
  */
 class KubeEffectKcm : public KCModule
 {
-    Q_OBJECT
+  Q_OBJECT
 
 public:
-    KubeEffectKcm(QObject *parent, const KPluginMetaData &data);
+  KubeEffectKcm(QObject *parent, const KPluginMetaData &data);
 
 private:
-    QWidget *buildVersionLabel();
-    QWidget *buildStampBox();
-    QWidget *buildCommandsBox(const QString &sourceRoot, QWidget *parent);
-    QWidget *buildFeatureBox();
-    QWidget *buildActionBox();
+  QWidget *buildVersionLabel();
+  QWidget *buildStampBox();
+  QWidget *buildCommandsBox(const QString &sourceRoot, QWidget *parent);
+  QWidget *buildFeatureBox();
+  QWidget *buildActionBox();
 
-    void reconfigureEffect();
-    void reloadCompositor();
-    void requestLogout();
+  void reconfigureEffect();
+  void reloadCompositor();
+  void requestLogout();
 
-    QLabel *m_stampLabel = nullptr;
-    QLabel *m_actionStatusLabel = nullptr;
-    QLabel *m_reloadStatusLabel = nullptr;
-    QPushButton *m_reloadButton = nullptr;
+  QLabel *m_stampLabel = nullptr;
+  QLabel *m_actionStatusLabel = nullptr;
+  QLabel *m_reloadStatusLabel = nullptr;
+  QPushButton *m_reloadButton = nullptr;
 };

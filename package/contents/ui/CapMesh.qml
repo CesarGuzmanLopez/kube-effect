@@ -37,42 +37,42 @@ import "constants.js" as Constants
 import "capGeometry.js" as CapGeometry
 
 Item {
-    id: capHolder
+  id: capHolder
 
-    visible: false
-    width: 0
-    height: 0
+  visible: false
+  width: 0
+  height: 0
 
-    // The numbers that define the cap (bound by Cube.qml through the Loader).
-    // Polygon branch: sides + apothem + faceWidth (apothem IS Cube.faceDistance,
-    // the one geometric source). faceWidth IS Cube.faceSize.width: the input
-    // the ring needed until the ADR-027 amendment — without it the generator
-    // can only follow the face PLANES and grows tangential tips past the face
-    // corners whenever the faces are separated (displacement > 0).
-    // Disc branch: radius (IS Cube.cylinderRadius) with the arc's fixed
-    // segment count. halfHeight gates the mesh: while the face size has not
-    // settled the cap has no plane to sit on and must render nothing.
-    property int sides: 4
-    property real apothem: 0
-    property real faceWidth: 0
-    property real radius: 0
-    property real halfHeight: 0
-    property int segments: Constants.CYLINDER_SEGMENTS
-    // True with the cylinder drum in effect (disc), false for the polygon
-    // (N-gon). Follows cube.cylinderActive, so the cap silhouette always
-    // matches the solid the faces actually render.
-    property bool useDisc: false
+  // The numbers that define the cap (bound by Cube.qml through the Loader).
+  // Polygon branch: sides + apothem + faceWidth (apothem IS Cube.faceDistance,
+  // the one geometric source). faceWidth IS Cube.faceSize.width: the input
+  // the ring needed until the ADR-027 amendment — without it the generator
+  // can only follow the face PLANES and grows tangential tips past the face
+  // corners whenever the faces are separated (displacement > 0).
+  // Disc branch: radius (IS Cube.cylinderRadius) with the arc's fixed
+  // segment count. halfHeight gates the mesh: while the face size has not
+  // settled the cap has no plane to sit on and must render nothing.
+  property int sides: 4
+  property real apothem: 0
+  property real faceWidth: 0
+  property real radius: 0
+  property real halfHeight: 0
+  property int segments: Constants.CYLINDER_SEGMENTS
+  // True with the cylinder drum in effect (disc), false for the polygon
+  // (N-gon). Follows cube.cylinderActive, so the cap silhouette always
+  // matches the solid the faces actually render.
+  property bool useDisc: false
 
-    // Recomputed only when the inputs above change: one object with the four
-    // arrays, so the mesh properties below read slices of it without ever
-    // re-running the trigonometry (the CylinderArcMesh pattern).
-    readonly property var capGeometry: useDisc ? CapGeometry.capDiscGeometry(radius, segments, halfHeight) : CapGeometry.capPolygonGeometry(apothem, faceWidth, sides, halfHeight)
+  // Recomputed only when the inputs above change: one object with the four
+  // arrays, so the mesh properties below read slices of it without ever
+  // re-running the trigonometry (the CylinderArcMesh pattern).
+  readonly property var capGeometry: useDisc ? CapGeometry.capDiscGeometry(radius, segments, halfHeight) : CapGeometry.capPolygonGeometry(apothem, faceWidth, sides, halfHeight)
 
-    property ProceduralMesh mesh: ProceduralMesh {
-        primitiveMode: ProceduralMesh.Triangles
-        positions: capHolder.capGeometry.positions
-        normals: capHolder.capGeometry.normals
-        uv0s: capHolder.capGeometry.uvs
-        indexes: capHolder.capGeometry.indexes
-    }
+  property ProceduralMesh mesh: ProceduralMesh {
+    primitiveMode: ProceduralMesh.Triangles
+    positions: capHolder.capGeometry.positions
+    normals: capHolder.capGeometry.normals
+    uv0s: capHolder.capGeometry.uvs
+    indexes: capHolder.capGeometry.indexes
+  }
 }

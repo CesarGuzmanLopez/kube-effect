@@ -33,7 +33,7 @@ pasar al siguiente.
 - `native/` — **Kube Effect Plus** (C++/CMake), módulo nativo opcional
   (`kcm_kube_effect_plus`, «Kube Effect Plus»). Se compila a demanda con
   `make native` (sin root, prefijo privado; solo se abre con `prefix.sh`); `make
-  native-install` lo pone en `/usr` y sí aparece en Preferencias → Gestión de
+native-install` lo pone en `/usr` y sí aparece en Preferencias → Gestión de
   ventanas. Ese target compila como tu usuario y solo invoca `sudo` en el paso
   de instalación (contraseña una vez, sin artefactos de root en el build), así
   que no se le pone `sudo` delante. `make native-status` dice si el stamp está

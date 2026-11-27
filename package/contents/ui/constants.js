@@ -6,13 +6,13 @@
 
 // Matches the Background enum in config/main.xml
 const Background = {
-    Color: 0,
-    // Index 1 used to be named SkyBox; kwinrc stores the index, not the name.
-    Image: 1,
-    Gradient: 2,
-    // Appended as index 3 so the stored 0/1/2 keep their meaning. Video is an
-    // image whose source is a clip: same layout/fit/rotate keys.
-    Video: 3
+  Color: 0,
+  // Index 1 used to be named SkyBox; kwinrc stores the index, not the name.
+  Image: 1,
+  Gradient: 2,
+  // Appended as index 3 so the stored 0/1/2 keep their meaning. Video is an
+  // image whose source is a clip: same layout/fit/rotate keys.
+  Video: 3,
 };
 // Matches the BackgroundImageLayout enum in config/main.xml. Auto was
 // removed (ADR-013): the user states whether the picture is a panorama. The
@@ -21,14 +21,14 @@ const Background = {
 // as Flat (it used to mean Equirect under the 0=Auto, 1=Equirect, 2=Flat
 // scheme).
 const BackgroundImageLayout = {
-    Equirect: 0,
-    Flat: 1
+  Equirect: 0,
+  Flat: 1,
 };
 // Matches the BackgroundImageFit enum in config/main.xml
 const BackgroundImageFit = {
-    Cover: 0,
-    Contain: 1,
-    Stretch: 2
+  Cover: 0,
+  Contain: 1,
+  Stretch: 2,
 };
 // Default BackgroundImageFit / DimWhileRotatingAmount / BackgroundGradientStop
 // from config/main.xml, used when the stored value is not a usable number.
@@ -37,34 +37,34 @@ const DEFAULT_DIM_AMOUNT = 40;
 const DEFAULT_GRADIENT_STOP = 50;
 // Matches the BackgroundGradientType enum in config/main.xml
 const BackgroundGradientType = {
-    LinearVertical: 0,
-    LinearHorizontal: 1,
-    Radial: 2
+  LinearVertical: 0,
+  LinearHorizontal: 1,
+  Radial: 2,
 };
 // Matches the BackgroundGradientRotation enum in config/main.xml. Only the
 // gradient hull uses it (ADR-017): the layer may stay still or turn with the
 // cube, forwards or backwards.
 const BackgroundGradientRotation = {
-    Fixed: 0,
-    FollowCube: 1,
-    FollowCubeInverse: 2
+  Fixed: 0,
+  FollowCube: 1,
+  FollowCubeInverse: 2,
 };
 // Matches the Shape enum in config/main.xml (ADR-025). Polygon is the virgin
 // KDE cube (flat faces on an N-gon); Cylinder bends the same faces into arcs
 // on a cylinder. Neither is read below 3 desktops: the sheet always wins
 // (ADR-024), so this table never needs to model that case.
 const Shape = {
-    Polygon: 0,
-    Cylinder: 1
+  Polygon: 0,
+  Cylinder: 1,
 };
 
 // An unknown value (kwinrc edited by hand) falls back to a solid colour
 // instead of leaving the hull unpainted.
 function backgroundMode(value) {
-    if (value === Background.Image || value === Background.Gradient || value === Background.Video) {
-        return value;
-    }
-    return Background.Color;
+  if (value === Background.Image || value === Background.Gradient || value === Background.Video) {
+    return value;
+  }
+  return Background.Color;
 }
 
 // Human-readable Background name for the debug overlay (ADR-023). The chain
@@ -72,19 +72,19 @@ function backgroundMode(value) {
 // value says "Unknown" — a diagnostic line must never print "undefined"
 // where a mode name belongs.
 function backgroundName(value) {
-    if (value === Background.Image) {
-        return "Image";
-    }
-    if (value === Background.Gradient) {
-        return "Gradient";
-    }
-    if (value === Background.Video) {
-        return "Video";
-    }
-    if (value === Background.Color) {
-        return "Color";
-    }
-    return "Unknown";
+  if (value === Background.Image) {
+    return "Image";
+  }
+  if (value === Background.Gradient) {
+    return "Gradient";
+  }
+  if (value === Background.Video) {
+    return "Video";
+  }
+  if (value === Background.Color) {
+    return "Color";
+  }
+  return "Unknown";
 }
 
 // An unknown Shape value (kwinrc edited by hand) falls back to the polygon:
@@ -92,10 +92,10 @@ function backgroundName(value) {
 // keeps a hull painted. The sub-3 override is Cube's job (ADR-024), not
 // this resolver's.
 function shape(value) {
-    if (value === Shape.Cylinder) {
-        return Shape.Cylinder;
-    }
-    return Shape.Polygon;
+  if (value === Shape.Cylinder) {
+    return Shape.Cylinder;
+  }
+  return Shape.Polygon;
 }
 
 // Human-readable Shape name for the debug overlay (ADR-023), in the short
@@ -103,13 +103,13 @@ function shape(value) {
 // instead of trusting key order (the backgroundName pattern); an unknown
 // value says so rather than printing "undefined".
 function shapeName(value) {
-    if (value === Shape.Cylinder) {
-        return "cyl";
-    }
-    if (value === Shape.Polygon) {
-        return "poly";
-    }
-    return "Unknown";
+  if (value === Shape.Cylinder) {
+    return "cyl";
+  }
+  if (value === Shape.Polygon) {
+    return "poly";
+  }
+  return "Unknown";
 }
 
 // Equirect is the default and the safe fallback: only an explicit Flat turns
@@ -120,15 +120,15 @@ function shapeName(value) {
 // hasImage no longer influences the decision (the SkyBox still requires an
 // image, see skyBoxBackground); it stays in the signature for callers/tests.
 function usesEquirectMapping(mapping, hasImage) {
-    return mapping !== BackgroundImageLayout.Flat;
+  return mapping !== BackgroundImageLayout.Flat;
 }
 
 // Flat-image fit: unknown values fall back to Cover, the schema default.
 function imageFit(value) {
-    if (value === BackgroundImageFit.Contain || value === BackgroundImageFit.Stretch) {
-        return value;
-    }
-    return DEFAULT_IMAGE_FIT;
+  if (value === BackgroundImageFit.Contain || value === BackgroundImageFit.Stretch) {
+    return value;
+  }
+  return DEFAULT_IMAGE_FIT;
 }
 
 // Finite test with the same coercion as the historical isFinite(): KConfig
@@ -137,7 +137,7 @@ function imageFit(value) {
 // exactly as the global isFinite did; the local Number() coercion is kept
 // inside this one place so no call site has to remember the difference.
 function isFiniteNumber(value) {
-    return Number.isFinite(Number(value));
+  return Number.isFinite(Number(value));
 }
 
 // Number(null) and Number("") are 0, not NaN: a KConfig value that was never
@@ -145,30 +145,30 @@ function isFiniteNumber(value) {
 // schema default of the active branch (ADR-022). Parse to a finite number, or
 // null when there is no usable value.
 function finiteOr(nullable) {
-    if (nullable === null || nullable === undefined) {
-        return null;
-    }
-    // A whitespace-only string is "unset" too: Number(" ") is 0, which the
-    // floor clamps would take as a real minimum (ADR-022, second review).
-    if (typeof nullable === "string" && nullable.trim() === "") {
-        return null;
-    }
-    const value = Number(nullable);
-    return Number.isFinite(value) ? value : null;
+  if (nullable === null || nullable === undefined) {
+    return null;
+  }
+  // A whitespace-only string is "unset" too: Number(" ") is 0, which the
+  // floor clamps would take as a real minimum (ADR-022, second review).
+  if (typeof nullable === "string" && nullable.trim() === "") {
+    return null;
+  }
+  const value = Number(nullable);
+  return Number.isFinite(value) ? value : null;
 }
 
 // Opacity of the black veil drawn over the hull while the cube rotates:
 // 0 when DimWhileRotating is off, otherwise amount/100 clamped to 0..1. A
 // missing or non-numeric amount uses the schema default (40 %).
 function dimOpacity(enabled, amount) {
-    if (enabled !== true) {
-        return 0;
-    }
-    let percent = finiteOr(amount);
-    if (percent === null) {
-        percent = DEFAULT_DIM_AMOUNT;
-    }
-    return Math.min(1, Math.max(0, percent / 100));
+  if (enabled !== true) {
+    return 0;
+  }
+  let percent = finiteOr(amount);
+  if (percent === null) {
+    percent = DEFAULT_DIM_AMOUNT;
+  }
+  return Math.min(1, Math.max(0, percent / 100));
 }
 
 // Exposure of the SkyBox light probe while the cube rotates. 1.0 leaves the
@@ -179,10 +179,10 @@ function dimOpacity(enabled, amount) {
 // color/gradient/flat image or flat video cannot reach it; probeExposure (the
 // brightness of the environment) can. The result stays in 0..1.
 function skyBoxExposure(enabled, rotating, amount) {
-    if (enabled !== true || rotating !== true) {
-        return 1;
-    }
-    return Math.max(0, 1 - dimOpacity(enabled, amount));
+  if (enabled !== true || rotating !== true) {
+    return 1;
+  }
+  return Math.max(0, 1 - dimOpacity(enabled, amount));
 }
 
 // Position of the second gradient stop in 0..1 (BackgroundGradientStop is a
@@ -190,11 +190,11 @@ function skyBoxExposure(enabled, rotating, amount) {
 // carry anything, and a non-numeric value would poison the stop with NaN, so a
 // non-finite value uses the schema default (50 %) and the rest is clamped.
 function gradientStopPosition(value) {
-    let percent = finiteOr(value);
-    if (percent === null) {
-        percent = DEFAULT_GRADIENT_STOP;
-    }
-    return Math.min(1, Math.max(0, percent / 100));
+  let percent = finiteOr(value);
+  if (percent === null) {
+    percent = DEFAULT_GRADIENT_STOP;
+  }
+  return Math.min(1, Math.max(0, percent / 100));
 }
 
 // Angle in degrees applied to the gradient layer (ADR-017). Fixed (and any
@@ -203,14 +203,17 @@ function gradientStopPosition(value) {
 // mirrors it. A non-finite yaw also falls back to 0 instead of poisoning the
 // transform with NaN.
 function gradientRotationAngle(mode, yawDegrees) {
-    if (mode !== BackgroundGradientRotation.FollowCube && mode !== BackgroundGradientRotation.FollowCubeInverse) {
-        return 0;
-    }
-    const yaw = Number(yawDegrees);
-    if (!isFiniteNumber(yaw)) {
-        return 0;
-    }
-    return mode === BackgroundGradientRotation.FollowCube ? yaw : -yaw;
+  if (
+    mode !== BackgroundGradientRotation.FollowCube &&
+    mode !== BackgroundGradientRotation.FollowCubeInverse
+  ) {
+    return 0;
+  }
+  const yaw = Number(yawDegrees);
+  if (!isFiniteNumber(yaw)) {
+    return 0;
+  }
+  return mode === BackgroundGradientRotation.FollowCube ? yaw : -yaw;
 }
 
 // Visible span of a w x h area along the gradient axis once the layer is turned
@@ -219,15 +222,15 @@ function gradientRotationAngle(mode, yawDegrees) {
 // vertical ones measure Y (|w*sin| + |h*cos|). A non-finite input falls back to
 // 0 instead of poisoning the stops with NaN.
 function gradientVisibleSpan(w, h, angleDeg, horizontal) {
-    const width = Number(w);
-    const height = Number(h);
-    const radians = Number(angleDeg) * Math.PI / 180;
-    if (!isFiniteNumber(width) || !isFiniteNumber(height) || !isFiniteNumber(radians)) {
-        return 0;
-    }
-    const cosine = Math.abs(Math.cos(radians));
-    const sine = Math.abs(Math.sin(radians));
-    return horizontal ? width * cosine + height * sine : width * sine + height * cosine;
+  const width = Number(w);
+  const height = Number(h);
+  const radians = (Number(angleDeg) * Math.PI) / 180;
+  if (!isFiniteNumber(width) || !isFiniteNumber(height) || !isFiniteNumber(radians)) {
+    return 0;
+  }
+  const cosine = Math.abs(Math.cos(radians));
+  const sine = Math.abs(Math.sin(radians));
+  return horizontal ? width * cosine + height * sine : width * sine + height * cosine;
 }
 
 // Half of the unpainted margin left on each side of the visible band (0..0.5).
@@ -235,22 +238,30 @@ function gradientVisibleSpan(w, h, angleDeg, horizontal) {
 // the stops are remapped into [margin, 1 - margin] to keep Fixed's look. A
 // degenerate area (w or h = 0) has no gradient to remap.
 function gradientStopMargin(w, h, angleDeg, horizontal) {
-    const width = Number(w);
-    const height = Number(h);
-    const radians = Number(angleDeg) * Math.PI / 180;
-    if (!isFiniteNumber(width) || !isFiniteNumber(height) || !isFiniteNumber(radians)
-        || width <= 0 || height <= 0) {
-        return 0;
-    }
-    const diagonal = Math.hypot(width, height);
-    const span = gradientVisibleSpan(width, height, angleDeg, horizontal);
-    return 0.5 - 0.5 * Math.min(1, span / diagonal);
+  const width = Number(w);
+  const height = Number(h);
+  const radians = (Number(angleDeg) * Math.PI) / 180;
+  if (
+    !isFiniteNumber(width) ||
+    !isFiniteNumber(height) ||
+    !isFiniteNumber(radians) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return 0;
+  }
+  const diagonal = Math.hypot(width, height);
+  const span = gradientVisibleSpan(width, height, angleDeg, horizontal);
+  return 0.5 - 0.5 * Math.min(1, span / diagonal);
 }
 
 // True when the gradient layer follows the cube (ADR-017). Fixed and any value
 // a hand-edited kwinrc may carry keep the radial focal point at the centre.
 function gradientFollows(mode) {
-    return mode === BackgroundGradientRotation.FollowCube || mode === BackgroundGradientRotation.FollowCubeInverse;
+  return (
+    mode === BackgroundGradientRotation.FollowCube ||
+    mode === BackgroundGradientRotation.FollowCubeInverse
+  );
 }
 
 // Face opacity defaults from config/main.xml (ADR-021). The floor is 0.1,
@@ -267,23 +278,23 @@ const MIN_FACE_OPACITY = 0.1;
 // null/empty/non-finite value uses the schema default; 0 is a real value and
 // still clamps up to the 0.1 floor. The result stays in [0.1, 1].
 function faceOpacity(restOpacity, rotationOpacity, rotating) {
-    // A null/empty stored value means "never configured", not 0 (the floor):
-    // finiteOr maps it to the default of the active branch (ADR-022).
-    let value = finiteOr(rotating === true ? rotationOpacity : restOpacity);
-    if (value === null) {
-        value = rotating === true ? DEFAULT_FACE_ROTATION_OPACITY : DEFAULT_FACE_OPACITY;
-    }
-    return Math.min(1, Math.max(MIN_FACE_OPACITY, value));
+  // A null/empty stored value means "never configured", not 0 (the floor):
+  // finiteOr maps it to the default of the active branch (ADR-022).
+  let value = finiteOr(rotating === true ? rotationOpacity : restOpacity);
+  if (value === null) {
+    value = rotating === true ? DEFAULT_FACE_ROTATION_OPACITY : DEFAULT_FACE_OPACITY;
+  }
+  return Math.min(1, Math.max(MIN_FACE_OPACITY, value));
 }
 
 // Duration of the rest<->rotation opacity fade (FaceFadeMs, 0..1000 ms).
 // 0 is a hard cut; a non-finite value uses the schema default (120 ms).
 function faceFadeDuration(value) {
-    let ms = finiteOr(value);
-    if (ms === null) {
-        ms = 120;
-    }
-    return Math.min(1000, Math.max(0, ms));
+  let ms = finiteOr(value);
+  if (ms === null) {
+    ms = 120;
+  }
+  return Math.min(1000, Math.max(0, ms));
 }
 
 // Sheet geometry (ADR-024): with 1-2 desktops the solid is a sheet of
@@ -298,23 +309,23 @@ const SHEET_AZIMUTH_LIMIT_DEG = 80;
 // desktops both sides are real desktops, and >=3 is the polygon (free wrap).
 // 360 (not Infinity) so every caller compares against the same unit.
 function sheetAzimuthLimit(count) {
-    return count === 1 ? SHEET_AZIMUTH_LIMIT_DEG : 360;
+  return count === 1 ? SHEET_AZIMUTH_LIMIT_DEG : 360;
 }
 
 // Sheet yaw in (-180, 180]: unlike the polygon there is no wrap to keep, so
 // callers normalize BEFORE clamping. Non-finite input is 0 (front view).
 function normalizeSheetAzimuth(azimuth) {
-    const angle = Number(azimuth);
-    if (!isFiniteNumber(angle)) {
-        return 0;
-    }
-    let norm = angle % 360;
-    if (norm > 180) {
-        norm -= 360;
-    } else if (norm <= -180) {
-        norm += 360;
-    }
-    return norm;
+  const angle = Number(azimuth);
+  if (!isFiniteNumber(angle)) {
+    return 0;
+  }
+  let norm = angle % 360;
+  if (norm > 180) {
+    norm -= 360;
+  } else if (norm <= -180) {
+    norm += 360;
+  }
+  return norm;
 }
 
 // The azimuth clamp for the paths that SET a target angle (arrows, states),
@@ -332,24 +343,24 @@ function normalizeSheetAzimuth(azimuth) {
 // clamps the raw delta sum between min and max without normalizing, so a
 // hard pull cannot cross the band and teleport the view.
 function clampAzimuthRange(azimuth, min, max) {
-    const angle = Number(azimuth);
-    if (!isFiniteNumber(angle)) {
-        return 0;
-    }
-    // null/undefined BEFORE Number(): Number(null) is 0 — a finite number —
-    // so coercing first would turn the open range into the degenerate [0, 0]
-    // and park the view at azimuth 0 instead of letting it pass (the ADR-022
-    // lesson, applied to the bounds).
-    if (min === null || min === undefined || max === null || max === undefined) {
-        return angle;
-    }
-    const lo = Number(min);
-    const hi = Number(max);
-    if (!isFiniteNumber(lo) || !isFiniteNumber(hi)) {
-        return angle;
-    }
-    const norm = normalizeSheetAzimuth(angle);
-    return Math.min(hi, Math.max(lo, norm));
+  const angle = Number(azimuth);
+  if (!isFiniteNumber(angle)) {
+    return 0;
+  }
+  // null/undefined BEFORE Number(): Number(null) is 0 — a finite number —
+  // so coercing first would turn the open range into the degenerate [0, 0]
+  // and park the view at azimuth 0 instead of letting it pass (the ADR-022
+  // lesson, applied to the bounds).
+  if (min === null || min === undefined || max === null || max === undefined) {
+    return angle;
+  }
+  const lo = Number(min);
+  const hi = Number(max);
+  if (!isFiniteNumber(lo) || !isFiniteNumber(hi)) {
+    return angle;
+  }
+  const norm = normalizeSheetAzimuth(angle);
+  return Math.min(hi, Math.max(lo, norm));
 }
 
 // Which face of the sheet looks at the camera for a given azimuth: 0 = front,
@@ -357,17 +368,17 @@ function clampAzimuthRange(azimuth, min, max) {
 // viewer). -1 = no sheet (>=3 desktops, 0 mid-sync) or a non-finite azimuth —
 // callers map -1 to a null desktop instead of guessing a face.
 function sheetDesktopAt(azimuth, count) {
-    if (count !== 1 && count !== 2) {
-        return -1;
-    }
-    const angle = Number(azimuth);
-    if (!isFiniteNumber(angle)) {
-        return -1;
-    }
-    if (count === 1) {
-        return 0;
-    }
-    return Math.abs(normalizeSheetAzimuth(angle)) <= 90 ? 0 : 1;
+  if (count !== 1 && count !== 2) {
+    return -1;
+  }
+  const angle = Number(azimuth);
+  if (!isFiniteNumber(angle)) {
+    return -1;
+  }
+  if (count === 1) {
+    return 0;
+  }
+  return Math.abs(normalizeSheetAzimuth(angle)) <= 90 ? 0 : 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -400,26 +411,26 @@ const CYLINDER_SEGMENTS = 64;
 // pins the camera above it); an unset/garbage gap reads as 0 through
 // finiteOr, the ADR-022 rule for null/""/whitespace.
 function cylinderRadius(count, faceWidth, gap) {
-    const faces = Number(count);
-    const width = Number(faceWidth);
-    if (!isFiniteNumber(faces) || !isFiniteNumber(width) || faces < 1 || width <= 0) {
-        return 0;
-    }
-    const value = finiteOr(gap);
-    const effectiveGap = value === null ? 0 : Math.max(0, value);
-    return faces * (width + effectiveGap) / (2 * Math.PI);
+  const faces = Number(count);
+  const width = Number(faceWidth);
+  if (!isFiniteNumber(faces) || !isFiniteNumber(width) || faces < 1 || width <= 0) {
+    return 0;
+  }
+  const value = finiteOr(gap);
+  const effectiveGap = value === null ? 0 : Math.max(0, value);
+  return (faces * (width + effectiveGap)) / (2 * Math.PI);
 }
 
 // Central angle of one arc in RADIANS: theta = W / R (isometry: the arc
 // length R*theta equals W by construction). Degenerate radius (0 or garbage)
 // answers 0; callers treat 0 as "no arc".
 function cylinderArcAngle(faceWidth, radius) {
-    const width = Number(faceWidth);
-    const r = Number(radius);
-    if (!isFiniteNumber(width) || !isFiniteNumber(r) || r <= 0) {
-        return 0;
-    }
-    return width / r;
+  const width = Number(faceWidth);
+  const r = Number(radius);
+  if (!isFiniteNumber(width) || !isFiniteNumber(r) || r <= 0) {
+    return 0;
+  }
+  return width / r;
 }
 
 // One or two faces cannot CLOSE a drum on their own — but with Shape ==
@@ -451,8 +462,6 @@ function cylinderArcAngle(faceWidth, radius) {
 // cylinderSegmentDesktopAt (the band design) are retired; the flat sheet
 // (Shape == Polygon, 1-2) is untouched (ADR-024).
 
-
-
 // The FLAT sheet's symmetric caps expressed as the same [min, max] shape,
 // so the camera has ONE clamp mechanism for every limited form
 // (ADR-024/ADR-025): 1 desktop -> [-80, 80] via SHEET_AZIMUTH_LIMIT_DEG,
@@ -461,8 +470,8 @@ function cylinderArcAngle(faceWidth, radius) {
 // azimuthLimit number: the drag clamps the raw sum the same way, and
 // clampAzimuthRange(azimuth, -80, 80) equals clampSheetAzimuth(azimuth, 80).
 function flatAzimuthRange(count) {
-    const limit = sheetAzimuthLimit(count);
-    return limit >= 360 ? [null, null] : [-limit, limit];
+  const limit = sheetAzimuthLimit(count);
+  return limit >= 360 ? [null, null] : [-limit, limit];
 }
 
 // The turn range the camera must obey, routed by shape (ADR-026, recast by
@@ -477,10 +486,10 @@ function flatAzimuthRange(count) {
 // Strict shape comparison (constants.shape() only ever answers the enum
 // ints). The count argument only matters on the flat branch.
 function azimuthRangeFor(shape, count, hasArcMesh) {
-    if (shape === Shape.Cylinder && hasArcMesh === true) {
-        return [null, null];
-    }
-    return flatAzimuthRange(count);
+  if (shape === Shape.Cylinder && hasArcMesh === true) {
+    return [null, null];
+  }
+  return flatAzimuthRange(count);
 }
 
 // Cull tokens (ADR-025 point 12): 1 = cull back faces (only the arcs' outer
@@ -512,12 +521,12 @@ function azimuthRangeFor(shape, count, hasArcMesh) {
 // user defended) and the cylinder now matches them; the wiring check drives
 // it explicitly to keep the contract of the seed alive.
 function cylinderCullMode(cameraRadius, radius) {
-    const cam = Number(cameraRadius);
-    const r = Number(radius);
-    if (!isFiniteNumber(cam) || !isFiniteNumber(r) || cam <= 0 || r <= 0) {
-        return 0;
-    }
-    return cam > r * 1.05 ? 1 : 0;
+  const cam = Number(cameraRadius);
+  const r = Number(radius);
+  if (!isFiniteNumber(cam) || !isFiniteNumber(r) || cam <= 0 || r <= 0) {
+    return 0;
+  }
+  return cam > r * 1.05 ? 1 : 0;
 }
 
 // The azimuth the ARROW buttons should rotate to (ADR-025 point 13): on a
@@ -577,53 +586,53 @@ function cylinderCullMode(cameraRadius, radius) {
 // Shared by the two face-list branches below (the originals skipped
 // non-finite entries inline, four times over).
 function finiteFaces(list) {
-    if (!Array.isArray(list)) {
-        return [];
+  if (!Array.isArray(list)) {
+    return [];
+  }
+  const out = [];
+  for (const item of list) {
+    const face = Number(item);
+    if (isFiniteNumber(face)) {
+      out.push(face);
     }
-    const out = [];
-    for (const item of list) {
-        const face = Number(item);
-        if (isFiniteNumber(face)) {
-            out.push(face);
-        }
-    }
-    return out;
+  }
+  return out;
 }
 
 // The face the camera stands on (offset within the threshold), or null.
 function standingFace(faces, norm, threshold) {
-    for (const face of faces) {
-        if (Math.abs(normalizeSheetAzimuth(norm - face)) < threshold) {
-            return face;
-        }
+  for (const face of faces) {
+    if (Math.abs(normalizeSheetAzimuth(norm - face)) < threshold) {
+      return face;
     }
-    return null;
+  }
+  return null;
 }
 
 // The nearest face strictly in the requested direction of `norm` (lowest
 // above for right / highest below for left, in normalized space), or null.
 function nextFaceInDirection(faces, norm, step) {
-    let best = null;
-    for (const face of faces) {
-        if (step > 0 ? face > norm : face < norm) {
-            if (best === null || (step > 0 ? face < best : face > best)) {
-                best = face;
-            }
-        }
+  let best = null;
+  for (const face of faces) {
+    if (step > 0 ? face > norm : face < norm) {
+      if (best === null || (step > 0 ? face < best : face > best)) {
+        best = face;
+      }
     }
-    return best;
+  }
+  return best;
 }
 
 // Carousel wrap over ALL faces: lowest for right, highest for left — the
 // first stop past the band edge. null only for an empty list.
 function wrapFace(faces, step) {
-    let best = null;
-    for (const face of faces) {
-        if (best === null || (step > 0 ? face < best : face > best)) {
-            best = face;
-        }
+  let best = null;
+  for (const face of faces) {
+    if (best === null || (step > 0 ? face < best : face > best)) {
+      best = face;
     }
-    return best;
+  }
+  return best;
 }
 
 // Limited-range answer (the sheet-1 [-80, 80] band is today's only real
@@ -634,16 +643,16 @@ function wrapFace(faces, step) {
 // holds. `faces` is numeric-filtered; `norm` the normalized current;
 // `fallback` returned when nothing finite is left.
 function bandedArrowAzimuth(faces, norm, step, threshold, fallback) {
-    const ahead = standingFace(faces, norm, threshold);
-    const candidates = ahead === null ? faces : faces.filter(f => f !== ahead);
-    const best = nextFaceInDirection(candidates, norm, step);
-    if (best !== null) {
-        return best;
-    }
-    // Wrap inside the band over the WHOLE list: the standing face is a
-    // valid wrap target (sheet-1 holds, ADR-024 tested).
-    const wrapped = wrapFace(faces, step);
-    return wrapped === null ? fallback : wrapped;
+  const ahead = standingFace(faces, norm, threshold);
+  const candidates = ahead === null ? faces : faces.filter((f) => f !== ahead);
+  const best = nextFaceInDirection(candidates, norm, step);
+  if (best !== null) {
+    return best;
+  }
+  // Wrap inside the band over the WHOLE list: the standing face is a
+  // valid wrap target (sheet-1 holds, ADR-024 tested).
+  const wrapped = wrapFace(faces, step);
+  return wrapped === null ? fallback : wrapped;
 }
 
 // Open-range answer with holes in the tick grid (ADR-026b, the three-slot
@@ -659,68 +668,73 @@ function bandedArrowAzimuth(faces, norm, step, threshold, fallback) {
 // slerps the short way (same verbatim-sign rule as the grid path).
 // `faces` is numeric-filtered; `centre` the normalized current.
 function ringArrowAzimuth(faces, current, centre, step, threshold) {
-    let ahead = null;
-    let wrap = null;
-    for (const face of faces) {
-        const offset = normalizeSheetAzimuth(face - centre);
-        if (Math.abs(offset) < threshold) {
-            continue;
-        }
-        if (step > 0 ? offset > 0 : offset < 0) {
-            if (ahead === null || Math.abs(offset) < Math.abs(ahead)) {
-                ahead = offset;
-            }
-        } else if (wrap === null || Math.abs(offset) > Math.abs(wrap)) {
-            wrap = offset;
-        }
+  let ahead = null;
+  let wrap = null;
+  for (const face of faces) {
+    const offset = normalizeSheetAzimuth(face - centre);
+    if (Math.abs(offset) < threshold) {
+      continue;
     }
-    // Plain Number.isFinite on purpose, NOT isFiniteNumber(): ahead/wrap are
-    // null sentinels and Number.isFinite(null) is false, so the fallback
-    // chain keeps its meaning. With isFiniteNumber() the null would pass as
-    // 0 and the arrow would stop holding on a one-face band.
-    const offset = Number.isFinite(ahead) ? ahead : wrap;
-    if (offset === null) {
-        return current;
+    if (step > 0 ? offset > 0 : offset < 0) {
+      if (ahead === null || Math.abs(offset) < Math.abs(ahead)) {
+        ahead = offset;
+      }
+    } else if (wrap === null || Math.abs(offset) > Math.abs(wrap)) {
+      wrap = offset;
     }
-    const stop = centre + offset;
-    return stop + 360 * Math.round((current - stop) / 360);
+  }
+  // Plain Number.isFinite on purpose, NOT isFiniteNumber(): ahead/wrap are
+  // null sentinels and Number.isFinite(null) is false, so the fallback
+  // chain keeps its meaning. With isFiniteNumber() the null would pass as
+  // 0 and the arrow would stop holding on a one-face band.
+  const offset = Number.isFinite(ahead) ? ahead : wrap;
+  if (offset === null) {
+    return current;
+  }
+  const stop = centre + offset;
+  return stop + 360 * Math.round((current - stop) / 360);
 }
 
 function arrowAzimuth(currentAzimuth, direction, tick, azimuthMin, azimuthMax, faceAzimuths) {
-    const current = Number(currentAzimuth);
-    if (!isFiniteNumber(current)) {
-        return 0;
-    }
-    const step = Number(direction) < 0 ? -1 : 1;
-    const faces = finiteFaces(faceAzimuths);
-    const lo = Number(azimuthMin);
-    const hi = Number(azimuthMax);
-    const limited = azimuthMin !== null && azimuthMin !== undefined && isFiniteNumber(lo)
-                    && azimuthMax !== null && azimuthMax !== undefined && isFiniteNumber(hi);
-    const t = Number(tick);
+  const current = Number(currentAzimuth);
+  if (!isFiniteNumber(current)) {
+    return 0;
+  }
+  const step = Number(direction) < 0 ? -1 : 1;
+  const faces = finiteFaces(faceAzimuths);
+  const lo = Number(azimuthMin);
+  const hi = Number(azimuthMax);
+  const limited =
+    azimuthMin !== null &&
+    azimuthMin !== undefined &&
+    isFiniteNumber(lo) &&
+    azimuthMax !== null &&
+    azimuthMax !== undefined &&
+    isFiniteNumber(hi);
+  const t = Number(tick);
 
-    if (limited) {
-        if (faces.length === 0) {
-            return current;
-        }
-        const threshold = (isFiniteNumber(t) && t > 0 ? t : 360) * 0.05;
-        return bandedArrowAzimuth(faces, normalizeSheetAzimuth(current), step, threshold, current);
+  if (limited) {
+    if (faces.length === 0) {
+      return current;
     }
+    const threshold = (isFiniteNumber(t) && t > 0 ? t : 360) * 0.05;
+    return bandedArrowAzimuth(faces, normalizeSheetAzimuth(current), step, threshold, current);
+  }
 
-    if (!isFiniteNumber(t) || t <= 0) {
-        return current;
-    }
+  if (!isFiniteNumber(t) || t <= 0) {
+    return current;
+  }
 
-    const slots = Math.round(360 / t);
-    if (slots > 1 && faces.length > 0 && faces.length < slots) {
-        return ringArrowAzimuth(faces, current, normalizeSheetAzimuth(current), step, t * 0.05);
-    }
+  const slots = Math.round(360 / t);
+  if (slots > 1 && faces.length > 0 && faces.length < slots) {
+    return ringArrowAzimuth(faces, current, normalizeSheetAzimuth(current), step, t * 0.05);
+  }
 
-    let next = step > 0 ? Math.ceil(current / t) * t : Math.floor(current / t) * t;
-    if (Math.abs(next - current) < 0.05 * t) {
-        next += step * t;
-    }
-    return next;
+  let next = step > 0 ? Math.ceil(current / t) * t : Math.floor(current / t) * t;
+  if (Math.abs(next - current) < 0.05 * t) {
+    next += step * t;
+  }
+  return next;
 }
 
 // KConfig hands a Url entry as a url value (not a string), and the entry can
@@ -728,14 +742,14 @@ function arrowAzimuth(currentAzimuth, direction, tick, azimuthMin, azimuthMax, f
 // accepted: the compositor must not fetch remote content when the effect
 // activates, and QtQuick3D could not use a remote texture anyway.
 function backgroundImageSource(value) {
-    return localSource(value, ["file", "image"]);
+  return localSource(value, ["file", "image"]);
 }
 
 // Same rules for the video (Background == Video), but narrower: a clip must be
 // a local file. "image:" is rejected (no video provider behind it) and any
 // remote scheme too, for the same reason as the image.
 function videoSource(value) {
-    return localSource(value, ["file"]);
+  return localSource(value, ["file"]);
 }
 
 // ---------------------------------------------------------------------------
@@ -751,26 +765,26 @@ function videoSource(value) {
 // mirroring visible to the eye and to cap pixel gate, removed for cost (doc/trucos-aprendidos.md, section P)
 // (ADR-027 amendment 2).
 const CapContent = {
-    Color: 0,
-    Gradient: 1,
-    Image: 2,
-    Arrow: 3
+  Color: 0,
+  Gradient: 1,
+  Image: 2,
+  Arrow: 3,
 };
 // Matches the CapGradientType enum in config/main.xml. Same order as
 // BackgroundGradientType by design (the cap paints through HullGradient), but
 // it is its OWN table because check-schema.py mirrors EVERY Enum entry of
 // main.xml to a constants.js table of the entry's name.
 const CapGradientType = {
-    LinearVertical: 0,
-    LinearHorizontal: 1,
-    Radial: 2
+  LinearVertical: 0,
+  LinearHorizontal: 1,
+  Radial: 2,
 };
 // Matches the CapImageFit enum in config/main.xml (same order as
 // BackgroundImageFit; own table for the same check-schema reason).
 const CapImageFit = {
-    Cover: 0,
-    Contain: 1,
-    Stretch: 2
+  Cover: 0,
+  Contain: 1,
+  Stretch: 2,
 };
 // Fallback for values that cannot be used: Color is the safest thing a cap
 // can paint (the schema DEFAULT of a fresh kwinrc is Arrow, an intentional
@@ -786,45 +800,45 @@ const DEFAULT_CAP_OPACITY = 80;
 // dimOpacity contract, minus the enabled flag (visibility is CapTop/CapBottom,
 // not the amount, so 0 here is a real transparent cap and must stay 0).
 function capOpacity(value) {
-    let percent = finiteOr(value);
-    if (percent === null) {
-        percent = DEFAULT_CAP_OPACITY;
-    }
-    return Math.min(1, Math.max(0, percent / 100));
+  let percent = finiteOr(value);
+  if (percent === null) {
+    percent = DEFAULT_CAP_OPACITY;
+  }
+  return Math.min(1, Math.max(0, percent / 100));
 }
 
 // Known indexes pass (Arrow since ADR-027 amendment 2); unknown values (a
 // hand-edited kwinrc) still fall back to the solid colour — the safest
 // thing a cap can paint.
 function capContent(value) {
-    if (value === CapContent.Gradient || value === CapContent.Image || value === CapContent.Arrow) {
-        return value;
-    }
-    return DEFAULT_CAP_CONTENT;
+  if (value === CapContent.Gradient || value === CapContent.Image || value === CapContent.Arrow) {
+    return value;
+  }
+  return DEFAULT_CAP_CONTENT;
 }
 
 // Same rule for the gradient type: an unknown value is the linear vertical
 // of the schema default, never a broken index.
 function capGradientType(value) {
-    if (value === CapGradientType.LinearHorizontal || value === CapGradientType.Radial) {
-        return value;
-    }
-    return DEFAULT_CAP_GRADIENT_TYPE;
+  if (value === CapGradientType.LinearHorizontal || value === CapGradientType.Radial) {
+    return value;
+  }
+  return DEFAULT_CAP_GRADIENT_TYPE;
 }
 
 // And the image fit: unknown is Cover, the schema default (imageFit pattern).
 function capImageFit(value) {
-    if (value === CapImageFit.Contain || value === CapImageFit.Stretch) {
-        return value;
-    }
-    return DEFAULT_CAP_IMAGE_FIT;
+  if (value === CapImageFit.Contain || value === CapImageFit.Stretch) {
+    return value;
+  }
+  return DEFAULT_CAP_IMAGE_FIT;
 }
 
 // Cap image: local resources only, the SAME filter as the background image
 // (file: or image:, bare paths kept; the compositor must not fetch anything
 // when the effect activates — 2.2 of doc/requerimientos.md).
 function capImageSource(value) {
-    return localSource(value, ["file", "image"]);
+  return localSource(value, ["file", "image"]);
 }
 
 // The cap MESH generators (capPolygonGeometry / capDiscGeometry) live in
@@ -844,25 +858,25 @@ function capImageSource(value) {
 // is a listed scheme: its authority ("wallpaper") is not a filesystem segment,
 // so a plain path-segment test is what fits here, not a normalized realpath.
 function localSource(value, schemes) {
-    if (value === undefined || value === null) {
-        return "";
-    }
-    const source = String(value);
-    if (source.length === 0) {
-        return "";
-    }
-    const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(source);
-    if (scheme !== null && !schemes.includes(scheme[1])) {
-        return "";
-    }
-    // ".." as a whole path segment, on "/" only: on Linux a backslash is a
-    // legal file-name character, not a separator, so treating it as one would
-    // reject real files for no gain.
-    if (/(^|\/)\.\.(\/|$)/.test(source)) {
-        return "";
-    }
-    if (scheme === null && !source.startsWith("/")) {
-        return "";
-    }
-    return source;
+  if (value === undefined || value === null) {
+    return "";
+  }
+  const source = String(value);
+  if (source.length === 0) {
+    return "";
+  }
+  const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(source);
+  if (scheme !== null && !schemes.includes(scheme[1])) {
+    return "";
+  }
+  // ".." as a whole path segment, on "/" only: on Linux a backslash is a
+  // legal file-name character, not a separator, so treating it as one would
+  // reject real files for no gain.
+  if (/(^|\/)\.\.(\/|$)/.test(source)) {
+    return "";
+  }
+  if (scheme === null && !source.startsWith("/")) {
+    return "";
+  }
+  return source;
 }

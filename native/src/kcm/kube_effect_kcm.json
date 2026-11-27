@@ -1,17 +1,17 @@
 {
-    "KPlugin": {
-        "Authors": [
-            {
-                "Name": "Cesar Guzman"
-            }
-        ],
-        "Description": "Kube Effect Plus diagnostics: build versions, native stamp, feature dependencies, effect reconfiguration and compositor reload for QML code changes.",
-        "Description[es]": "Diagnóstico de Kube Effect Plus: versiones de compilación, stamp nativo, dependencias de features, reconfiguración del efecto y recarga del compositor para cambios de código QML.",
-        "Id": "kcm_kube_effect_plus",
-        "License": "GPL-2.0-or-later",
-        "Name": "Kube Effect Plus",
-        "Name[es]": "Kube Effect Plus"
-    },
-    "X-KDE-System-Settings-Parent-Category": "windowmanagement",
-    "X-KDE-Keywords": "kube,cube,effect,efecto,escritorios,desktops,plasma,native,diagnostico,diagnostics"
+  "KPlugin": {
+    "Authors": [
+      {
+        "Name": "Cesar Guzman"
+      }
+    ],
+    "Description": "Kube Effect Plus diagnostics: build versions, native stamp, feature dependencies, effect reconfiguration and compositor reload for QML code changes.",
+    "Description[es]": "Diagnóstico de Kube Effect Plus: versiones de compilación, stamp nativo, dependencias de features, reconfiguración del efecto y recarga del compositor para cambios de código QML.",
+    "Id": "kcm_kube_effect_plus",
+    "License": "GPL-2.0-or-later",
+    "Name": "Kube Effect Plus",
+    "Name[es]": "Kube Effect Plus"
+  },
+  "X-KDE-System-Settings-Parent-Category": "windowmanagement",
+  "X-KDE-Keywords": "kube,cube,effect,efecto,escritorios,desktops,plasma,native,diagnostico,diagnostics"
 }

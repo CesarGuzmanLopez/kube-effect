@@ -38,31 +38,31 @@ import "constants.js" as Constants
 import "arcGeometry.js" as ArcGeo
 
 Item {
-    id: arcHolder
+  id: arcHolder
 
-    visible: false
-    width: 0
-    height: 0
+  visible: false
+  width: 0
+  height: 0
 
-    // The three numbers that define the arc (bound by Cube.qml through the
-    // Loader: a screen resize or a config change re-runs the generator,
-    // nothing else does) and the fixed segment count (ADR-002: 32-64, 64
-    // chosen for large arcs and close-up zoom).
-    property real faceWidth: 1
-    property real faceHeight: 1
-    property real radius: 0
-    property int segments: Constants.CYLINDER_SEGMENTS
+  // The three numbers that define the arc (bound by Cube.qml through the
+  // Loader: a screen resize or a config change re-runs the generator,
+  // nothing else does) and the fixed segment count (ADR-002: 32-64, 64
+  // chosen for large arcs and close-up zoom).
+  property real faceWidth: 1
+  property real faceHeight: 1
+  property real radius: 0
+  property int segments: Constants.CYLINDER_SEGMENTS
 
-    // Recomputed only when the inputs above change: one object with the
-    // four arrays (130 vertices, 384 indexes), so the mesh properties below
-    // read slices of it without ever re-running the trigonometry.
-    readonly property var arcGeometry: ArcGeo.cylinderArcGeometry(faceWidth, faceHeight, radius, segments)
+  // Recomputed only when the inputs above change: one object with the
+  // four arrays (130 vertices, 384 indexes), so the mesh properties below
+  // read slices of it without ever re-running the trigonometry.
+  readonly property var arcGeometry: ArcGeo.cylinderArcGeometry(faceWidth, faceHeight, radius, segments)
 
-    property ProceduralMesh mesh: ProceduralMesh {
-        primitiveMode: ProceduralMesh.Triangles
-        positions: arcHolder.arcGeometry.positions
-        normals: arcHolder.arcGeometry.normals
-        uv0s: arcHolder.arcGeometry.uvs
-        indexes: arcHolder.arcGeometry.indexes
-    }
+  property ProceduralMesh mesh: ProceduralMesh {
+    primitiveMode: ProceduralMesh.Triangles
+    positions: arcHolder.arcGeometry.positions
+    normals: arcHolder.arcGeometry.normals
+    uv0s: arcHolder.arcGeometry.uvs
+    indexes: arcHolder.arcGeometry.indexes
+  }
 }

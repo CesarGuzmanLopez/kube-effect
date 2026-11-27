@@ -1,0 +1,18 @@
+# KDE C++ guidelines at the project's 2-space indentation (this
+# clang-format has no built-in "KDE" style; this file mirrors its shape:
+# Allman braces, 100 columns, right-aligned pointers/references).
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 2
+BreakBeforeBraces: Allman
+ColumnLimit: 100
+PointerAlignment: Right
+AccessModifierOffset: -2
+DerivePointerAlignment: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IndentCaseLabels: false
+NamespaceIndentation: All

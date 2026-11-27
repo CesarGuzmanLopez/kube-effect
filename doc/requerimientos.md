@@ -10,7 +10,7 @@ por fases, pero el spec es entero).
 - **Escritorio virtual**: uno de los N espacios de trabajo de KDE. El sólido
   coloca uno por **cara**.
 - **Cara (face)**: un lado del sólido; muestra UN escritorio: su **fondo de cara**
-    - sus ventanas.
+  - sus ventanas.
 - **Sólido / forma**: el cuerpo que sostiene las caras. Dos formas:
   **polígono** (N caras planas en un N-gono) y **cilindro** (las mismas caras
   curvadas sobre un cilindro). Sin una tercera forma.
@@ -39,11 +39,11 @@ por fases, pero el spec es entero).
 
 ## 1. Formas y reglas por número de escritorios
 
-| Escritorios | Forma                                                                                                                                      | Interior                                              |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| 1           | Con `Polygon` (default): **hoja simple**, un solo quad; giro limitado a ±80° (el dorso se vería espejado, no debe verse). Con `Cylinder`: **tambor de 3 slots con 2 vacíos** — un arco de W en el slot 0 (azimut 0), los slots 1/2 sin cara: por ahí se ve el casco; giro **libre**, sin topes (§1.2) | **No permitido** (no hay volumen)                     |
+| Escritorios | Forma                                                                                                                                                                                                                                                                                                                                                                  | Interior                                              |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 1           | Con `Polygon` (default): **hoja simple**, un solo quad; giro limitado a ±80° (el dorso se vería espejado, no debe verse). Con `Cylinder`: **tambor de 3 slots con 2 vacíos** — un arco de W en el slot 0 (azimut 0), los slots 1/2 sin cara: por ahí se ve el casco; giro **libre**, sin topes (§1.2)                                                                  | **No permitido** (no hay volumen)                     |
 | 2           | Con `Polygon`: **hoja 2D doble cara**, un quad por escritorio, separación proporcional en z (`sheetGap`, ≥2 unidades); giro completo (cada lado es un escritorio real). Con `Cylinder`: **tambor de 3 slots con 1 vacío** — arcos en los slots 0 y 1 (azimuts 0° y 120°), el slot 2 sin cara (se ve el casco), giro **libre** sin topes, tick de selección 120° (§1.2) | **No permitido** (no hay volumen donde poner objetos) |
-| 3+          | **Polígono** (default) o **Cilindro** — tambor cerrado de N arcos (elegible)                                                               | Sí                                                    |
+| 3+          | **Polígono** (default) o **Cilindro** — tambor cerrado de N arcos (elegible)                                                                                                                                                                                                                                                                                           | Sí                                                    |
 
 **Regla permanente** (re-rectificada, ADR-026): con `Polygon` y 1-2
 escritorios la forma es la hoja plana de siempre (ADR-024 intacto; allí
@@ -102,7 +102,7 @@ y la hoja simple ya es útil (ADR-024).
   sección usaba la notación `arco = R·θ`; se conserva la relación, pero `θ`
   ahora es consecuencia de R (arriba), no un ajuste libre.
 - Cámara: `R` sustituye al apotema del polígono — `faceDistance = viewRadius =
-  R`, y close/distant/límites de zoom usan la infraestructura existente
+R`, y close/distant/límites de zoom usan la infraestructura existente
   (ADR-022/024) sin fórmulas nuevas.
 - **Tambor de tres slots (1-2 escritorios, ADR-025 pt.11 re-rectificado por
   el usuario, ADR-026)**: la banda con topes (primero ±80/±120, después
@@ -110,7 +110,7 @@ y la hoja simple ya es útil (ADR-024).
   "hacían saltos raros y se sentían poco fluidos". Con `Shape = Cylinder` y
   1-2 escritorios el sólido es el propio tambor corriendo con **N = 3**:
   - Geometría fija de 3 slots: `R = 3·(W + g) / (2π)` — `cylinderRadius(3, W,
-    g)`, **el hueco lineal g del usuario aplica** (antes, con el segmento,
+g)`, **el hueco lineal g del usuario aplica** (antes, con el segmento,
     R era el fijo 3W/2π y g no pintaba). Con g = 0 el arco del slot mide
     exactamente un tercio de círculo (θ = 120°).
   - Las caras ocupan los slots 0..count-1 (azimuts 0° y 120° por la grid
@@ -228,7 +228,7 @@ Común:
 ## 2. Sólido: caras
 
 - Cada cara = captura del **wallpaper real** de su escritorio (QML, sin shader)
-    - las ventanas de ese escritorio.
+  - las ventanas de ese escritorio.
 - Sin piel/superficie entre caras.
 - Sin espejo ni reflexión de contenido (exigirían shader; fuera).
 
@@ -240,11 +240,11 @@ reposo vuelven a ser opacas por defecto. Es modificable y aplica a **las dos
 formas**: la opacidad se aplica al material de cada cara, no a su geometría,
 así que la malla curva del cilindro (ADR-025) la hereda sin cambios.
 
-| Clave             | Tipo   | Rango | Default | Requerimiento                                                       |
-| ----------------- | ------ | ----- | ------- | ------------------------------------------------------------------- |
-| `FaceOpacity`     | Double | 0.1–1 | 1       | Opacidad de las caras en reposo (1 = opacas, como el cubo virgen)    |
-| `FaceRotationOpacity` | Double | 0.1–1 | 0.7 | Opacidad de las caras SOLO mientras gira (semitransparente)      |
-| `FaceFadeMs`      | Int    | 0–1000 | 120    | Fundido entre opacidad de reposo y de giro (0 = corte seco)          |
+| Clave                 | Tipo   | Rango  | Default | Requerimiento                                                     |
+| --------------------- | ------ | ------ | ------- | ----------------------------------------------------------------- |
+| `FaceOpacity`         | Double | 0.1–1  | 1       | Opacidad de las caras en reposo (1 = opacas, como el cubo virgen) |
+| `FaceRotationOpacity` | Double | 0.1–1  | 0.7     | Opacidad de las caras SOLO mientras gira (semitransparente)       |
+| `FaceFadeMs`          | Int    | 0–1000 | 120     | Fundido entre opacidad de reposo y de giro (0 = corte seco)       |
 
 Reglas:
 
@@ -262,13 +262,13 @@ Reglas:
 - **Todas las caras se pintan siempre** (ADR-023, sustituye el LOD de
   ADR-022 punto 3): no hay ocultado por orientación. Con `CubeFaceDisplacement
   > 0` los interiores de las caras traseras se ven a través de los huecos
-  entre caras (el cubo usa materiales sin culling); es **intencionado** — es
-  el look del cubo virgen de KDE, y ocultar esas caras abría agujeros por los
-  que asomaba el casco en reposo (medido en el anidado 2026-11-25). El coste
-  de capturas se atacará con LOD real por distancia cuando llegue
-  WindowLayering (§2.1), no por orientación. Con alfa < 1 el material entra en
-  el pase transparente de QtQuick3D, que ya ordena de atrás hacia delante; no
-  se reordena el modelo a mano.
+  > entre caras (el cubo usa materiales sin culling); es **intencionado** — es
+  > el look del cubo virgen de KDE, y ocultar esas caras abría agujeros por los
+  > que asomaba el casco en reposo (medido en el anidado 2026-11-25). El coste
+  > de capturas se atacará con LOD real por distancia cuando llegue
+  > WindowLayering (§2.1), no por orientación. Con alfa < 1 el material entra en
+  > el pase transparente de QtQuick3D, que ya ordena de atrás hacia delante; no
+  > se reordena el modelo a mano.
 
 ## 2.1 Capas de ventana (z-index / separación de ventanas)
 
@@ -301,18 +301,18 @@ separado y pinta un contenido propio (color, degradado o imagen) con su propia
 transparencia. Cierran el volumen por los extremos, pero **no** son una «piel»
 lateral: entre las caras sigue viéndose el casco (ADR-003 intacto en eso).
 
-| Clave             | Tipo  | Rango                                          | Default    | Requerimiento                                                       |
-| ----------------- | ----- | ---------------------------------------------- | ---------- | ------------------------------------------------------------------- |
-| `CapTop`          | Bool  | —                                              | false      | Habilita la tapa superior                                           |
-| `CapBottom`       | Bool  | —                                              | false      | Habilita la tapa inferior                                           |
-| `CapContent`      | Enum  | Color 0 / Gradient 1 / Image 2 / Arrow 3         | **3**      | Qué pinta la tapa: color, degradado, imagen o marcador de orientación (flecha cian + cuadrante magenta; ver abajo) |
-| `CapColor`        | Color | —                                              | `#1b3fd8`  | Color sólido (y respaldo cuando la imagen falla)                    |
-| `CapColor2`       | Color | —                                              | `#0a1a5e`  | Segundo color del degradado                                         |
-| `CapGradientType` | Enum  | LinearVertical 0 / LinearHorizontal 1 / Radial 2 | 0         | Tipo de degradado                                                   |
-| `CapGradientStop` | Int   | 0–100                                          | 50         | Proporción del degradado (posición del corte: 0 = todo `CapColor2` salvo borde, 100 = transición hasta el final) |
-| `CapImage`        | Url   | —                                              | vacío      | Imagen local de la tapa (solo `file:`/ruta local; nada remoto)      |
-| `CapImageFit`     | Enum  | Cover 0 / Contain 1 / Stretch 2                | 0          | Ajuste de la imagen                                                 |
-| `CapOpacity`      | Int   | 0–100                                          | 80         | Opacidad de la tapa (0 = transparente, 100 = opaca)                 |
+| Clave             | Tipo  | Rango                                            | Default   | Requerimiento                                                                                                      |
+| ----------------- | ----- | ------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| `CapTop`          | Bool  | —                                                | false     | Habilita la tapa superior                                                                                          |
+| `CapBottom`       | Bool  | —                                                | false     | Habilita la tapa inferior                                                                                          |
+| `CapContent`      | Enum  | Color 0 / Gradient 1 / Image 2 / Arrow 3         | **3**     | Qué pinta la tapa: color, degradado, imagen o marcador de orientación (flecha cian + cuadrante magenta; ver abajo) |
+| `CapColor`        | Color | —                                                | `#1b3fd8` | Color sólido (y respaldo cuando la imagen falla)                                                                   |
+| `CapColor2`       | Color | —                                                | `#0a1a5e` | Segundo color del degradado                                                                                        |
+| `CapGradientType` | Enum  | LinearVertical 0 / LinearHorizontal 1 / Radial 2 | 0         | Tipo de degradado                                                                                                  |
+| `CapGradientStop` | Int   | 0–100                                            | 50        | Proporción del degradado (posición del corte: 0 = todo `CapColor2` salvo borde, 100 = transición hasta el final)   |
+| `CapImage`        | Url   | —                                                | vacío     | Imagen local de la tapa (solo `file:`/ruta local; nada remoto)                                                     |
+| `CapImageFit`     | Enum  | Cover 0 / Contain 1 / Stretch 2                  | 0         | Ajuste de la imagen                                                                                                |
+| `CapOpacity`      | Int   | 0–100                                            | 80        | Opacidad de la tapa (0 = transparente, 100 = opaca)                                                                |
 
 Geometría por forma (una sola malla compartida, ver abajo):
 
@@ -328,7 +328,7 @@ Geometría por forma (una sola malla compartida, ver abajo):
     Cero regresión del look virgen.
   - `d > 0` (`betaCara < halfStep`): las caras están separadas; 2N
     vértices en las **esquinas reales de cada cara** (`rho = hypot(apotema,
-    W/2)`, azimuts `step·k ± betaCara`). Cada cara queda cubierta de canto
+W/2)`, azimuts `step·k ± betaCara`). Cada cara queda cubierta de canto
     a canto (`|tangencial| = W/2` EXACTO) y el hueco entre caras se cierra
     con una **cuerda recta** entre la esquina derecha de una cara y la
     izquierda de la siguiente — cuerda que queda POR DENTRO de los planos
@@ -338,10 +338,11 @@ Geometría por forma (una sola malla compartida, ver abajo):
   Invariantes duras (medidas por `scripts/check-cap.py`, evaluadas **por
   cara en el marco local de esa cara**, nunca contra ejes del mundo): ningún
   vértice asoma por fuera del plano de ninguna cara (`dot(v, n_k) ≤
-  apotema`) y ninguno cruza la esquina de la cara sobre la que está
+apotema`) y ninguno cruza la esquina de la cara sobre la que está
   (`|dot(v, t_k)| ≤ W/2`). La fórmula antigua (solo el N-gono
   `apotema/cos(π/N)` a cualquier d) sacaba puntas tangenciales de hasta
   +519.6 px (n=3, d=300, W=2560) — ver la enmienda en el ADR-027.
+
 - **Cilindro** (tambor, a cualquier count incluido el tambor de 3 slots con
   1-2 escritorios): la tapa es un **disco** de radio `R = cylinderRadius`
   (la misma `R = N·(W+g)/2π` de ADR-025, con `g` del usuario), triangulado en
@@ -406,20 +407,19 @@ Transparencia y contenido:
 - **Fuera de alcance (todavía no)**: vídeo como contenido de tapa, figuras
   animadas. Se recoge en §7.
 
-
 ## 3. Casco (espacio alrededor) — configurable
 
 El casco es la ZONA (el espacio que rodea al sólido). Se pinta de varias formas
 (modos). **SkyBox no es un modo aparte**: es la variante de "Imagen" con una
 panorámica 360.
 
-| Modo (`Background`)        | Qué pinta                                                                                                                     | Claves reales (tipo, rango, default)                                                                                                 |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Color** (0, default)         | Un color sólido                                                                                                               | `Background` Enum; `BackgroundColor` Color, default `#1b3fd8`                                                                     |
-| **Image** (1)                  | Imagen de fondo. Si el mapeo resuelve equirect **y** gira con el centro es **SkyBox** (entorno 360); si no, capa plana fullscreen estática | `SkyBox` Url (vacío = sin imagen); `BackgroundImageLayout` Enum (ver abajo); `BackgroundImageRotate` Bool default true; `BackgroundColor` actúa de color de respaldo |
-| **Gradient** (2)               | Degradado de dos colores sin shaders (Rectangle + Gradient QML). Tipos: vertical (arriba→abajo), horizontal, radial (real con Shapes; **opcional**: sin el módulo cae al lineal y avisa una vez) | `Background` Enum; `BackgroundGradientType` Enum (ver abajo); `BackgroundColor` Color `#1b3fd8`; `BackgroundColor2` Color `#ff8a00`; `BackgroundGradientStop` Int 0–100, default 50 (posición del corte: 0 = todo color2 salvo borde, 100 = transición hasta el final) |
-| **Video** (3)                  | **Vídeo** de fondo, igual que una imagen con otra fuente: equirect **y** girando = panorama 360 animado en una cúpula (ADR-020); Flat **o** sin girar = capa plana fullscreen con el ajuste. Requiere el módulo opcional QtMultimedia; sin él se pinta `BackgroundColor` y se avisa una vez | `BackgroundVideo` Url (vacío = sin vídeo; solo `file:`); `BackgroundImageLayout` / `BackgroundImageFit` / `BackgroundImageRotate` (compartidas con la imagen); `BackgroundColor` de respaldo |
-| (arena, futuro)                | Atenuación global del casco (0 = sin atenuar, 1 = negro)                                                                      | (sin clave aún) `CascoDim` reservado                                                                                              |
+| Modo (`Background`)    | Qué pinta                                                                                                                                                                                                                                                                                   | Claves reales (tipo, rango, default)                                                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Color** (0, default) | Un color sólido                                                                                                                                                                                                                                                                             | `Background` Enum; `BackgroundColor` Color, default `#1b3fd8`                                                                                                                                                                                                          |
+| **Image** (1)          | Imagen de fondo. Si el mapeo resuelve equirect **y** gira con el centro es **SkyBox** (entorno 360); si no, capa plana fullscreen estática                                                                                                                                                  | `SkyBox` Url (vacío = sin imagen); `BackgroundImageLayout` Enum (ver abajo); `BackgroundImageRotate` Bool default true; `BackgroundColor` actúa de color de respaldo                                                                                                   |
+| **Gradient** (2)       | Degradado de dos colores sin shaders (Rectangle + Gradient QML). Tipos: vertical (arriba→abajo), horizontal, radial (real con Shapes; **opcional**: sin el módulo cae al lineal y avisa una vez)                                                                                            | `Background` Enum; `BackgroundGradientType` Enum (ver abajo); `BackgroundColor` Color `#1b3fd8`; `BackgroundColor2` Color `#ff8a00`; `BackgroundGradientStop` Int 0–100, default 50 (posición del corte: 0 = todo color2 salvo borde, 100 = transición hasta el final) |
+| **Video** (3)          | **Vídeo** de fondo, igual que una imagen con otra fuente: equirect **y** girando = panorama 360 animado en una cúpula (ADR-020); Flat **o** sin girar = capa plana fullscreen con el ajuste. Requiere el módulo opcional QtMultimedia; sin él se pinta `BackgroundColor` y se avisa una vez | `BackgroundVideo` Url (vacío = sin vídeo; solo `file:`); `BackgroundImageLayout` / `BackgroundImageFit` / `BackgroundImageRotate` (compartidas con la imagen); `BackgroundColor` de respaldo                                                                           |
+| (arena, futuro)        | Atenuación global del casco (0 = sin atenuar, 1 = negro)                                                                                                                                                                                                                                    | (sin clave aún) `CascoDim` reservado                                                                                                                                                                                                                                   |
 
 - `BackgroundColor` (#1b3fd8 azul) y `BackgroundColor2` (#ff8a00 naranja) son los
   defaults **nuevos** de `main.xml`, elegidos para que el degradado se note de un
@@ -460,25 +460,25 @@ panorámica 360.
 
 - Objetos 3D y 2D, **animados por defecto**, además de imágenes y vídeos.
 - Capacidad a cubrir (todos):
-    - Objeto 3D **animado** (p. ej. planetas orbitando).
-    - Objeto 3D **estático** (quieto aunque el sólido gire).
-    - **Vídeo** como objeto interior.
-    - **Imagen 2D** estática dentro del sólido (no en la cara).
+  - Objeto 3D **animado** (p. ej. planetas orbitando).
+  - Objeto 3D **estático** (quieto aunque el sólido gire).
+  - **Vídeo** como objeto interior.
+  - **Imagen 2D** estática dentro del sólido (no en la cara).
 - Arranque (2 objetos): **planetas** + **mini-cubo**. Los demás se añaden después,
   pero el sistema debe soportarlos todos.
 - Sólo existe con volumen (3+ escritorios). Con 2 (hoja 2D) queda deshabilitado.
 
 ## 5. Activación y comportamiento
 
-| Clave                  | Tipo   | Rango       | Default | Requerimiento                                                                                                |
-| ---------------------- | ------ | ----------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-| `BorderActivate`       | String | "1,7"       | vacío   | Bordes de pantalla (puntero) que activan el sólido (1=Arriba…8=ArribaIzq)                                    |
-| `TouchBorderActivate`  | String | "5"         | vacío   | Igual, con toque                                                                                             |
-| `MouseInvertedX`       | Bool   | —           | false   | Invertir eje X del arrastre                                                                                  |
-| `MouseInvertedY`       | Bool   | —           | false   | Invertir eje Y del arrastre                                                                                  |
-| `CursorScreenOnly`     | Bool   | —           | false   | Dibuja el cubo solo en el monitor donde está el cursor al lanzarse; el resto de pantallas quedan normales. Sustituye al antiguo «casco por pantalla»; default `false` = todas las pantallas |
+| Clave                  | Tipo   | Rango       | Default | Requerimiento                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------- | ------ | ----------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `BorderActivate`       | String | "1,7"       | vacío   | Bordes de pantalla (puntero) que activan el sólido (1=Arriba…8=ArribaIzq)                                                                                                                                                                                                                                                                                                            |
+| `TouchBorderActivate`  | String | "5"         | vacío   | Igual, con toque                                                                                                                                                                                                                                                                                                                                                                     |
+| `MouseInvertedX`       | Bool   | —           | false   | Invertir eje X del arrastre                                                                                                                                                                                                                                                                                                                                                          |
+| `MouseInvertedY`       | Bool   | —           | false   | Invertir eje Y del arrastre                                                                                                                                                                                                                                                                                                                                                          |
+| `CursorScreenOnly`     | Bool   | —           | false   | Dibuja el cubo solo en el monitor donde está el cursor al lanzarse; el resto de pantallas quedan normales. Sustituye al antiguo «casco por pantalla»; default `false` = todas las pantallas                                                                                                                                                                                          |
 | `CubeFaceDisplacement` | Double | −500…500 px | 100     | Separación entre caras. 0 = caras pegadas; **negativo = se solapan** (el polígono encoge); positivo = huecos. **En cilindro (todos los counts, tambor y tambor de tres slots) es el hueco lineal entre arcos: los valores negativos se tratan como 0** (ADR-025/ADR-026 — g también rige R = 3(W+g)/2π con 1-2). La hoja plana (Polygon 1-2) no lo usa (su separación es `sheetGap`) |
-| `DistanceFactor`       | Double | 0.5–5       | 1.75    | Distancia de la cámara al activar                                                                            |
+| `DistanceFactor`       | Double | 0.5–5       | 1.75    | Distancia de la cámara al activar                                                                                                                                                                                                                                                                                                                                                    |
 
 - Atajo por defecto: **Meta+K**. Se registra con `ShortcutHandler` → **KGlobalAccel**, y se
   cambia en **Preferencias del sistema → Atajos de teclado → KWin → «Toggle Kube Effect»**
@@ -502,33 +502,33 @@ panorámica 360.
 Estas claves viven SOLO aquí; no se reparten por otras pestañas. **Advanced es el
 único sitio para opciones avanzadas.**
 
-| Clave                    | Tipo | Rango | Default | Requerimiento                                                              |
-| ------------------------ | ---- | ----- | ------- | -------------------------------------------------------------------------- |
-| `DimWhileRotating`       | Bool | —     | false   | Oscurece el fondo SOLO mientras el cubo gira; vuelve al soltar             |
-| `DimWhileRotatingAmount` | Int  | 0–100 | 40      | Cuánto se oscurece el fondo al girar (solo con `DimWhileRotating`)        |
+| Clave                    | Tipo | Rango | Default | Requerimiento                                                                         |
+| ------------------------ | ---- | ----- | ------- | ------------------------------------------------------------------------------------- |
+| `DimWhileRotating`       | Bool | —     | false   | Oscurece el fondo SOLO mientras el cubo gira; vuelve al soltar                        |
+| `DimWhileRotatingAmount` | Int  | 0–100 | 40      | Cuánto se oscurece el fondo al girar (solo con `DimWhileRotating`)                    |
 | `CursorScreenOnly`       | Bool | —     | false   | Cubo solo en el monitor del cursor al lanzarse; default `false` = todas las pantallas |
-| `DebugOverlay`           | Bool | —     | false   | Muestra estado interno del efecto en pantalla (diagnóstico)                            |
+| `DebugOverlay`           | Bool | —     | false   | Muestra estado interno del efecto en pantalla (diagnóstico)                           |
 
 Implementación (QML puro, sin C++):
 
 - **Atenuar al girar**: cubre los **cuatro** modos de casco, pero no siempre
   con el mismo objeto:
-    - **Color / Degradado / imagen plana** → un velo negro (`hullDim`) pintado
-      entre el casco y la escena 3D, así que oscurece el fondo y no las caras.
-    - **Imagen 360 equirectangular (SkyBox 3D)** → `SceneEnvironment.probeExposure`
-      (brillo del entorno): el SkyBox lo pinta el entorno 3D, no la capa 2D, así
-      que el velo no lo alcanza y ponerlo delante del `View3D` taparía las caras.
-  Se enciende mientras «el cubo se mueve»: `CubeCameraController.busy` (arrastre
-  con el puntero) **o** la animación de rotación (`Behavior on rotation`, que
-  cubre flechas, activación y cambio de escritorio). El zoom con la rueda no se
-  considera giro. Un `Behavior` de 120 ms funde tanto el velo como la exposición
-  para que no parpadeen cuando el puntero se detiene un frame.
-  Fórmula única en `constants.js`: `skyBoxExposure(enabled, rotating, amount)` =
-  `1.0` (sin atenuar) si `DimWhileRotating` está apagado o el cubo no gira; si
-  no, `1 - dimOpacity(...)` recortado a `[0, 1]` — la misma cantidad que el velo
-  2D. Nunca se aplican los dos a la vez sobre lo mismo: con el SkyBox ya pintado
-  el velo 2D queda apagado (solo cubre el color de respaldo mientras la sonda
-  decodifica).
+  - **Color / Degradado / imagen plana** → un velo negro (`hullDim`) pintado
+    entre el casco y la escena 3D, así que oscurece el fondo y no las caras.
+  - **Imagen 360 equirectangular (SkyBox 3D)** → `SceneEnvironment.probeExposure`
+    (brillo del entorno): el SkyBox lo pinta el entorno 3D, no la capa 2D, así
+    que el velo no lo alcanza y ponerlo delante del `View3D` taparía las caras.
+    Se enciende mientras «el cubo se mueve»: `CubeCameraController.busy` (arrastre
+    con el puntero) **o** la animación de rotación (`Behavior on rotation`, que
+    cubre flechas, activación y cambio de escritorio). El zoom con la rueda no se
+    considera giro. Un `Behavior` de 120 ms funde tanto el velo como la exposición
+    para que no parpadeen cuando el puntero se detiene un frame.
+    Fórmula única en `constants.js`: `skyBoxExposure(enabled, rotating, amount)` =
+    `1.0` (sin atenuar) si `DimWhileRotating` está apagado o el cubo no gira; si
+    no, `1 - dimOpacity(...)` recortado a `[0, 1]` — la misma cantidad que el velo
+    2D. Nunca se aplican los dos a la vez sobre lo mismo: con el SkyBox ya pintado
+    el velo 2D queda apagado (solo cubre el color de respaldo mientras la sonda
+    decodifica).
 - **Vídeo de fondo (dependencia opcional)**: `Background=Video` necesita el
   módulo `QtMultimedia` (paquete `qt6-multimedia` en Arch). Sin él, el
   `HullVideo.qml` cargado por `Loader` queda en `Error`, se avisa **una vez** y el

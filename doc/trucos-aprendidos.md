@@ -19,11 +19,12 @@ KWin::QuickSceneEffect::addScreen → QQml… → QQuickMediaPlayer → QMediaPl
 ```
 
 El backend ffmpeg de QtMultimedia sondea dispositivos HW al construir el
-`MediaPlayer` y uno de ellos abre el X11 *display*. En el anidado ese display era
+`MediaPlayer` y uno de ellos abre el X11 _display_. En el anidado ese display era
 su **propio** Xwayland (`--xwayland :2`), que aún no podía atender porque
 necesita el bucle de eventos de KWin, y KWin estaba esperando al Xwayland.
 
 Arreglo (y por qué el proyecto es **solo Wayland**):
+
 1. El arnés arranca `kwin_wayland` **sin** `--xwayland`: no hay X que esperar.
 2. Por seguridad, además `QT_FFMPEG_DECODING_HW_DEVICE_TYPES=""` en el entorno
    del anidado (el sondeo HW por X11 no tiene nada que hacer aquí).
@@ -48,7 +49,7 @@ No sirve. El caché que manda es el **en memoria** del `QQmlEngine`, no el disco
 ### ✅ VERDADERO: reiniciar KWin, o usar un KWin anidado
 
 - Recarga real: cerrar sesión y volver a entrar. `systemctl --user restart
-  plasma-kwin_wayland.service` NO vale en Wayland (2026-11-25, medido): mata
+plasma-kwin_wayland.service` NO vale en Wayland (2026-11-25, medido): mata
   todos los clientes (plasmashell, kded, apps), el compositor nuevo sale en un
   socket nuevo sin registrar `org.kde.KWin` y nada reconecta; el escritorio
   queda muerto.
@@ -61,7 +62,7 @@ No sirve. El caché que manda es el **en memoria** del `QQmlEngine`, no el disco
   (`org.kde.Shutdown /Shutdown org.kde.Shutdown.logout`); SDDM autologin
   devuelve la sesión y el `kwin_wayland` nuevo compila el QML desde disco. Botón
   secundario «Copiar comando» deja `systemctl --user restart
-  plasma-kwin_wayland.service` para un TTY. No usa `reconfigureEffect` (solo
+plasma-kwin_wayland.service` para un TTY. No usa `reconfigureEffect` (solo
   re-lee la config) ni `kwin_wayland --replace` (X11; en Wayland peor). Se
   niega si `WAYLAND_DISPLAY` contiene `kube-effect-nested` o `KUBE_NESTED=1`
   (el arnés exporta el flag): dentro del anidado el compositor es del script, no
@@ -168,7 +169,7 @@ Verificado en `Quick3D.qmltypes` de Qt 6.12: `Texture.sourceItem` es un
 `QQuickItem` y `VideoOutput` lo es, así que el SkyBox 360 puede muestrear el vídeo
 con `lightProbe: Texture { sourceItem: videoOutput }`. El `VideoOutput` va oculto
 (`visible: false`): `QQuick3DTexture::setSourceItem` registra el item como
-	extit{effect item} (`refFromEffectItem`) y lo renderiza a una capa offscreen, así
+extit{effect item} (`refFromEffectItem`) y lo renderiza a una capa offscreen, así
 que no necesita estar visible. Alternativa si una versión futura de Qt dejara de
 renderizar sourceItems ocultos: degradar el vídeo a **capa plana** (ya soportada) en
 vez de dejar un SkyBox negro.
@@ -358,7 +359,7 @@ Guardas del repo:
   `KGlobalAccel::self()->setShortcut(action, {m_keySequence})` y **Autoloading**: el valor
   guardado en `kglobalshortcutsrc` tiene precedencia sobre el `sequence` del QML.
 - `sequence` es inmutable tras construir el handler: `"ShortcutHandler.sequence cannot be
-  changed"`. Un binding a `configuration.X` solo valora el atajo por defecto al crear el
+changed"`. Un binding a `configuration.X` solo valora el atajo por defecto al crear el
   handler, y aun así perdería contra el valor ya guardado.
 
 **✅ VERDADERO: el atajo se edita en Preferencias del sistema → Atajos de teclado → KWin.**
@@ -404,8 +405,8 @@ en su `config.ui`.
 - **Ruido benigno del anidado** (no son bugs del efecto, no perseguirlos):
   `Activated service 'org.kde.KSplash' failed` (no hay splash en la sesión
   anidada), `kf.coreaddons ... explicitly states an 'Id' in the embedded
-  metadata` (aviso de metadata de un plugin KF6) y `qt.qpa.services: Failed to
-  register with host portal ... App info not found for 'kcm_kube_effect_plus'`
+metadata` (aviso de metadata de un plugin KF6) y `qt.qpa.services: Failed to
+register with host portal ... App info not found for 'kcm_kube_effect_plus'`
   (el KCM nativo lanzado dentro del anidado no puede registrarse en el portal
   del host).
 
@@ -414,12 +415,12 @@ en su `config.ui`.
   `[Containments][N]` con `wallpaperplugin=org.kde.image` y las claves del
   plugin en `[Containments][N][Wallpaper][org.kde.image][General]` → `Image=`
   (URL `file://` con ruta absoluta). Trampeos:
-  * el id del plugin es `org.kde.image`, **no** `image`
+  - el id del plugin es `org.kde.image`, **no** `image`
     (`ls /usr/share/plasma/wallpapers/`);
-  * la clave es `Image` (`type="String"` en
+  - la clave es `Image` (`type="String"` en
     `/usr/share/plasma/wallpapers/org.kde.image/contents/config/main.xml`); no
     existe `url`;
-  * **no hay claves por escritorio virtual** (`Image1`/`Desktop1` no existen):
+  - **no hay claves por escritorio virtual** (`Image1`/`Desktop1` no existen):
     Plasma 6.8.3 sigue sin admitir un wallpaper por escritorio (bug upstream
     155150 abierto; comprobado también en el QML del plugin, que no itera
     escritorios). El único truco conocido es por ACTIVIDADES (un containment por
@@ -428,9 +429,9 @@ en su `config.ui`.
     (`scripts/make-test-wallpaper.py`, PNG generado en la raíz privada, nunca
     commiteado) y ventanas maximizadas `E1..EN` por escritorio
     (`scripts/test-wallpaper-label.py`) para identificar cada cara;
-  * el containment de ESCRITORIO es el bloque con `formfactor=0` (los paneles
+  - el containment de ESCRITORIO es el bloque con `formfactor=0` (los paneles
     traen `formfactor=2`; medido en el host);
-  * plasmashell **no relee ediciones externas** del appletsrc en caliente: el
+  - plasmashell **no relee ediciones externas** del appletsrc en caliente: el
     arnés lo lanza una vez (etapa 1) para que él mismo escriba su containment de
     fábrica — nunca adivinar el `id` ni el vínculo con la actividad —, lo para,
     parchea con `kwriteconfig6` (varios `--group` = grupos anidados; produce
@@ -538,8 +539,8 @@ propio SceneEffect al ver otro componente. Verificado en la fuente de KWin
 de 2 a 4 escritorios con el efecto cargado).
 
 > **SUPERSEDED por ADR-024 (2026-11-25)**: el gate `desktopCount < 3 ?
-> placeholder : cube` ya no existe — `PlaceholderView.qml` se retiró y el
-delegate de `main.qml` es **único** (`ScreenView`), porque `Cube` cambia solo a
+placeholder : cube` ya no existe — `PlaceholderView.qml` se retiró y el
+> delegate de `main.qml` es **único** (`ScreenView`), porque `Cube` cambia solo a
 > hoja con <3 escritorios. La lección sigue viva (el delegate se evalúa una vez
 > por SceneEffect: si mañana volviera a haber dos componentes, el binding sobre
 > un `count` reactivo sigue siendo obligatorio), pero el código que describía
@@ -677,11 +678,11 @@ y `WindowFilterModel.qml`).
 
 Tres gates dibujaban la escena real y se comparaban píxel a píxel:
 
-| fichero | qué protegía |
-|---|---|
+| fichero                                                                   | qué protegía                                                      |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `scripts/check-cap-overlap.py` + `.qml` + `scripts/cap_overlap_oracle.py` | orden de pintado y silueta de las tapas (ADR-027 enmiendas 1 y 2) |
-| `scripts/check-cylinder-overlap.py` + `.qml` | que la pared lejana no quedara encima de las caras (ADR-026) |
-| `scripts/check-video-dome.py` | el vídeo 360 forzado a Stretch y la cúpula pintada (ADR-020) |
+| `scripts/check-cylinder-overlap.py` + `.qml`                              | que la pared lejana no quedara encima de las caras (ADR-026)      |
+| `scripts/check-video-dome.py`                                             | el vídeo 360 forzado a Stretch y la cúpula pintada (ADR-020)      |
 
 **Por qué se fueron:** cada pasada costaba minutos (un proceso hijo por pitch,
 42 filas de grabs) y `check-video-dome` fallaba con la VRAM saturada, así que el

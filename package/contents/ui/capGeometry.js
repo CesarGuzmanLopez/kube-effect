@@ -20,7 +20,7 @@
 // values can arrive as strings, so Number() first (the constants.js rule,
 // kept local because QML script files do not import each other).
 function isFiniteNumber(value) {
-    return Number.isFinite(Number(value));
+  return Number.isFinite(Number(value));
 }
 
 // Azimuth band where the face-corner and the plane-intersection vertices
@@ -97,63 +97,70 @@ const CAP_BETA_TOL = 1e-9;
 // not a polygon, and a non-finite halfHeight means faceSize has not settled
 // yet — mid-sync renders nothing instead of a floating NaN plane.
 function capPolygonGeometry(apothem, faceWidth, sides, halfHeight) {
-    const a = Number(apothem);
-    const w = Number(faceWidth);
-    const rawSides = Number(sides);
-    const h = Number(halfHeight);
-    if (!isFiniteNumber(a) || a <= 0 || !isFiniteNumber(w) || w <= 0
-        || !isFiniteNumber(h) || h <= 0
-        || !isFiniteNumber(rawSides) || Math.floor(rawSides) < 3) {
-        return { positions: [], normals: [], uvs: [], indexes: [] };
+  const a = Number(apothem);
+  const w = Number(faceWidth);
+  const rawSides = Number(sides);
+  const h = Number(halfHeight);
+  if (
+    !isFiniteNumber(a) ||
+    a <= 0 ||
+    !isFiniteNumber(w) ||
+    w <= 0 ||
+    !isFiniteNumber(h) ||
+    h <= 0 ||
+    !isFiniteNumber(rawSides) ||
+    Math.floor(rawSides) < 3
+  ) {
+    return { positions: [], normals: [], uvs: [], indexes: [] };
+  }
+  const n = Math.floor(rawSides);
+  const step = (2 * Math.PI) / n;
+  const halfStep = Math.PI / n;
+  const betaFace = Math.atan(w / 2 / a);
+
+  const alphas = [];
+  let rho;
+  if (betaFace >= halfStep - CAP_BETA_TOL) {
+    // d <= 0: the inscribed N-gon of the original ADR-027 (n vertices,
+    // every edge midpoint on a face plane and on the face azimuth grid).
+    rho = a / Math.cos(halfStep);
+    for (let k = 0; k < n; ++k) {
+      alphas.push(step * (k + 0.5));
     }
-    const n = Math.floor(rawSides);
-    const step = 2 * Math.PI / n;
-    const halfStep = Math.PI / n;
-    const betaFace = Math.atan((w / 2) / a);
-
-    const alphas = [];
-    let rho;
-    if (betaFace >= halfStep - CAP_BETA_TOL) {
-        // d <= 0: the inscribed N-gon of the original ADR-027 (n vertices,
-        // every edge midpoint on a face plane and on the face azimuth grid).
-        rho = a / Math.cos(halfStep);
-        for (let k = 0; k < n; ++k) {
-            alphas.push(step * (k + 0.5));
-        }
-    } else {
-        // d > 0: two vertices per face, the real corners (a, +/- w/2) in the
-        // face's local frame. n >= 3 keeps halfStep <= pi/3 and betaFace
-        // finite, so rho = hypot(a, w/2) is finite and positive.
-        rho = Math.hypot(a, w / 2);
-        for (let k = 0; k < n; ++k) {
-            alphas.push(step * k - betaFace, step * k + betaFace);
-        }
+  } else {
+    // d > 0: two vertices per face, the real corners (a, +/- w/2) in the
+    // face's local frame. n >= 3 keeps halfStep <= pi/3 and betaFace
+    // finite, so rho = hypot(a, w/2) is finite and positive.
+    rho = Math.hypot(a, w / 2);
+    for (let k = 0; k < n; ++k) {
+      alphas.push(step * k - betaFace, step * k + betaFace);
     }
-    const m = alphas.length;
+  }
+  const m = alphas.length;
 
-    const positions = [];
-    const normals = [];
-    const uvs = [];
-    const indexes = [];
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indexes = [];
 
-    // Vertex 0 is the centre; the fan is (0, 1 + i, 1 + (i + 1) mod m),
-    // CCW seen from +Y for increasing azimuth (same outward convention as
-    // the arc mesh).
-    positions.push(Qt.vector3d(0, 0, 0));
+  // Vertex 0 is the centre; the fan is (0, 1 + i, 1 + (i + 1) mod m),
+  // CCW seen from +Y for increasing azimuth (same outward convention as
+  // the arc mesh).
+  positions.push(Qt.vector3d(0, 0, 0));
+  normals.push(Qt.vector3d(0, 1, 0));
+  uvs.push(Qt.vector2d(0.5, 0.5));
+  for (let i = 0; i < m; ++i) {
+    const x = rho * Math.sin(alphas[i]);
+    const z = rho * Math.cos(alphas[i]);
+    positions.push(Qt.vector3d(x, 0, z));
     normals.push(Qt.vector3d(0, 1, 0));
-    uvs.push(Qt.vector2d(0.5, 0.5));
-    for (let i = 0; i < m; ++i) {
-        const x = rho * Math.sin(alphas[i]);
-        const z = rho * Math.cos(alphas[i]);
-        positions.push(Qt.vector3d(x, 0, z));
-        normals.push(Qt.vector3d(0, 1, 0));
-        uvs.push(Qt.vector2d(0.5 + x / (2 * rho), 0.5 + z / (2 * rho)));
-    }
-    for (let i = 0; i < m; ++i) {
-        indexes.push(0, 1 + i, 1 + ((i + 1) % m));
-    }
+    uvs.push(Qt.vector2d(0.5 + x / (2 * rho), 0.5 + z / (2 * rho)));
+  }
+  for (let i = 0; i < m; ++i) {
+    indexes.push(0, 1 + i, 1 + ((i + 1) % m));
+  }
 
-    return { positions: positions, normals: normals, uvs: uvs, indexes: indexes };
+  return { positions: positions, normals: normals, uvs: uvs, indexes: indexes };
 }
 
 // Disc of radius `radius` in the XZ plane (y = 0), fan-triangulated from the
@@ -166,36 +173,42 @@ function capPolygonGeometry(apothem, faceWidth, sides, halfHeight) {
 // (radius <= 0, non-finite halfHeight, fewer than 3 segments) answers EMPTY
 // arrays, exactly like the arc generator's mid-sync rule.
 function capDiscGeometry(radius, segments, halfHeight) {
-    const r = Number(radius);
-    const rawSegments = Number(segments);
-    const h = Number(halfHeight);
-    if (!isFiniteNumber(r) || r <= 0 || !isFiniteNumber(h) || h <= 0
-        || !isFiniteNumber(rawSegments) || Math.floor(rawSegments) < 3) {
-        return { positions: [], normals: [], uvs: [], indexes: [] };
-    }
-    const s = Math.floor(rawSegments);
-    const step = 2 * Math.PI / s;
+  const r = Number(radius);
+  const rawSegments = Number(segments);
+  const h = Number(halfHeight);
+  if (
+    !isFiniteNumber(r) ||
+    r <= 0 ||
+    !isFiniteNumber(h) ||
+    h <= 0 ||
+    !isFiniteNumber(rawSegments) ||
+    Math.floor(rawSegments) < 3
+  ) {
+    return { positions: [], normals: [], uvs: [], indexes: [] };
+  }
+  const s = Math.floor(rawSegments);
+  const step = (2 * Math.PI) / s;
 
-    const positions = [];
-    const normals = [];
-    const uvs = [];
-    const indexes = [];
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indexes = [];
 
-    positions.push(Qt.vector3d(0, 0, 0));
+  positions.push(Qt.vector3d(0, 0, 0));
+  normals.push(Qt.vector3d(0, 1, 0));
+  uvs.push(Qt.vector2d(0.5, 0.5));
+  for (let k = 0; k < s; ++k) {
+    // No half-step offset: a disc is rotationally symmetric, its ring
+    // needs no alignment with the face azimuths (unlike the polygon).
+    const x = r * Math.sin(step * k);
+    const z = r * Math.cos(step * k);
+    positions.push(Qt.vector3d(x, 0, z));
     normals.push(Qt.vector3d(0, 1, 0));
-    uvs.push(Qt.vector2d(0.5, 0.5));
-    for (let k = 0; k < s; ++k) {
-        // No half-step offset: a disc is rotationally symmetric, its ring
-        // needs no alignment with the face azimuths (unlike the polygon).
-        const x = r * Math.sin(step * k);
-        const z = r * Math.cos(step * k);
-        positions.push(Qt.vector3d(x, 0, z));
-        normals.push(Qt.vector3d(0, 1, 0));
-        uvs.push(Qt.vector2d(0.5 + x / (2 * r), 0.5 + z / (2 * r)));
-    }
-    for (let k = 0; k < s; ++k) {
-        indexes.push(0, 1 + k, 1 + ((k + 1) % s));
-    }
+    uvs.push(Qt.vector2d(0.5 + x / (2 * r), 0.5 + z / (2 * r)));
+  }
+  for (let k = 0; k < s; ++k) {
+    indexes.push(0, 1 + k, 1 + ((k + 1) % s));
+  }
 
-    return { positions: positions, normals: normals, uvs: uvs, indexes: indexes };
+  return { positions: positions, normals: normals, uvs: uvs, indexes: indexes };
 }

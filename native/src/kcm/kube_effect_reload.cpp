@@ -9,35 +9,37 @@
 
 namespace KubeReload
 {
-namespace
-{
-// The nested harness points WAYLAND_DISPLAY at its own socket; KUBE_NESTED is
-// the explicit opt-in flag for wrappers that launch the KCM in the same way.
-constexpr auto kNestedSocketMarker = "kube-effect-nested";
-constexpr auto kNestedFlag = "KUBE_NESTED";
-} // namespace
+  namespace
+  {
+    // The nested harness points WAYLAND_DISPLAY at its own socket; KUBE_NESTED is
+    // the explicit opt-in flag for wrappers that launch the KCM in the same way.
+    constexpr auto kNestedSocketMarker = "kube-effect-nested";
+    constexpr auto kNestedFlag = "KUBE_NESTED";
+  } // namespace
 
-bool isNestedSession(const QProcessEnvironment &environment)
-{
-    if (environment.value(QString::fromLatin1(kNestedFlag)) == QLatin1String("1")) {
-        return true;
+  bool isNestedSession(const QProcessEnvironment &environment)
+  {
+    if (environment.value(QString::fromLatin1(kNestedFlag)) == QLatin1String("1"))
+    {
+      return true;
     }
-    return environment.value(QStringLiteral("WAYLAND_DISPLAY")).contains(QString::fromLatin1(kNestedSocketMarker));
-}
+    return environment.value(QStringLiteral("WAYLAND_DISPLAY"))
+        .contains(QString::fromLatin1(kNestedSocketMarker));
+  }
 
-QString serviceUnit()
-{
+  QString serviceUnit()
+  {
     return QStringLiteral("plasma-kwin_wayland.service");
-}
+  }
 
-QStringList restartCommand()
-{
+  QStringList restartCommand()
+  {
     return {
         QStringLiteral("systemctl"),
         QStringLiteral("--user"),
         QStringLiteral("restart"),
         serviceUnit(),
     };
-}
+  }
 
 } // namespace KubeReload

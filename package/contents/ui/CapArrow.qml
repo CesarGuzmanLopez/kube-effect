@@ -44,66 +44,66 @@ import QtQuick
 import QtQuick.Shapes
 
 Item {
-    id: capArrow
+  id: capArrow
 
-    // Solid background so the cap border reads against the hull (the KCM
-    // "Color de las tapas" value, bound by Cap.qml).
-    property color color1: "#1b3fd8"
+  // Solid background so the cap border reads against the hull (the KCM
+  // "Color de las tapas" value, bound by Cap.qml).
+  property color color1: "#1b3fd8"
 
-    Rectangle {
-        anchors.fill: parent
-        color: capArrow.color1
+  Rectangle {
+    anchors.fill: parent
+    color: capArrow.color1
+  }
+
+  // Corner box (handedness marker): a quadrant, not a centred shape, so a
+  // horizontal mirror and a 180 rotation land it in DIFFERENT places.
+  Rectangle {
+    x: 0
+    y: 0
+    width: capArrow.width * 0.42
+    height: capArrow.height * 0.42
+    color: "#ff00ff"
+  }
+
+  // The arrow: head at the item's top edge, tail centred at the bottom.
+  // One closed ShapePath (shaft + barbs), cyan.
+  Shape {
+    anchors.fill: parent
+    ShapePath {
+      strokeColor: "transparent"
+      strokeWidth: 0
+      fillColor: "#00ffff"
+      fillRule: ShapePath.WindingFill
+      startX: capArrow.width * 0.5
+      startY: capArrow.height * 0.08
+      PathLine {
+        x: capArrow.width * 0.8
+        y: capArrow.height * 0.44
+      }
+      PathLine {
+        x: capArrow.width * 0.62
+        y: capArrow.height * 0.44
+      }
+      PathLine {
+        x: capArrow.width * 0.62
+        y: capArrow.height * 0.82
+      }
+      PathLine {
+        x: capArrow.width * 0.38
+        y: capArrow.height * 0.82
+      }
+      PathLine {
+        x: capArrow.width * 0.38
+        y: capArrow.height * 0.44
+      }
+      PathLine {
+        x: capArrow.width * 0.2
+        y: capArrow.height * 0.44
+      }
+      PathLine {
+        x: capArrow.width * 0.5
+        y: capArrow.height * 0.08
+      }
     }
-
-    // Corner box (handedness marker): a quadrant, not a centred shape, so a
-    // horizontal mirror and a 180 rotation land it in DIFFERENT places.
-    Rectangle {
-        x: 0
-        y: 0
-        width: capArrow.width * 0.42
-        height: capArrow.height * 0.42
-        color: "#ff00ff"
-    }
-
-    // The arrow: head at the item's top edge, tail centred at the bottom.
-    // One closed ShapePath (shaft + barbs), cyan.
-    Shape {
-        anchors.fill: parent
-        ShapePath {
-            strokeColor: "transparent"
-            strokeWidth: 0
-            fillColor: "#00ffff"
-            fillRule: ShapePath.WindingFill
-            startX: capArrow.width * 0.5
-            startY: capArrow.height * 0.08
-            PathLine {
-                x: capArrow.width * 0.8
-                y: capArrow.height * 0.44
-            }
-            PathLine {
-                x: capArrow.width * 0.62
-                y: capArrow.height * 0.44
-            }
-            PathLine {
-                x: capArrow.width * 0.62
-                y: capArrow.height * 0.82
-            }
-            PathLine {
-                x: capArrow.width * 0.38
-                y: capArrow.height * 0.82
-            }
-            PathLine {
-                x: capArrow.width * 0.38
-                y: capArrow.height * 0.44
-            }
-            PathLine {
-                x: capArrow.width * 0.2
-                y: capArrow.height * 0.44
-            }
-            PathLine {
-                x: capArrow.width * 0.5
-                y: capArrow.height * 0.08
-            }
-        }
-    }
+  }
 }
