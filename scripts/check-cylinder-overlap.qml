@@ -93,7 +93,11 @@ Item {
             if (child === null || child === undefined) {
                 continue;
             }
-            if (child.materials !== undefined && child.position !== undefined && child.geometry !== undefined) {
+            if (child.materials !== undefined && child.position !== undefined && child.geometry !== undefined && child.kubeCapSurface !== true) {
+                // (kubeCapSurface marks the ADR-027 cap Models: flat closing
+                // surfaces, not desktop faces; they also carry materials, a
+                // position and a geometry, so without this filter the walk
+                // would count them in the face assertions.)
                 const material = child.materials.length > 0 ? child.materials[0] : null;
                 if (material !== null && material !== undefined && material.opacity !== undefined) {
                     faces.push({

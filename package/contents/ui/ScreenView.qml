@@ -567,6 +567,21 @@ Item {
             // desktops it picks the representation (flat sheet vs the
             // three-slot drum, ADR-024/ADR-025 pt.11 re-rectified).
             shape: Constants.shape(effect.configuration.Shape)
+            // Caps (ADR-027): raw config values; Cube resolves every enum /
+            // range through the pure constants.js helpers, so a hand-edited
+            // kwinrc cannot reach the paint with a broken index. Defaults
+            // are off (CapTop/CapBottom false): nothing loads without the
+            // user asking for it.
+            capTop: effect.configuration.CapTop
+            capBottom: effect.configuration.CapBottom
+            capContent: effect.configuration.CapContent
+            capColor: effect.configuration.CapColor
+            capColor2: effect.configuration.CapColor2
+            capGradientType: effect.configuration.CapGradientType
+            capGradientStop: effect.configuration.CapGradientStop
+            capImage: effect.configuration.CapImage
+            capImageFit: effect.configuration.CapImageFit
+            capOpacity: effect.configuration.CapOpacity
             // Live camera distance for the culling seed kept ready
             // (ADR-025 point 12 reverted): the runtime ignores it
             // (faceCullMode is pinned to NoCulling) but the documented

@@ -163,5 +163,69 @@
                 <choice name="Cylinder" />
             </choices>
         </entry>
+        <!-- Caps (ADR-027): the top and bottom closing surfaces of the solid,
+             enabled separately. Enums are stored as INTEGER indexes in kwinrc
+             (a string value breaks the KCM environment); CapOpacity is an Int
+             0-100 like DimWhileRotatingAmount, constants.js capOpacity()
+             converts it to 0..1. CapImage accepts local resources only (file:
+             or bare paths, same filter as the background image): the
+             compositor must not fetch content when the effect activates. The
+             polygon cap's apothem is the live faceDistance and the disc's
+             radius the live cylinderRadius (2.2 of doc/requerimientos.md), so
+             there is no parallel radius key here. Appended last: the
+             convention for new entries, so the stored indexes of existing
+             keys never move. -->
+        <entry name="CapTop" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="CapBottom" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="CapContent" type="Enum">
+            <default>Color</default>
+            <choices>
+                <choice name="Color" />
+                <choice name="Gradient" />
+                <choice name="Image" />
+            </choices>
+        </entry>
+        <entry name="CapColor" type="Color">
+            <!-- Also the fallback when the cap image is missing or broken. -->
+            <default>#1b3fd8</default>
+        </entry>
+        <entry name="CapColor2" type="Color">
+            <default>#0a1a5e</default>
+        </entry>
+        <entry name="CapGradientType" type="Enum">
+            <default>LinearVertical</default>
+            <choices>
+                <choice name="LinearVertical" />
+                <choice name="LinearHorizontal" />
+                <choice name="Radial" />
+            </choices>
+        </entry>
+        <entry name="CapGradientStop" type="Int">
+            <default>50</default>
+            <min>0</min>
+            <max>100</max>
+        </entry>
+        <entry name="CapImage" type="Url">
+            <!-- Local file only (file: or a bare path); remote URLs are
+                 dropped by constants.js capImageSource(). -->
+            <default></default>
+        </entry>
+        <entry name="CapImageFit" type="Enum">
+            <default>Cover</default>
+            <choices>
+                <choice name="Cover" />
+                <choice name="Contain" />
+                <choice name="Stretch" />
+            </choices>
+        </entry>
+        <entry name="CapOpacity" type="Int">
+            <default>80</default>
+            <min>0</min>
+            <max>100</max>
+        </entry>
     </group>
 </kcfg>

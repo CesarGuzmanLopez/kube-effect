@@ -95,6 +95,39 @@ Item {
         check("dim(on, empty)", Constants.dimOpacity(true, ""), 0.4);
         check("dim(undefined, 40)", Constants.dimOpacity(undefined, 40), 0);
 
+        // isFiniteNumber keeps the coercion of the historical global isFinite().
+        // KConfig can hand a numeric string; Number.isFinite() alone would reject
+        // it and silently fall back to the schema default. The mechanical S7773
+        // fix (isFinite -> Number.isFinite wrapped in a Number()) is proven to be
+        // a drop-in for every input the helpers actually see.
+        check("isFiniteNumber(50)", Constants.isFiniteNumber(50), true);
+        check("isFiniteNumber(numeric string)", Constants.isFiniteNumber("50"), true);
+        check("isFiniteNumber(0 string)", Constants.isFiniteNumber("0"), true);
+        check("isFiniteNumber(empty string)", Constants.isFiniteNumber(""), true);
+        check("isFiniteNumber(whitespace)", Constants.isFiniteNumber("  "), true);
+        check("isFiniteNumber(NaN)", Constants.isFiniteNumber(NaN), false);
+        check("isFiniteNumber(Infinity)", Constants.isFiniteNumber(Infinity), false);
+        check("isFiniteNumber(-Infinity)", Constants.isFiniteNumber(-Infinity), false);
+        check("isFiniteNumber(non-numeric string)", Constants.isFiniteNumber("abc"), false);
+        check("isFiniteNumber(null)", Constants.isFiniteNumber(null), true);
+        check("isFiniteNumber(undefined)", Constants.isFiniteNumber(undefined), false);
+        // Identical verdict to the old global on the tricky input: the helper is
+        // a faithful clone, not a stricter filter (empty/whitespace stay finite
+        // here; turning them into "unset" is finiteOr's separate job, tested at
+        // the dim(on, empty) case above, which lands on the default).
+        check("isFiniteNumber matches isFinite('50')", Constants.isFiniteNumber("50"), isFinite("50"));
+        check("isFiniteNumber matches isFinite('')", Constants.isFiniteNumber(""), isFinite(""));
+        // End-to-end: a numeric string is COERCED, not dropped to the default.
+        // The expected value differs from the schema default, so a regression to
+        // bare Number.isFinite() (which would return 0.4 / 0.5 / 0.8 / 1 here)
+        // cannot pass these.
+        check("dim(on, numeric string 100)", Constants.dimOpacity(true, "100"), 1);
+        check("dim(on, numeric string 60)", Constants.dimOpacity(true, "60"), 0.6);
+        check("stop(numeric string 100)", Constants.gradientStopPosition("100"), 1);
+        check("capOpacity(numeric string 100)", Constants.capOpacity("100"), 1);
+        check("faceOpacity(numeric string rest)", Constants.faceOpacity("0.5", 0.7, false), 0.5);
+        check("fade(numeric string 300)", Constants.faceFadeDuration("300"), 300);
+
         // SkyBox exposure: 1.0 when not dimming or not rotating, otherwise the
         // veil opacity is subtracted (same amount as the 2D hull), clamped at 0
         // so a hand-edited amount above 100 cannot turn the value negative.
@@ -528,6 +561,15 @@ Item {
         check("source(null)", Constants.backgroundImageSource(null), "");
         check("source(http)", Constants.backgroundImageSource("http://example.com/sky.jpg"), "");
         check("source(smb)", Constants.backgroundImageSource("smb://host/sky.jpg"), "");
+        // Defence in depth over kwinrc (NOT a sandbox): a bare path must be
+        // absolute, and traversal segments are rejected wherever they appear,
+        // while the documented image: provider keeps working.
+        check("source(relative bare path)", Constants.backgroundImageSource("sky.jpg"), "");
+        check("source(dot relative)", Constants.backgroundImageSource("./sky.jpg"), "");
+        check("source(traversal bare)", Constants.backgroundImageSource("../secrets/sky.jpg"), "");
+        check("source(traversal nested)", Constants.backgroundImageSource("/home/user/../../etc/passwd"), "");
+        check("source(traversal in file url)", Constants.backgroundImageSource("file:///home/user/../x.jpg"), "");
+        check("source(image provider with dots)", Constants.backgroundImageSource("image://wallpaper/a/../b"), "");
 
         // Video source: same local-only rule as the image, but a clip must be a
         // real file. image: is rejected (there is no video provider behind it)
@@ -542,6 +584,152 @@ Item {
         check("video(null)", Constants.videoSource(null), "");
         check("video(image provider)", Constants.videoSource("image://wallpaper/0"), "");
         check("video(http)", Constants.videoSource("http://example.com/clip.mp4"), "");
+        // Same traversal/absolute rule as the image (a clip is file: only).
+        check("video(relative bare path)", Constants.videoSource("clip.mp4"), "");
+        check("video(traversal)", Constants.videoSource("/home/user/../../mnt/usb/clip.mp4"), "");
+        check("video(absolute bare)", Constants.videoSource("/home/user/clip.mp4"), "/home/user/clip.mp4");
         check("video(smb)", Constants.videoSource("smb://host/clip.mp4"), "");
+
+        // Caps (ADR-027): CapOpacity is an Int 0..100 converted to 0..1; 0 is
+        // a real transparent cap (no enabled flag here), anything unusable
+        // falls back to the schema default (80 %).
+        check("capOpacity(0)", Constants.capOpacity(0), 0);
+        check("capOpacity(50)", Constants.capOpacity(50), 0.5);
+        check("capOpacity(80)", Constants.capOpacity(80), 0.8);
+        check("capOpacity(100)", Constants.capOpacity(100), 1);
+        check("capOpacity(150)", Constants.capOpacity(150), 1);
+        check("capOpacity(-20)", Constants.capOpacity(-20), 0);
+        check("capOpacity(null)", Constants.capOpacity(null), 0.8);
+        check("capOpacity(empty)", Constants.capOpacity(""), 0.8);
+        check("capOpacity(undefined)", Constants.capOpacity(undefined), 0.8);
+        check("capOpacity(NaN)", Constants.capOpacity(NaN), 0.8);
+        check("capOpacity(text)", Constants.capOpacity("eighty"), 0.8);
+
+        // Enum resolvers: only the stored indexes pass; unknown values fall
+        // back to the schema defaults (backgroundMode / imageFit pattern).
+        check("capContent(Color)", Constants.capContent(Constants.CapContent.Color), Constants.CapContent.Color);
+        check("capContent(Gradient)", Constants.capContent(Constants.CapContent.Gradient), Constants.CapContent.Gradient);
+        check("capContent(Image)", Constants.capContent(Constants.CapContent.Image), Constants.CapContent.Image);
+        check("capContent(unknown 3)", Constants.capContent(3), Constants.CapContent.Color);
+        check("capContent(-1)", Constants.capContent(-1), Constants.CapContent.Color);
+        check("capContent(undefined)", Constants.capContent(undefined), Constants.CapContent.Color);
+        check("capContent(string)", Constants.capContent("Gradient"), Constants.CapContent.Color);
+        check("capGradientType(LinearVertical)", Constants.capGradientType(Constants.CapGradientType.LinearVertical), Constants.CapGradientType.LinearVertical);
+        check("capGradientType(LinearHorizontal)", Constants.capGradientType(Constants.CapGradientType.LinearHorizontal), Constants.CapGradientType.LinearHorizontal);
+        check("capGradientType(Radial)", Constants.capGradientType(Constants.CapGradientType.Radial), Constants.CapGradientType.Radial);
+        check("capGradientType(unknown 5)", Constants.capGradientType(5), Constants.CapGradientType.LinearVertical);
+        check("capGradientType(null)", Constants.capGradientType(null), Constants.CapGradientType.LinearVertical);
+        check("capImageFit(Cover)", Constants.capImageFit(Constants.CapImageFit.Cover), Constants.CapImageFit.Cover);
+        check("capImageFit(Contain)", Constants.capImageFit(Constants.CapImageFit.Contain), Constants.CapImageFit.Contain);
+        check("capImageFit(Stretch)", Constants.capImageFit(Constants.CapImageFit.Stretch), Constants.CapImageFit.Stretch);
+        check("capImageFit(unknown 9)", Constants.capImageFit(9), Constants.CapImageFit.Cover);
+        check("capImageFit(undefined)", Constants.capImageFit(undefined), Constants.CapImageFit.Cover);
+
+        // Cap image: same local-only filter as the background image (file: or
+        // bare paths; image: allowed; remote schemes dropped).
+        check("capSource(file url)", Constants.capImageSource(h.fileUrl), "file:///home/user/My Wall.jpg");
+        check("capSource(bare url value)", Constants.capImageSource(h.bareUrl), "/home/user/wall.jpg");
+        check("capSource(absolute path)", Constants.capImageSource("/home/user/cap.png"), "/home/user/cap.png");
+        check("capSource(image provider)", Constants.capImageSource("image://wallpaper/0"), "image://wallpaper/0");
+        check("capSource(empty url)", Constants.capImageSource(h.emptyUrl), "");
+        check("capSource(undefined)", Constants.capImageSource(undefined), "");
+        check("capSource(null)", Constants.capImageSource(null), "");
+        check("capSource(http)", Constants.capImageSource("http://example.com/cap.png"), "");
+        check("capSource(smb)", Constants.capImageSource("smb://host/cap.png"), "");
+
+        // Cap generators (ADR-027): the polygon cap is INSCRIBED — its edge
+        // midpoints sit exactly on the apothem (the live faceDistance) and on
+        // the face azimuth grid; the circumradius is derived. Flat y = 0, +Y
+        // normals, centred UVs, CCW fan (cross along +Y). Degenerate inputs
+        // answer EMPTY arrays (mid-sync contract, like the arc generator).
+        const apothem = 1200;
+        const sides = 5;
+        const halfHeight = 720;
+        const circum = apothem / Math.cos(Math.PI / sides);
+        const capPoly = Constants.capPolygonGeometry(apothem, sides, halfHeight);
+        check("capPoly vertices", capPoly.positions.length, sides + 1);
+        check("capPoly triangles", capPoly.indexes.length, sides * 3);
+        check("capPoly centre", capPoly.positions[0].x === 0 && capPoly.positions[0].y === 0 && capPoly.positions[0].z === 0, true);
+        let capOnRing = true;
+        let capFlat = true;
+        let capUp = true;
+        for (let i = 0; i <= sides; ++i) {
+            const p = capPoly.positions[i];
+            if (!isFinite(p.x) || !isFinite(p.y) || !isFinite(p.z) || Math.abs(p.y) > 1e-9) {
+                capFlat = false;
+            }
+            // Qt.vector3d stores float32: compare with a radius-scaled
+            // epsilon (the check-cap.py convention), never a 1e-9 double.
+            if (i > 0 && Math.abs(Math.hypot(p.x, p.z) - circum) > 1e-6 * circum) {
+                capOnRing = false;
+            }
+            const n = capPoly.normals[i];
+            if (Math.abs(n.x) > 1e-9 || Math.abs(n.y - 1) > 1e-9 || Math.abs(n.z) > 1e-9) {
+                capUp = false;
+            }
+        }
+        check("capPoly flat ring at circumradius", capFlat && capOnRing, true);
+        check("capPoly normals +Y", capUp, true);
+        let capMidApothem = true;
+        let capMidGrid = true;
+        let capWinding = true;
+        const step = 2 * Math.PI / sides;
+        for (let k = 0; k < sides; ++k) {
+            const a = capPoly.positions[1 + k];
+            const b = capPoly.positions[1 + (k + 1) % sides];
+            const mid = Math.hypot((a.x + b.x) / 2, (a.z + b.z) / 2);
+            if (Math.abs(mid - apothem) > 1e-6 * apothem) {
+                capMidApothem = false;
+            }
+            const angle = Math.atan2((a.x + b.x) / 2, (a.z + b.z) / 2);
+            const rem = ((angle % step) + step) % step;
+            // float32 coordinates carry ~1e-7 rad of angular noise here.
+            if (Math.min(rem, step - rem) > 1e-5) {
+                capMidGrid = false;
+            }
+            const i0 = capPoly.indexes[k * 3];
+            const i1 = capPoly.indexes[k * 3 + 1];
+            const i2 = capPoly.indexes[k * 3 + 2];
+            if (i0 !== 0 || i1 < 1 || i1 > sides || i2 < 1 || i2 > sides) {
+                capWinding = false;
+                continue;
+            }
+            const p1 = capPoly.positions[i1];
+            const p2 = capPoly.positions[i2];
+            if (p1.z * p2.x - p1.x * p2.z <= 0) {
+                capWinding = false;
+            }
+        }
+        check("capPoly edge midpoints on the apothem", capMidApothem, true);
+        check("capPoly edge midpoints on the face grid", capMidGrid, true);
+        check("capPoly fan CCW seen from +Y", capWinding, true);
+        let capUvOk = true;
+        for (let i = 0; i <= sides; ++i) {
+            const uv = capPoly.uvs[i];
+            const p = capPoly.positions[i];
+            if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1
+                || Math.abs(uv.x - (0.5 + p.x / (2 * circum))) > 1e-6
+                || Math.abs(uv.y - (0.5 + p.z / (2 * circum))) > 1e-6) {
+                capUvOk = false;
+            }
+        }
+        check("capPoly centred UVs in [0,1]", capUvOk, true);
+        const capDisc = Constants.capDiscGeometry(800, 64, halfHeight);
+        check("capDisc vertices", capDisc.positions.length, 65);
+        check("capDisc triangles", capDisc.indexes.length, 64 * 3);
+        let capDiscRing = true;
+        for (let k = 1; k <= 64; ++k) {
+            const p = capDisc.positions[k];
+            if (Math.abs(Math.hypot(p.x, p.z) - 800) > 1e-6 * 800 || Math.abs(p.y) > 1e-9) {
+                capDiscRing = false;
+            }
+        }
+        check("capDisc ring at R, flat", capDiscRing, true);
+        check("capDisc degenerate radius", Constants.capDiscGeometry(0, 64, halfHeight).positions.length, 0);
+        check("capDisc few segments", Constants.capDiscGeometry(800, 2, halfHeight).positions.length, 0);
+        check("capPoly sides below 3", Constants.capPolygonGeometry(1200, 2, halfHeight).positions.length, 0);
+        check("capPoly negative apothem", Constants.capPolygonGeometry(-5, 5, halfHeight).positions.length, 0);
+        check("capPoly zero halfHeight", Constants.capPolygonGeometry(1200, 5, 0).positions.length, 0);
+        check("capPoly garbage input", Constants.capPolygonGeometry("x", "y", "z").positions.length, 0);
     }
 }

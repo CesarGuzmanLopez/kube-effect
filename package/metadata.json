@@ -12,7 +12,7 @@
         "Id": "kube-effect",
         "License": "GPL-2.0-or-later",
         "Name": "Kube Effect",
-        "Version": "0.0.0.4"
+        "Version": "0.0.0.5"
     },
     "X-KDE-Ordering": 60,
     "X-KDE-ConfigModule": "kcm_kwin4_genericscripted",

@@ -227,6 +227,34 @@ def _check_mode_stack(form, problems):
             )
 
 
+def _check_cap_stack(form, problems):
+    """The cap content combo must switch the cap pages (ADR-027).
+
+    Same guard as _check_mode_stack, for the second stacked block of the
+    form: the pages follow the CapContent enum order (Color=0, Gradient=1,
+    Image=2) and the only thing that moves them is the designer connection
+    recreated by QUiLoader, so the wiring has to be exercised, not parsed.
+    """
+    combo = form.findChild(QComboBox, "kcfg_CapContent")
+    stack = form.findChild(QStackedWidget, "capContentStack")
+    if combo is None or stack is None:
+        problems.append("config.ui: kcfg_CapContent and capContentStack are required")
+        return
+    if combo.count() != stack.count():
+        problems.append(
+            f"capContentStack: {stack.count()} pages for {combo.count()} cap contents"
+        )
+        return
+    order = list(range(1, combo.count())) + [0]
+    for index in order:
+        combo.setCurrentIndex(index)
+        if stack.currentIndex() != index:
+            problems.append(
+                f"capContentStack: combo index {index} leaves page {stack.currentIndex()} "
+                "(the <connection> is missing or does not match)"
+            )
+
+
 def _check_advanced_behaviour(form, problems):
     """The Advanced tab is the only dynamic part left besides the mode stack.
 
@@ -302,6 +330,7 @@ def main():
         _check_widget(name, widget, info, problems)
 
     _check_mode_stack(form, problems)
+    _check_cap_stack(form, problems)
     _check_advanced_behaviour(form, problems)
 
     print(f"check-ui: {len(entries)} entries, {len(widgets)} widgets created")

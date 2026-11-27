@@ -3,7 +3,7 @@
 Clon del cubo de escritorios de KDE (efecto KWin en **QML puro**). Arranca como
 el **cubo virgen** de KDE (caras planas en polígono) y crece feature a feature.
 
-- Id: `kube-effect`. Atajo: `Meta+K`. Licencia: GPL-2.0-or-later. Versión: 0.0.0.4.
+- Id: `kube-effect`. Atajo: `Meta+K`. Licencia: GPL-2.0-or-later. Versión: 0.0.0.5.
 
 ## Qué es (estado actual)
 
@@ -16,7 +16,10 @@ espejado)); con Cylinder el sólido es un **tambor de tres posiciones con las
 que faltan vacías** — R = 3(W+g)/2π con el hueco g, caras en 0° y 120°, giro
 libre sin topes, la pared interior se ve como en el polígono (ADR-025 pt.11
 re-rectificado + ADR-026; los topes de banda [-60°,60°]/[-60°,180°] se
-probaron y retiraron). Sobre
+probaron y retiraron). Sobre el sólido pueden cerrarlo arriba y abajo las
+**tapas** (`CapTop`/`CapBottom`, ADR-027: N-gono inscrito o disco según la
+forma, con color/degradado/imagen local propios y opacidad; deshabilitadas por
+código en la hoja 2D). Sobre
 el virgen: **casco configurable** (Color / Imagen / Degradado / **Vídeo**, con sus
 claves en `package/contents/config/main.xml`) y un **KCM genérico con UI
 dinámica** (combo de modo + páginas apiladas vía `<connections>`, sin C++). El

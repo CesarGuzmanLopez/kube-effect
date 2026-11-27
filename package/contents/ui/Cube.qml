@@ -226,6 +226,116 @@ Node {
     // stay so the cylinderCullMode seed (and the wiring check that drives
     // it) keep their contract as the documented alternative.
     property real cameraRadius: 0
+    // -----------------------------------------------------------------
+    // Caps (tapas, ADR-027): the top and bottom closing surfaces, enabled
+    // separately and dead by default (false) so the untouched look is the
+    // cube of before, pixel for pixel. Raw config values arrive here (the
+    // ScreenView binding below passes effect.configuration as-is) and are
+    // RESOLVED here through the pure constants.js helpers, the same way
+    // shape() is resolved upstream: a hand-edited kwinrc can only ever mean
+    // a valid content/fit/gradient type, a 0..1 opacity and a local image.
+    // None of these feeds faceDistance/viewRadius/sheetGap: the cap block
+    // only READS the existing geometry (geometryCount, faceDistance,
+    // cylinderRadius, faceSize), never writes it, so it cannot recreate the
+    // ADR-026b binding-loop class (the capMesh property is consumed by the
+    // two Cap Models and by nothing that measures the camera).
+    property bool capTop: false
+    property bool capBottom: false
+    property int capContent: Constants.CapContent.Color
+    property color capColor: "#1b3fd8"
+    property color capColor2: "#0a1a5e"
+    property int capGradientType: Constants.CapGradientType.LinearVertical
+    property int capGradientStop: 50
+    property url capImage: ""
+    property int capImageFit: Constants.CapImageFit.Cover
+    property int capOpacity: 80
+    // Resolved once here so both caps (and the debug paths later) share one
+    // interpretation of the stored values.
+    readonly property int capContentType: Constants.capContent(capContent)
+    readonly property int capGradientTypeResolved: Constants.capGradientType(capGradientType)
+    readonly property int capImageFitResolved: Constants.capImageFit(capImageFit)
+    readonly property string capImageSource: Constants.capImageSource(capImage)
+    readonly property real capOpacityValue: Constants.capOpacity(capOpacity)
+    // The one log for a broken/absent cap image (both Cap Models funnel
+    // their imageUnavailable signal here; the radialWarned pattern).
+    property bool capImageWarned: false
+    function reportCapImageFailure(reason) {
+        if (cube.capImageWarned) {
+            return;
+        }
+        cube.capImageWarned = true;
+        console.warn("kube-effect: " + reason + "; painting CapColor on the caps instead");
+    }
+    // Caps are volume surfaces: the flat sheet (Polygon at 1-2 desktops,
+    // ADR-024) encloses nothing, so they are disabled BY CODE (ADR-027), not
+    // by an option. cylinderActive picks the silhouette: disc over the drum
+    // (it closes the empty wedges too), inscribed N-gon over the polygon.
+    readonly property bool capsActive: (capTop || capBottom) && !isSheet
+    // ONE mesh for both caps (ADR-027, the shared CylinderArcMesh pattern):
+    // isolated behind a Loader because ProceduralMesh lives in
+    // QtQuick3D.Helpers — without the module only this Loader errors, the
+    // mesh stays null, both caps stay hidden and the cube is untouched (one
+    // engine log line, no console spam). The bindings are the existing
+    // geometry outputs; the generators answer EMPTY arrays while any of them
+    // is degenerate (mid-sync faceSize, displacement past the apothem), so
+    // the mesh simply renders nothing until the numbers settle.
+    Loader {
+        id: capMeshLoader
+        active: cube.capsActive
+        source: "CapMesh.qml"
+        onLoaded: {
+            // Bind, do not assign (the arcMeshLoader lesson): the KCM can
+            // toggle Shape or move the displacement slider, and the screen
+            // can resize, while the caps are open.
+            item.sides = Qt.binding(() => cube.geometryCount);
+            item.apothem = Qt.binding(() => cube.faceDistance);
+            item.radius = Qt.binding(() => cube.cylinderRadius);
+            item.halfHeight = Qt.binding(() => cube.faceSize.height / 2);
+            item.useDisc = Qt.binding(() => cube.cylinderActive);
+        }
+    }
+    // Loader.Ready can still hand a transient null item (ADR-022 guard).
+    readonly property Geometry capMesh: capMeshLoader.status === Loader.Ready && capMeshLoader.item !== null && capMeshLoader.item !== undefined ? capMeshLoader.item.mesh : null
+    // The two closing surfaces at y = +/- faceSize.height/2. The BOTTOM one
+    // is the SAME mesh on a node rotated 180 deg about X (ADR-027: no second
+    // geometry): the rotation flips the +Y normal to -Y (outward down) and
+    // keeps the winding consistent seen from outside. Distinct Y centroids
+    // (+H/2 vs -H/2) extend the ADR-026 ordering rule to the caps: they can
+    // never paint over the front faces.
+    Cap {
+        id: capTopModel
+        visible: cube.capTop && cube.capsActive && cube.capMesh !== null
+        mesh: cube.capMesh
+        position: Qt.vector3d(0, cube.faceSize.height / 2, 0)
+        content: cube.capContentType
+        color1: cube.capColor
+        color2: cube.capColor2
+        gradientType: cube.capGradientTypeResolved
+        gradientStop: cube.capGradientStop
+        imageSource: cube.capImageSource
+        imageFit: cube.capImageFitResolved
+        opacityValue: cube.capOpacityValue
+        onImageUnavailable: cube.reportCapImageFailure(reason)
+    }
+    Cap {
+        id: capBottomModel
+        visible: cube.capBottom && cube.capsActive && cube.capMesh !== null
+        mesh: cube.capMesh
+        position: Qt.vector3d(0, -cube.faceSize.height / 2, 0)
+        // Rotation of the SAME node content: +Y normal becomes -Y, and the
+        // mesh (flat, y = 0 around its origin) lands in the plane y = 0 of
+        // this node — the position above already carries the half-height.
+        eulerRotation.x: 180
+        content: cube.capContentType
+        color1: cube.capColor
+        color2: cube.capColor2
+        gradientType: cube.capGradientTypeResolved
+        gradientStop: cube.capGradientStop
+        imageSource: cube.capImageSource
+        imageFit: cube.capImageFitResolved
+        opacityValue: cube.capOpacityValue
+        onImageUnavailable: cube.reportCapImageFailure(reason)
+    }
     // Culling: NoCulling ALWAYS, every shape (ADR-025 point 12, reverted
     // by the user; ADR-026 keeps the rule): the mirrored inner wall of the
     // far arcs seen through the gaps and edges IS the virgin KDE cube look

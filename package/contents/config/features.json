@@ -94,6 +94,18 @@
         "since": "0.0.0.4"
     },
     {
+        "id": "shape-caps",
+        "label": "Tapas: superior e inferior",
+        "requires": [
+            "QtQuick3D",
+            "QtQuick3D.Helpers"
+        ],
+        "native": false,
+        "notes": "Tapas (ADR-027): superficies de cierre superior e inferior del sólido, habilitables por separado (CapTop/CapBottom, default apagados). Contenido propio por tapa: color (CapColor, también respaldo), degradado (CapColor2, CapGradientType, CapGradientStop — reusa HullGradient, radial opcional vía QtQuick.Shapes) o imagen local (CapImage, CapImageFit; rota/ausente -> CapColor y avisa una vez), con transparencia compartida CapOpacity (Int 0-100, helper capOpacity). Geometría sin fuente paralela: polígono = N-gono INSCRITO con apotema = faceDistance (circunradio derivado), cilindro = disco de radio cylinderRadius (tapa las cuñas vacías del tambor de 3 slots); hoja 2D = deshabilitadas por código. UNA sola ProceduralMesh compartida por las dos tapas (la inferior por rotación del nodo), cargada con Loader aislado (si falta QtQuick3D.Helpers las tapas no se pintan y el cubo queda intacto). Fijado por scripts/check-cap.py.",
+        "status": "stable",
+        "since": "0.0.0.5"
+    },
+    {
         "id": "interior",
         "label": "Interior: objetos decorativos",
         "requires": [

@@ -26,7 +26,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
             <item>
                 <widget class="QLabel" name="versionLabel">
                     <property name="text">
-                        <string>kube-effect 0.0.0.4</string>
+                        <string>kube-effect 0.0.0.5</string>
                     </property>
                     <property name="alignment">
                         <set>Qt::AlignRight|Qt::AlignVCenter</set>
@@ -561,6 +561,283 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                     </layout>
                                 </widget>
                             </item>
+                            <item>
+                                <!-- Caps (ADR-027): the top and bottom closing surfaces, one
+                                     checkbox each (dead by default: without them the cube is
+                                     exactly as before). The content block follows the
+                                     stacked-pages pattern of the background tab: the combo
+                                     kcfg_CapContent drives capContentStack through a designer
+                                     <connection> (the generic KCM has no logic of its own).
+                                     These options only mean something with at least one cap
+                                     enabled, and the caps are disabled by code on the flat 2D
+                                     sheet (1-2 escritorios con Polígono: no hay volumen). -->
+                                <widget class="QGroupBox" name="capGroup">
+                                    <property name="title">
+                                        <string>Tapas (Caps)</string>
+                                    </property>
+                                    <layout class="QVBoxLayout" name="capLayout">
+                                        <item>
+                                            <widget class="QCheckBox" name="kcfg_CapTop">
+                                                <property name="text">
+                                                    <string>Tapa superior (CapTop)</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item>
+                                            <widget class="QCheckBox" name="kcfg_CapBottom">
+                                                <property name="text">
+                                                    <string>Tapa inferior (CapBottom)</string>
+                                                </property>
+                                            </widget>
+                                        </item>
+                                        <item>
+                                            <layout class="QFormLayout" name="capContentForm">
+                                                <item row="0" column="0">
+                                                    <widget class="QLabel" name="capContentLabel">
+                                                        <property name="text">
+                                                            <string>Contenido de las tapas:</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="0" column="1">
+                                                    <!-- Items in main.xml order: Color=0, Gradient=1, Image=2. -->
+                                                    <widget class="QComboBox" name="kcfg_CapContent">
+                                                        <item>
+                                                            <property name="text">
+                                                                <string>Color</string>
+                                                            </property>
+                                                        </item>
+                                                        <item>
+                                                            <property name="text">
+                                                                <string>Degradado (Gradient)</string>
+                                                            </property>
+                                                        </item>
+                                                        <item>
+                                                            <property name="text">
+                                                                <string>Imagen (Image)</string>
+                                                            </property>
+                                                        </item>
+                                                    </widget>
+                                                </item>
+                                            </layout>
+                                        </item>
+                                        <item>
+                                            <!-- One KConfigXT entry binds exactly one widget, and
+                                                 CapColor is also the fallback when the cap image
+                                                 fails, so it lives outside the stack and is always
+                                                 visible (the BackgroundColor pattern). -->
+                                            <layout class="QFormLayout" name="capBaseForm">
+                                                <item row="0" column="0">
+                                                    <widget class="QLabel" name="capColorLabel">
+                                                        <property name="text">
+                                                            <string>Color de las tapas:</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="0" column="1">
+                                                    <widget class="KColorButton" name="kcfg_CapColor" />
+                                                </item>
+                                            </layout>
+                                        </item>
+                                        <item>
+                                            <widget class="QStackedWidget" name="capContentStack">
+                                                <property name="currentIndex">
+                                                    <number>0</number>
+                                                </property>
+
+                                                <!-- 0: Color -->
+                                                <widget class="QWidget" name="capColorPage">
+                                                    <layout class="QFormLayout" name="capColorForm">
+                                                        <item row="0" column="0" colspan="2">
+                                                            <widget class="QLabel" name="capColorHint">
+                                                                <property name="text">
+                                                                    <string>Color: las tapas se pintan con el color de arriba. Con imagen elegida, ese color es el respaldo si la imagen falla.</string>
+                                                                </property>
+                                                                <property name="wordWrap">
+                                                                    <bool>true</bool>
+                                                                </property>
+                                                            </widget>
+                                                        </item>
+                                                    </layout>
+                                                </widget>
+
+                                                <!-- 1: Gradient -->
+                                                <widget class="QWidget" name="capGradientPage">
+                                                    <layout class="QFormLayout" name="capGradientForm">
+                                                        <item row="0" column="0">
+                                                            <widget class="QLabel" name="capGradientTypeLabel">
+                                                                <property name="text">
+                                                                    <string>Tipo de degradado:</string>
+                                                                </property>
+                                                            </widget>
+                                                        </item>
+                                                        <item row="0" column="1">
+                                                            <widget class="QComboBox" name="kcfg_CapGradientType">
+                                                                <item>
+                                                                    <property name="text">
+                                                                        <string>Vertical (LinearVertical)</string>
+                                                                    </property>
+                                                                </item>
+                                                                <item>
+                                                                    <property name="text">
+                                                                        <string>Horizontal (LinearHorizontal)</string>
+                                                                    </property>
+                                                                </item>
+                                                                <item>
+                                                                    <property name="text">
+                                                                        <string>Radial</string>
+                                                                    </property>
+                                                                </item>
+                                                            </widget>
+                                                        </item>
+                                                        <item row="1" column="0">
+                                                            <widget class="QLabel" name="capColor2Label">
+                                                                <property name="text">
+                                                                    <string>Segundo color:</string>
+                                                                </property>
+                                                            </widget>
+                                                        </item>
+                                                        <item row="1" column="1">
+                                                            <widget class="KColorButton" name="kcfg_CapColor2" />
+                                                        </item>
+                                                        <item row="2" column="0">
+                                                            <widget class="QLabel" name="capStopLabel">
+                                                                <property name="text">
+                                                                    <string>Posición del corte:</string>
+                                                                </property>
+                                                            </widget>
+                                                        </item>
+                                                        <item row="2" column="1">
+                                                            <widget class="QSlider" name="kcfg_CapGradientStop">
+                                                                <property name="orientation">
+                                                                    <enum>Qt::Horizontal</enum>
+                                                                </property>
+                                                                <property name="minimum">
+                                                                    <number>0</number>
+                                                                </property>
+                                                                <property name="maximum">
+                                                                    <number>100</number>
+                                                                </property>
+                                                                <property name="tickPosition">
+                                                                    <enum>QSlider::TicksBelow</enum>
+                                                                </property>
+                                                                <property name="tickInterval">
+                                                                    <number>25</number>
+                                                                </property>
+                                                            </widget>
+                                                        </item>
+                                                        <item row="3" column="0" colspan="2">
+                                                            <widget class="QLabel" name="capGradientHint">
+                                                                <property name="text">
+                                                                    <string>Dos colores sobre la tapa (el primero es el color de las tapas). El tipo Radial necesita QtQuick.Shapes; sin ese módulo cae al lineal y avisa una vez (ADR-022).</string>
+                                                                </property>
+                                                                <property name="wordWrap">
+                                                                    <bool>true</bool>
+                                                                </property>
+                                                            </widget>
+                                                        </item>
+                                                    </layout>
+                                                </widget>
+
+                                                <!-- 2: Image -->
+                                                <widget class="QWidget" name="capImagePage">
+                                                    <layout class="QFormLayout" name="capImageForm">
+                                                        <item row="0" column="0">
+                                                            <widget class="QLabel" name="capImageLabel">
+                                                                <property name="text">
+                                                                    <string>Imagen de las tapas:</string>
+                                                                </property>
+                                                            </widget>
+                                                        </item>
+                                                        <item row="0" column="1">
+                                                            <widget class="KUrlRequester" name="kcfg_CapImage" />
+                                                        </item>
+                                                        <item row="1" column="0">
+                                                            <widget class="QLabel" name="capImageFitLabel">
+                                                                <property name="text">
+                                                                    <string>Ajuste de la imagen:</string>
+                                                                </property>
+                                                            </widget>
+                                                        </item>
+                                                        <item row="1" column="1">
+                                                            <widget class="QComboBox" name="kcfg_CapImageFit">
+                                                                <item>
+                                                                    <property name="text">
+                                                                        <string>Cubrir (Cover)</string>
+                                                                    </property>
+                                                                </item>
+                                                                <item>
+                                                                    <property name="text">
+                                                                        <string>Contener (Contain)</string>
+                                                                    </property>
+                                                                </item>
+                                                                <item>
+                                                                    <property name="text">
+                                                                        <string>Estirar (Stretch)</string>
+                                                                    </property>
+                                                                </item>
+                                                            </widget>
+                                                        </item>
+                                                        <item row="2" column="0" colspan="2">
+                                                            <widget class="QLabel" name="capImageHint">
+                                                                <property name="text">
+                                                                    <string>Solo archivos locales (el compositor no descarga al activarse). Si la imagen falta o falla, la tapa se pinta con el color de las tapas y se avisa una vez.</string>
+                                                                </property>
+                                                                <property name="wordWrap">
+                                                                    <bool>true</bool>
+                                                                </property>
+                                                            </widget>
+                                                        </item>
+                                                    </layout>
+                                                </widget>
+                                            </widget>
+                                        </item>
+                                        <item>
+                                            <layout class="QFormLayout" name="capOpacityForm">
+                                                <item row="0" column="0">
+                                                    <widget class="QLabel" name="capOpacityLabel">
+                                                        <property name="text">
+                                                            <string>Opacidad de las tapas (%):</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="0" column="1">
+                                                    <widget class="QSlider" name="kcfg_CapOpacity">
+                                                        <property name="orientation">
+                                                            <enum>Qt::Horizontal</enum>
+                                                        </property>
+                                                        <property name="minimum">
+                                                            <number>0</number>
+                                                        </property>
+                                                        <property name="maximum">
+                                                            <number>100</number>
+                                                        </property>
+                                                        <property name="value">
+                                                            <number>80</number>
+                                                        </property>
+                                                        <property name="tickPosition">
+                                                            <enum>QSlider::TicksBelow</enum>
+                                                        </property>
+                                                        <property name="tickInterval">
+                                                            <number>25</number>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="1" column="0" colspan="2">
+                                                    <widget class="QLabel" name="capHint">
+                                                        <property name="text">
+                                                            <string>Las tapas cierran el sólido por arriba y por abajo (y=±alto de cara/2); entre las caras laterales sigue viéndose el fondo (ADR-003). La poligonal queda inscrita en el prisma; con cilindro es un disco que tapa también las posiciones vacías del tambor de 1-2 escritorios. Con la hoja 2D (Polígono con 1-2 escritorios) no hay volumen: las tapas se desactivan solas. 0 % = transparentes, 100 % = opacas.</string>
+                                                        </property>
+                                                        <property name="wordWrap">
+                                                            <bool>true</bool>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                            </layout>
+                                        </item>
+                                    </layout>
+                                </widget>
+                            </item>
                         </layout>
                     </widget>
 
@@ -929,6 +1206,20 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
             <signal>toggled(bool)</signal>
             <receiver>plusSection</receiver>
             <slot>setVisible(bool)</slot>
+        </connection>
+        <!-- Caps (ADR-027): same stacked-pages pattern as the background mode.
+             The pages follow the CapContent enum order (Color=0, Gradient=1,
+             Image=2), so the combo index IS the page index; QUiLoader
+             recreates this connection and the generic KCM needs nothing
+             else. (Enabling all of this per CapTop/CapBottom cannot be an
+             OR of two checkboxes in designer connections — last signal wins
+             — so the group stays visible with an explanatory hint; the
+             effect itself hides the caps when neither is checked.) -->
+        <connection>
+            <sender>kcfg_CapContent</sender>
+            <signal>currentIndexChanged(int)</signal>
+            <receiver>capContentStack</receiver>
+            <slot>setCurrentIndex(int)</slot>
         </connection>
     </connections>
 </ui>
