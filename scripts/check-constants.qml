@@ -569,6 +569,10 @@ Item {
         check("source(traversal bare)", Constants.backgroundImageSource("../secrets/sky.jpg"), "");
         check("source(traversal nested)", Constants.backgroundImageSource("/home/user/../../etc/passwd"), "");
         check("source(traversal in file url)", Constants.backgroundImageSource("file:///home/user/../x.jpg"), "");
+        // A single "." segment is not traversal, and a backslash is a legal file
+        // name on Linux: both must keep working.
+        check("source(dot dot file)", Constants.backgroundImageSource("/home/user/..jpg"), "/home/user/..jpg");
+        check("source(backslash name)", Constants.backgroundImageSource("/home/user/a\\b.jpg"), "/home/user/a\\b.jpg");
         check("source(image provider with dots)", Constants.backgroundImageSource("image://wallpaper/a/../b"), "");
 
         // Video source: same local-only rule as the image, but a clip must be a

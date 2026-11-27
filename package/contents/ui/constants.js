@@ -994,7 +994,10 @@ function localSource(value, schemes) {
     if (scheme !== null && !schemes.includes(scheme[1])) {
         return "";
     }
-    if (/(^|[\/])\.\.([\/]|$)/.test(source)) {
+    // ".." as a whole path segment, on "/" only: on Linux a backslash is a
+    // legal file-name character, not a separator, so treating it as one would
+    // reject real files for no gain.
+    if (/(^|\/)\.\.(\/|$)/.test(source)) {
         return "";
     }
     if (scheme === null && !source.startsWith("/")) {
