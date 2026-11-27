@@ -16,6 +16,12 @@ SONAR_URL := http://localhost:9000
 SONAR_CONTAINER := kkube-sonar
 SONAR_COMPOSE := docker-compose.sonar.yml
 
+# La versión que ve Sonar es la del paquete, nunca una copia a mano: con
+# sonar-project.properties clavada en 0.0.0.3 TODAS las analíticas eran la misma
+# versión, así que no existía "versión anterior" (New Code = PREVIOUS_VERSION) y
+# las métricas new_* salían sin valor => gate en ERROR permanente.
+KUBE_PKG_VERSION := $(shell python3 -c "import json;print(json.load(open('$(QML_DIR)/metadata.json'))['KPlugin']['Version'])" 2>/dev/null)
+
 # Token local (secrets/ está prohibido para reales): env gana, si no .sonar-token (600, gitignored).
 SONAR_TOKEN ?= $(shell cat .sonar-token 2>/dev/null)
 export SONAR_TOKEN
@@ -66,6 +72,18 @@ lint-ci: check
 # Su --selftest verifica que el validador rechaza mallas rotas (winding
 # invertido, vértice fuera del radio, UV/índice fuera, NaN, triángulo
 # ausente). Se salta (exit 0) si faltan PySide6 o QtQuick3D.Helpers.
+# check-cap.py instancia la malla de tapas REAL (CapMesh.qml -> ProceduralMesh
+# de QtQuick3D.Helpers, ADR-027) en el mismo motor offscreen y exige: polígono
+# INSCRITO — apotema medido = faceDistance del sólido (cada punto medio de
+# lado cae además sobre el azimut de una cara) — y disco con radio =
+# cylinderRadius; todo en el plano y=0 (el nodo ±H/2, una sola malla para las
+# dos tapas, la inferior por rotación), normales exactas +Y unitarias, UVs
+# centradas u=0.5+x/2r, v=0.5+z/2r dentro de [0,1], índices en rango,
+# abanico con winding CCW uniforme visto desde +Y, malla vacía con entradas
+# degeneradas y los dos Models compartiendo la MISMA geometría (el patrón del
+# cubo). Su --selftest verifica que el validador rechaza mallas rotas (NaN,
+# winding invertido, UV/índice fuera, triángulo ausente) en polígono y disco.
+# Se salta (exit 0) si faltan PySide6 o QtQuick3D.Helpers.
 # check-cylinder-wiring.py instancia el Cube.qml REAL (no la malla suelta) contra
 # el stub org.kde.kwin de check-video-dome con Shape=Cylinder: 3 escritorios
 # (tambor: flags, Loader→Ready con Geometry no-nula o fallback documentado sin
@@ -139,6 +157,8 @@ check:
 	@python3 scripts/check-scene-environment.py --selftest
 	@python3 scripts/check-cylinder.py
 	@python3 scripts/check-cylinder.py --selftest
+	@python3 scripts/check-cap.py
+	@python3 scripts/check-cap.py --selftest
 	@python3 scripts/check-cylinder-wiring.py
 	@python3 scripts/check-cylinder-overlap.py
 	@python3 scripts/check-video.py
@@ -165,6 +185,7 @@ sonar-scan:
 		{ echo 'error: SonarQube no responde en localhost:9000; ejecuta make sonar-up' >&2; exit 1; }
 	@python3 scripts/qmllint-sonar.py . build/qmllint-sonar.json
 	@sonar-scanner -Dsonar.host.url=$(SONAR_URL) \
+		-Dsonar.projectVersion=$(KUBE_PKG_VERSION) \
 		-Dsonar.externalIssuesReportPaths=build/qmllint-sonar.json
 
 # SonarQube local COMPARTIDO (contenedores kkube-sonar + kkube-sonar-db, una

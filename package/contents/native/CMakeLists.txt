@@ -10,9 +10,49 @@
 # and reconfigureEffect. It is built on demand (make native) and never
 # automatically.
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.19)
 
 project(kube_effect_native VERSION 0.0.0.3 LANGUAGES CXX)
+
+# The package version lives in package/metadata.json (KPlugin.Version); this
+# project must not keep a second copy of it, or the KCM reports a stale version
+# after a release (it drifted to 0.0.0.3 while the effect shipped 0.0.0.5).
+# file(READ) is relative to CMAKE_CURRENT_SOURCE_DIR, and both layouts resolve:
+# the repository (native/../package) and the installed copy
+# (contents/native/../metadata.json).
+set(kube_metadata_candidates
+    "${CMAKE_CURRENT_SOURCE_DIR}/../package/metadata.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../metadata.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../metadata.json"
+)
+# EXISTS does not normalize ".." (measured with CMake 4.5.1), and
+# CMAKE_CURRENT_SOURCE_DIR is absolute only when -S was given one: resolve
+# every candidate first, then test.
+foreach(kube_candidate IN LISTS kube_metadata_candidates)
+    get_filename_component(kube_candidate "${kube_candidate}" ABSOLUTE)
+    if(NOT kube_metadata AND EXISTS "${kube_candidate}")
+        set(kube_metadata "${kube_candidate}")
+    endif()
+endforeach()
+if(kube_metadata)
+    file(READ "${kube_metadata}" kube_metadata_text)
+    # Index cut + single-line match, not string(JSON) nor a multiline regex:
+    # the ERROR keyword of string(JSON) is gone in CMake 4.5 (it aborts the
+    # configure) and ".*$" does not cross newlines in CMake regex. A missing
+    # key must degrade to a warning, never to a hard error.
+    string(FIND "${kube_metadata_text}" "\"KPlugin\"" kube_kplugin_at)
+    string(SUBSTRING "${kube_metadata_text}" "${kube_kplugin_at}" -1 kube_after_kplugin)
+    string(REGEX MATCH "\"Version\"[ \t]*:[ \t]*\"([0-9][^\"]*)\"" kube_version_match "${kube_after_kplugin}")
+    string(REGEX REPLACE "^\"Version\"[ \t]*:[ \t]*\"([^\"]*)\"$" "\\1" kube_pkg_version "${kube_version_match}")
+    if(kube_pkg_version MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?$")
+        set(PROJECT_VERSION "${kube_pkg_version}")
+    else()
+        message(WARNING "kube-effect: no usable KPlugin.Version in ${kube_metadata}; the KCM keeps reporting ${PROJECT_VERSION}")
+    endif()
+else()
+    message(WARNING "kube-effect: no package/metadata.json next to these sources; the KCM reports the fallback version ${PROJECT_VERSION}")
+endif()
+
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
