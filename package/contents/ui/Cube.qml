@@ -482,8 +482,21 @@ Node {
       }
     }
     const first = faceRepeater.count > 0 ? faceRepeater.objectAt(0) : null;
-    const eff = first !== null && first !== undefined && first.windowLayers !== null && first.windowLayers !== undefined ? Math.round(first.windowLayers.layerSlabEff) : 0;
-    return boxes + "/" + quadsTotal + " eff=" + eff;
+    const wl = first !== null && first !== undefined && first.windowLayers !== null && first.windowLayers !== undefined ? first.windowLayers : null;
+    const eff = wl !== null ? Math.round(wl.layerSlabEff) : 0;
+    // Frame-vs-grab diagnostics (the separation hunt, 2026-11-28): the
+    // FIRST layered window of face 0, box rect and grab rect side by
+    // side. boxW == grabW with a geometry available = the frame == grab
+    // case; box < grab with the margins visible here is the expected
+    // Breeze picture.
+    let diag = "";
+    if (wl !== null && wl.quadCount > 0) {
+      const q = wl.quadAt(0);
+      if (q !== null && q !== undefined && q.win !== null && q.win !== undefined) {
+        diag = " boxW=" + Math.round(q.boxW) + " boxH=" + Math.round(q.boxH) + " grabW=" + Math.round(q.win.width) + " grabH=" + Math.round(q.win.height) + " frame=" + (q.hasFrame ? 1 : 0);
+      }
+    }
+    return boxes + "/" + quadsTotal + " eff=" + eff + diag;
   }
 
   Repeater3D {

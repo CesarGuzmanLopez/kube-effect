@@ -380,17 +380,17 @@ Item {
     // per-position uv formula as the front - u=1 at x=+w/2, u=0 at
     // x=-w/2 - so the mirror emerges from the -z viewpoint exactly like
     // the flat NoCulling quad (a written 1-u would CANCEL it).
-    check("slab back uv at +x is 1", slab.uvs[22].x, 1);
-    check("slab back uv at -x is 0", slab.uvs[20].x, 0);
-    check("slab back uv at +y is 1", slab.uvs[23].y, 1);
+    check("slab back uv at +x is 1", slab.uvs[6].x, 1);
+    check("slab back uv at -x is 0", slab.uvs[4].x, 0);
+    check("slab back uv at +y is 1", slab.uvs[7].y, 1);
     check("slab front normal +z", slab.normals[0].z, 1);
     check("slab front uv bottom-left", slab.uvs[0].x, 0);
     check("slab front uv bottom-left v", slab.uvs[0].y, 0);
     check("slab front uv top-right u", slab.uvs[3].x, 1);
     check("slab front uv top-right v", slab.uvs[3].y, 1);
     check("slab front z at half depth", slab.positions[0].z, 50);
-    check("slab back face normal", slab.normals[20].z, -1);
-    check("slab first side is +x", slab.normals[4].x, 1);
+    check("slab back face normal", slab.normals[4].z, -1);
+    check("slab first side is +x", slab.normals[8].x, 1);
     check("slab degenerate width", LayerGeo.slabVertices(0, 100, 2).positions.length, 0);
     check("slab degenerate depth", LayerGeo.slabVertices(100, 100, -5).indexes.length, 0);
     check("slab garbage input", LayerGeo.slabVertices("x", 100, 100).positions.length, 0);

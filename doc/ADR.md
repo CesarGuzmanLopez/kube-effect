@@ -1572,10 +1572,14 @@ scripting y NO existe en EffectWindow: la primera lectura por ese nombre
 daba undefined y la caja caía al fallback del grab - segunda propiedad
 inventada del día, cazada ya con assert duro `hasFrameNow` + escenario
 `noframe` con NOTE), con fallback al grab solo si el wrapper no expone
-geometry. Gates: subsetCounts [6,24,6] leídos del motor, back
-texturado/espejo/textura compartida, caja == frame (size AND centre) con
-rechazos «posterior losa negra», «espejo ausente», «doble captura», «caja al
-grab (wallpaper band)» y «centro del grab».
+geometry. Gates: subsetCounts [6,6,24] leídos del motor (0 frente, 1
+posterior, 2 cantos), back == mismo material/Texture del frente (una captura,
+un crop) y el sub-rect del frame llevado por la transform position/scale del
+Texture (la malla sigue compartida y estática), caja == frame (size AND centre),
+con rechazos «posterior losa negra», «espejo ausente», «doble captura», «caja al
+grab (wallpaper band)», «centro del grab» y «UVs sin crop». Prueba de píxeles
+one-off (stub con sombra asimétrica): franja contenido→canto 15 px (14 de
+wallpaper) sin crop vs 1 px con crop.
 
 **Canto con luz (medido el mismo 2026-11-28, segunda corrección visual)**: con
 grosor alto la caja dibujaba canto, pero «sin canto sólido, solo un cuadro como

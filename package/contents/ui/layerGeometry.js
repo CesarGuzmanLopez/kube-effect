@@ -179,12 +179,20 @@ function thicknessEffective(raw, fitted) {
 // slabVertices(width, height, depth): an axis-aligned box centred on the
 // origin, FRONT at +depth/2 (the outward normal, +z), BACK at -depth/2,
 // exact width x height in face pixels - one unit is one pixel. Returns
-// {positions, normals, uvs, indexes, frontCount, sideCount, backCount}:
-// the indexes run FRONT first (0..5 = subset 0), then the FOUR SIDES
-// (6..29 = subset 1, sides only - NOT the back any more), then the BACK
-// (30..35 = subset 2). 24 vertices (4 per face), per-face outward
-// normals, CCW seen from OUTSIDE (each entry below hand-checked with
-// (v1-v0) x (v3-v0) = normal), triangles (0,1,3) and (3,2,0).
+// {positions, normals, uvs, indexes, frontCount, backCount, sideCount}:
+// the indexes run FRONT first (0..5 = subset 0), then the BACK (6..11 =
+// subset 1), then the FOUR SIDES (12..35 = subset 2). 24 vertices (4 per
+// face), per-face outward normals, CCW seen from OUTSIDE (each entry
+// below hand-checked with (v1-v0) x (v3-v0) = normal), triangles (0,1,3)
+// and (3,2,0).
+//
+// The frame sub-rect of the grab texture is NOT baked into the vertices:
+// the mesh stays SHARED (one static instance like the arc) and the crop
+// rides on the per-layer Texture (positionU/scaleU/positionV/scaleV -
+// documented to map mesh uv into texture space, bottom-left origin like
+// these UVs; verified on this Qt). front and back reference the SAME
+// Texture object, so the sub-rect applies to both and the mirror stays a
+// pure consequence of the per-position UVs.
 //
 // UV convention - all in the SAME per-position formula
 // uv = (0.5 + x/width, 0.5 + y/height): the front keeps the proven
@@ -216,9 +224,13 @@ function slabVertices(width, height, depth) {
   // Corners are listed CCW seen from outside, and EVERY face uses the
   // same per-position uv formula built from the corner coordinates.
   const faces = [
-    // front (+z): subset 0.
+    // front (+z): SUBSET 0.
     { n: [0, 0, 1], c: [[-hw, -hh, hd], [hw, -hh, hd], [-hw, hh, hd], [hw, hh, hd]] },
-    // right (+x): subset 1 starts here...
+    // back (-z): SUBSET 1 - same per-position uv formula as the front, so
+    // with the SAME transformed Texture it reads MIRRORED from -z exactly
+    // like the flat quad (and from the front it is culled away).
+    { n: [0, 0, -1], c: [[-hw, -hh, -hd], [-hw, hh, -hd], [hw, -hh, -hd], [hw, hh, -hd]] },
+    // right (+x): SUBSET 2 (the four sides) starts here.
     { n: [1, 0, 0], c: [[hw, -hh, hd], [hw, -hh, -hd], [hw, hh, hd], [hw, hh, -hd]] },
     // left (-x)
     { n: [-1, 0, 0], c: [[-hw, -hh, -hd], [-hw, -hh, hd], [-hw, hh, -hd], [-hw, hh, hd]] },
@@ -226,9 +238,6 @@ function slabVertices(width, height, depth) {
     { n: [0, 1, 0], c: [[-hw, hh, hd], [hw, hh, hd], [-hw, hh, -hd], [hw, hh, -hd]] },
     // bottom (-y)
     { n: [0, -1, 0], c: [[-hw, -hh, -hd], [hw, -hh, -hd], [-hw, -hh, hd], [hw, -hh, hd]] },
-    // back (-z): subset 2 - same per-position uv formula as the front,
-    // which makes it read MIRRORED from -z exactly like the flat quad.
-    { n: [0, 0, -1], c: [[-hw, -hh, -hd], [-hw, hh, -hd], [hw, -hh, -hd], [hw, hh, -hd]] },
   ];
   const positions = [];
   const normals = [];
@@ -241,8 +250,15 @@ function slabVertices(width, height, depth) {
       positions.push(Qt.vector3d(face.c[c][0], face.c[c][1], face.c[c][2]));
       normals.push(Qt.vector3d(face.n[0], face.n[1], face.n[2]));
       // Per-position uv (the mirror of the back face emerges from the
-      // viewpoint, see the numbered convention above).
-      uvs.push(Qt.vector2d(0.5 + face.c[c][0] / w, 0.5 + face.c[c][1] / h));
+      // viewpoint, see the numbered convention above). With a subUv the
+      // FRONT (and with it the mirrored BACK) is restricted to the frame's
+      // sub-rectangle of the GRAB texture: the visible content lands 1:1
+      // on the frame-sized face instead of being compressed - the fix for
+      // the asymmetric Breeze shadow (measured 2026-11-28: the band to the
+      // right/bottom). The sides keep a planar uv (uniform colour).
+      const ux = 0.5 + face.c[c][0] / w;
+      const vy = 0.5 + face.c[c][1] / h;
+      uvs.push(Qt.vector2d(ux, vy));
     }
     indexes.push(base + 0, base + 1, base + 3, base + 3, base + 2, base + 0);
   }
@@ -252,10 +268,45 @@ function slabVertices(width, height, depth) {
     uvs: uvs,
     indexes: indexes,
     frontCount: 6,
-    sideCount: 24,
-    backCount: 6
+    backCount: 6,
+    sideCount: 24
   };
 }
+
+// slabSubUv: the sub-rectangle of the FRAME inside the GRAB texture.
+// Screen pixels, y down; the result uses the proven bottom-left v
+// convention: v0 is the BOTTOM edge of the frame (screen y = gy+gh,
+// farthest from the top) so v grows with the face's +y, exactly like the
+// identity UVs (v = 0.5 + y/H) it degenerates to when frame == grab.
+function slabSubUv(frame, grab) {
+  const fx = finiteOr(frame.x);
+  const fy = finiteOr(frame.y);
+  const fw = finiteOr(frame.width);
+  const fh = finiteOr(frame.height);
+  const gx = finiteOr(grab.x);
+  const gy = finiteOr(grab.y);
+  const gw = finiteOr(grab.width);
+  const gh = finiteOr(grab.height);
+  if (fx === null || fy === null || fw === null || fh === null || gx === null || gy === null || gw === null || gh === null) {
+    return null;
+  }
+  if (gw <= 0 || gh <= 0 || fw <= 0 || fh <= 0) {
+    return null;
+  }
+  const u0 = (fx - gx) / gw;
+  const u1 = (fx + fw - gx) / gw;
+  // v from the BOTTOM of the frame upward (bottom-left origin).
+  const v0 = (gy + gh - (fy + fh)) / gh;
+  const v1 = (gy + gh - fy) / gh;
+  if (u0 < 0 || u1 > 1 || v0 < 0 || v1 > 1 || u1 <= u0 || v1 <= v0) {
+    // A frame poking outside the grab is not a sub-rect (corrupted or
+    // unexpected geometry): answer null -> the caller keeps the identity
+    // UVs and the old compression-free behaviour.
+    return null;
+  }
+  return { u0: u0, v0: v0, u1: u1, v1: v1 };
+}
+
 function edgeColor(rawColor) {
   if (typeof rawColor !== "string") {
     return EDGE_COLOR_DEFAULT;

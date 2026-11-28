@@ -3,43 +3,44 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-// The window-slab box mesh (ADR-028 fourth amendment, final design after
-// the bevel was measured 2026-11-28).
+// The window-slab box mesh (ADR-028 fourth amendment).
 //
-// ONE ProceduralMesh, a closed unit box (100 x 100 x 100 — the "#Rectangle"
-// pixel convention: per-window dimensions and the effective thickness
-// arrive through the Model scale, never through the vertices) with TWO
-// material subsets: indexes 0..5 are the FRONT face (subset 0 -> the
-// textured WindowThumbnail material, proven #Rectangle UVs from
-// layerGeometry.slabVertices), the next 24 are the FOUR SIDES (subset 1 ->
-// the uniform edge colour) and the last 6 are the BACK (subset 2 -> the
-// SAME shared Texture, mirrored by per-position UVs: from behind the box
-// reads like the flat NoCulling quad - the same window, reversed - not a
-// dark slab). The subset order IS
-// the Model.materials order (the documented ProceduralMesh rule), so
-// "which index is the front" is not a guess — it is built here: the front
-// is subset 0 by construction. (The first attempt assumed
-// Model.customMaterials[0..5] = front/right/back/...; verified against the
-// live Qt 6.12 engine: customMaterials is not a property of Model at all,
-// and the built-in #Cube is a single subset.)
+// ONE shared ProceduralMesh (like the arc and the caps): a closed unit box
+// (100 x 100 x 100 - the "#Rectangle" pixel convention; per-window size and
+// the EFFECTIVE thickness arrive through the Model scale, never through
+// vertices) with THREE material subsets splitting the one indexes list, so
+// their order IS the Model.materials order:
+//   subset 0 = FRONT   (indexes 0..5)   -> materials[0]: textured
+//   subset 1 = BACK    (indexes 6..11)  -> materials[1]: the SAME textured
+//             material object - the glass-like mirror comes from the
+//             per-position UVs and the viewpoint, never from a second
+//             capture (a coloured back read as a dark slab - measured
+//             2026-11-28 - which is why the back left the sides subset)
+//   subset 2 = SIDES   (indexes 12..35) -> materials[2]: the lit edge
+//             colour
+// "Which index is the front" is built here, not guessed: Model has NO
+// customMaterials in Qt 6.12 (verified against the live engine) and the
+// built-in #Cube is a single subset; ProceduralMeshSubset only carries
+// offset/count/name (its boundsMin/boundsMax once made this file a
+// permanent Loader.Error - also measured).
+//
+// The frame's sub-rect of the grab texture lives on the per-layer Texture
+// (positionU/scaleU/positionV/scaleV - the documented Texture coordinate
+// transform, bottom-left origin like these UVs), NOT here: the mesh stays
+// static and shared, no per-window rebuilds at all.
 //
 // Like CylinderArcMesh.qml and CapMesh.qml this is one of the ONLY files
 // importing QtQuick3D.Helpers, reached through a Loader source URL
 // compiled at RUNTIME: a system without the module fails only this Loader
-// — WindowLayers.slabBox stays null, every layer keeps the flat
-// #Rectangle (thickness degrades to nothing) and the cube still works.
-// The root is a zero-size holder Item because a Loader can only load
-// Item-based components; the geometry it exposes is a plain ProceduralMesh
-// referenced by every slab Model (one shared mesh per face component, the
-// arc pattern).
+// - slabBox stays null and every layer keeps the flat built-in #Rectangle
+// (the thickness degrades, the effect survives). The root is a zero-size
+// holder Item because a Loader can only load Item-based components.
 //
-// Culling note (the measured bug): the box is rendered with
-// BackFaceCulling on both materials. With NoCulling the transparent
-// shadow margins of the thumbnail (pixels the Mask front discards under
-// the cutoff) showed the box's own black BACK/inner side — a giant bezel
-// around every window. A closed, culled box has no inner surfaces to
-// leak: those margin pixels fall through to the plate/interior exactly as
-// in the flat model.
+// Culling (see WindowLayers): all three materials are BackFaceCulling on
+// the box; from outside you see the textured front (or, from behind, the
+// mirrored back), never the box's inner walls - the NoCulling variant
+// showed the black interior through the thumbnail's transparent shadow
+// margins (the measured bezel, 2026-11-28).
 
 import QtQuick
 import QtQuick3D.Helpers
@@ -53,8 +54,7 @@ Item {
   width: 0
   height: 0
 
-  // The unit box: rebuilt never (the numbers are constants - the windows
-  // differ only in the Model scale).
+  // The unit box: rebuilt never (the numbers are constants).
   readonly property var box: LayerGeometry.slabVertices(100, 100, 100)
 
   property ProceduralMesh mesh: ProceduralMesh {
@@ -64,15 +64,6 @@ Item {
     uv0s: slabHolder.box.uvs
     indexes: slabHolder.box.indexes
     subsets: [
-      // Three subsets, split of the ONE indexes list; the order IS
-      // Model.materials (the documented ProceduralMesh rule), so the
-      // FRONT index is constructed, never guessed: 0 = front (the
-      // textured face), 1 = the FOUR SIDES (the lit edge colour - and
-      // NOT the back any more), 2 = the BACK.
-      // The back is a full textured subset: seen from behind the box
-      // must read like the flat NoCulling quad does today - the same
-      // window MIRRORED ("como la misma pantalla pero al reves"), not a
-      // dark slab (measured with the first two-subset build).
       ProceduralMeshSubset {
         offset: 0
         count: slabHolder.box.frontCount
@@ -80,13 +71,13 @@ Item {
       },
       ProceduralMeshSubset {
         offset: slabHolder.box.frontCount
-        count: slabHolder.box.sideCount
-        name: "edges"
-      },
-      ProceduralMeshSubset {
-        offset: slabHolder.box.frontCount + slabHolder.box.sideCount
         count: slabHolder.box.backCount
         name: "back"
+      },
+      ProceduralMeshSubset {
+        offset: slabHolder.box.frontCount + slabHolder.box.backCount
+        count: slabHolder.box.sideCount
+        name: "sides"
       }
     ]
   }

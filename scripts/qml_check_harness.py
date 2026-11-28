@@ -298,9 +298,9 @@ ListModel {
             // second invented-property bug of 2026-11-28 (boundsMax was the
             // first): the stub now mirrors ONLY properties that exist in
             // effectwindow.h. The grab (x/y/width/height) extends past the
-            // frame by the shadow margin, so geometry sits INSIDE the grab
-            // with an asymmetric inset: geometry = (x+6, y+2, w-12, h-12),
-            // deliberately different in size AND centre so the slab gate
+            // frame by the shadow margin with the ASYMMETRY Breeze shows
+            // (heavier right/bottom): geometry = (x+20, y+10, w-60, h-45)
+            // - left margin 20, top 10, right 40, bottom 35. Deliberately different in size AND centre so the slab gate
             // moves real geometry: the box must span THIS rect, and the
             // front's whole-grab texture gets compressed into it (no
             // wallpaper band between content and edge).
@@ -308,7 +308,9 @@ ListModel {
             // leaves it undefined to exercise the documented grab fallback
             // - with a visible NOTE, never a silent relaxation.
             if (typeof stubNoGeometry !== "boolean" || !stubNoGeometry) {
-                win.geometry = Qt.rect(win.x + 6, win.y + 2, win.width - 12, win.height - 12);
+                win.geometry = (typeof stubFrameZero === "boolean" && stubFrameZero)
+                    ? Qt.rect(win.x, win.y, win.width, win.height)
+                    : Qt.rect(win.x + 20, win.y + 10, win.width - 60, win.height - 45);
             }
             win.stackingOrder = i;
             win.minimized = i === 3;
@@ -331,12 +333,62 @@ Item {
     readonly property real cover: (typeof stubFaceCoverage === "number" && stubFaceCoverage > 0) ? stubFaceCoverage : 1
     width: parent !== null ? parent.width * cover : 0
     height: parent !== null ? parent.height * cover : 0
+    // stubWindowFrame (pixel-probe only, default false so every existing
+    // gate keeps the plain full-face colour block): draw the thumbnail
+    // like the REAL WindowThumbnailItem does - it captures
+    // visibleGeometry (shadow included) and paints the FRAME content
+    // inset by the shadow margin inside an item covering the window.
+    // The inset constants MUST match the geometry assignment above
+    // (left 20, top 10, right 40, bottom 35) and the row layout (i is
+    // the trailing digit of the id).
+    readonly property bool frameMode: (typeof stubWindowFrame === "boolean" && stubWindowFrame)
+    readonly property int rowId: {
+        const parts = String(thumb.wId).split("-");
+        const n = parseInt(parts[parts.length - 1], 10);
+        return isNaN(n) ? -1 : n;
+    }
     Rectangle {
         anchors.fill: parent
+        visible: !thumb.frameMode
         color: String(thumb.wId).endsWith("-1") ? "#ff0000"
             : String(thumb.wId).endsWith("-2") ? "#00ff00"
             : String(thumb.wId).endsWith("-3") ? "#0000ff"
             : "#ffa500"
+    }
+    // Shadow margin: alpha 0 (what a real grab carries around the frame).
+    Rectangle {
+        visible: thumb.frameMode
+        anchors.fill: parent
+        color: "transparent"
+    }
+    Rectangle {
+        visible: thumb.frameMode
+        // the frame rect inside the grab-sized item: the item is already
+        // positioned at win.x/win.y by DesktopView, the frame sits inset
+        // by the shadow margin (20, 10) inside it
+        x: 20
+        y: 10
+        width: (320 - 40 * thumb.rowId) - 60
+        height: (200 + 30 * thumb.rowId) - 45
+        color: "transparent"
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: 12
+            color: "#ffffff"
+        }
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.topMargin: 12
+            anchors.bottom: parent.bottom
+            color: String(thumb.wId).endsWith("-1") ? "#ff0000"
+                : String(thumb.wId).endsWith("-2") ? "#00ff00"
+                : String(thumb.wId).endsWith("-3") ? "#0000ff"
+                : "#ffa500"
+        }
     }
 }
 """,

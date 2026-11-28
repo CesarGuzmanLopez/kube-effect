@@ -346,19 +346,21 @@ Reglas:
   **una sola caja cerrada** — un `ProceduralMesh` unitario compartido con TRES
   subsets de material: subset 0 el frente (texturizado con la ventana, UVs
   idénticas al `#Rectangle` probado — el índice frontal es construido, no
-  adivinado), subset 1 los CUATRO cantos con `WindowLayerEdgeColor` (con luz:
-  lighting Fragment + headlight en la cámara, gateado por el flag) y subset 2
-  la POSTERIOR, que repite la MISMA captura del frente (Textura compartida,
-  UNA grabación) con UVs por-posición: desde atrás la ventana se ve EN ESPEJO
-  — "como la misma pantalla pero al revés", igual que el quad plano hoy; el
-  posterior en color de canto era una losa negra (medido 2026-11-28); los tres
-  materiales con `BackFaceCulling`. La caja mide el rectángulo VISIBLE
-  (`geometry` — en el efecto; `frameGeometry` es el nombre de la API de
-  scripting y NO existe en EffectWindow, medido 2026-11-28), dentro del grab
-  que incluye la sombra) — dimensionada al
-  grab, el canto quedaba separado del contenido por una franja de wallpaper
-  (medido 2026-11-28); wrapper sin geometry → fallback al rect del grab
-  (degradado, nunca roto). La vía "un
+  adivinado), subset 1 la POSTERIOR —que comparte el MISMO material y Texture
+  del frente (una sola captura) y, con sus UVs por-posición, desde atrás se ve
+  EN ESPEJO: "como la misma pantalla pero al revés", igual que el quad plano
+  hoy; el posterior en color de canto era una losa negra (medido 2026-11-28)—
+  y subset 2 los CUATRO cantos con `WindowLayerEdgeColor` (con luz: lighting
+  Fragment + headlight en la cámara, gateado por el flag). Todos los
+  materiales de la caja con `BackFaceCulling`. La caja mide el rectángulo
+  VISIBLE: `geometry` en el efecto (`frameGeometry` es el nombre de la API de
+  scripting y NO existe en EffectWindow, medido 2026-11-28), que cae dentro
+  del grab (x/y/width/height llegan hasta el borde exterior de la sombra);
+  dimensionada al grab el canto quedaba separado del contenido por una franja
+  de wallpaper asimétrica (medido) — por eso el sub-rect del frame se recorta
+  vía la Transform del Texture (positionU/scaleU/positionV/scaleV) y la malla
+  sigue compartida; wrapper sin geometry → fallback al rect del grab
+  (degradado, nunca roto, con NOTE visible en el gate). La vía "un
   cubo con seis materiales" no existe (`Model.customMaterials` no está en Qt
   6.12, medido en el motor vivo; el built-in **#Cube** es un solo subset), y el
   intermedio "quad delante + cubo detrás sin culling" quedó refutado con

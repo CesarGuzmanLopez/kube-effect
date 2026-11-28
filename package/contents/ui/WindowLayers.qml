@@ -152,7 +152,7 @@ Node {
   readonly property real layerSlabEff: LayerGeometry.thicknessEffective(root.layerThickness, root.fittedGap)
   // The shared unit box mesh via a runtime Loader (the arc/cap isolation
   // pattern): without QtQuick3D.Helpers the Loader simply fails to load,
-  // slabBox stays null and every layer keeps the flat #Rectangle - the
+  // slabMeshComponent stays null and every layer keeps the flat #Rectangle - the
   // thickness degrades, the effect does not.
   readonly property Geometry slabBox: slabMeshLoader.status === Loader.Ready && slabMeshLoader.item !== null && slabMeshLoader.item !== undefined ? slabMeshLoader.item.mesh : null
   // The EFFECTIVE opacity of the pile, animated by ScreenView with the very
@@ -250,7 +250,7 @@ Node {
 
   // The slab unit box (fourth amendment): reached through a runtime
   // Loader exactly like the arc and the caps — QtQuick3D.Helpers missing
-  // only ever fails THIS loader (slabBox stays null, every layer keeps the
+  // only ever fails THIS loader (slabMeshComponent stays null, every layer keeps the
   // flat quad); the file itself is static-import-safe. Active whenever a
   // slab could be needed on this face (an effective thickness above 0 -
   // fitted-step changes re-evaluate it, the unit geometry itself never
@@ -354,7 +354,18 @@ Node {
       // ONE WindowThumbnail capture shared by the front AND the
       // back material (the mirror is in the UVs, not in a second grab - the
       // box costs exactly the same captures as the flat quad).
+      // The frame's sub-rect of the grab rides on the TEXTURE (the
+      // documented coordinate transform: texCoord = position + mesh uv *
+      // scale, bottom-left origin like the mesh UVs). Both the front and
+      // the back material reference this same Texture, so one crop serves
+      // both and the mirror survives. Identity (0/1) when there is no
+      // frame or the frame is not inside the grab (slabSubUv answers
+      // null): the old full-grab mapping, pixel parity.
       property Texture winTex: Texture {
+        positionU: layer.texCrop !== null && layer.texCrop !== undefined ? layer.texCrop.u0 : 0
+        scaleU: layer.texCrop !== null && layer.texCrop !== undefined ? layer.texCrop.u1 - layer.texCrop.u0 : 1
+        positionV: layer.texCrop !== null && layer.texCrop !== undefined ? layer.texCrop.v0 : 0
+        scaleV: layer.texCrop !== null && layer.texCrop !== undefined ? layer.texCrop.v1 - layer.texCrop.v0 : 1
         sourceItem: KWinComponents.WindowThumbnail {
           // A dropped window (hidden while the delegate still exists,
           // e.g. it just became a dock) releases the capture too: the
@@ -387,6 +398,15 @@ Node {
       // AND the mesh loaded; otherwise it is the flat #Rectangle of the
       // original model (NoCulling, parity).
       readonly property bool boxActive: root.slabBox !== null && root.slabBox !== undefined && layer.slabEff > 0
+      // The frame's sub-rect inside the grab texture (null = identity:
+      // no frame, or a frame poking outside the grab - then the old
+      // whole-grab mapping keeps parity). It rides on the per-layer
+      // Texture (position/scale below), NOT on the mesh: the shared unit
+      // box keeps its per-position identity UVs; the asymmetric shadow
+      // (Breeze, bigger right/bottom - measured 2026-11-28, "sigue la
+      // separación") is absorbed by the texture transform, one crop
+      // serving front and back alike.
+      readonly property var texCrop: layer.hasFrame ? LayerGeometry.slabSubUv(frameGeom, Qt.rect(win !== null ? win.x : 0, win !== null ? win.y : 0, win !== null ? win.width : 0, win !== null ? win.height : 0)) : null
       // Captured while the window still exists: onDestruction may already
       // face a null row, and the id is still needed to prune the map.
       property var trackedId: null
@@ -434,86 +454,76 @@ Node {
       // at the front face, never at the centre. x/y: the BOX centres on
       // the FRAME rect (the visible window), the flat quad on the grab.
       position: Qt.vector3d(layer.boxActive ? layer.boxCenterX : localX, layer.boxActive ? layer.boxCenterY : localY, layer.boxActive ? layerDepthOut - layer.slabEff / 2 : layerDepthOut)
-      materials: [
-        PrincipledMaterial {
-          lighting: PrincipledMaterial.NoLighting
-          // Subset 0 (front): NoCulling keeps the proven two-sided rule of
-          // the FLAT quad (the ADR-025 look when the box is off); the box
-          // itself must be culled — NoCulling on a closed box showed its
-          // inner black side through the thumbnail's transparent shadow
-          // margins (the measured bezel, 2026-11-28).
-          cullMode: layer.boxActive ? Material.BackFaceCulling : Material.NoCulling
-          // The ADR-026 threshold over the LAYER opacity (measured, the
-          // amendment to the amendment): a quad's sort centroid carries the
-          // window's lateral offset, so the transparent-pass centroid order
-          // does NOT follow the rank — at oblique angles at rest a lower
-          // rank painted over the top one. While the pile is effectively
-          // opaque (rest, or WindowLayerRotationOpacity 1.0 turning) the
-          // quad joins the OPAQUE pass with depth writes: real geometry
-          // settles the overlap (the outermost wins the pixel). Below
-          // 0.99 it is Blend again with the fade, and the residual centroid
-          // swaps last only WHILE turning (documented accepted behaviour).
-          // Unlike the face Mask (bounded to the cylinder, where the flat
-          // pile never overlapped), the quads always overlap each other at
-          // oblique angles, so the threshold applies on every shape.
-          alphaMode: layerOpacity < 0.99 ? PrincipledMaterial.Blend : PrincipledMaterial.Mask
-          // Pinned explicitly (the face argument: never rely on a Qt
-          // default moving the hard/soft edge). Trade-off measured: at rest
-          // the AA window edge/shadow cuts hard at the cutoff, same class
-          // as the cylinder face holes (ADR-026).
-          alphaCutoff: 0.5
-          opacity: root.layerOpacity
-          baseColorMap: layer.winTex
-        },
-        // Subset 1 (the four SIDES only - the back is its own textured
-        // subset since the "glass back" fix): the uniform edge colour.
-        // BackFaceCulling always on the box. Same threshold and opacity
-        // as the front: the rim joins the opaque depth-writing pass
-        // exactly when the pile is solid. The colour is baseColor:
-        // PrincipledMaterial has no diffuseColor (that name belongs to
-        // DefaultMaterial; assigning it here was a "non-existent
-        // property" load error, measured). While the layer is flat this
-        // material never binds a subset (the #Rectangle has one) - harmless,
-        // and it keeps the materials list shape constant for the gate.
-        PrincipledMaterial {
-          // FRAGMENT lighting on the edge only (measured 2026-11-28: the
-          // unlit flat colour "reads as a shadow, not a solid" - there was
-          // a band but no volume). The camera-anchored headlight of
-          // ScreenView (present iff WindowLayering) shades the four edge
-          // orientations differently; roughness keeps it a matte plastic,
-          // never a mirror. The TEXTURED front and every face of the cube
-          // stay NoLighting - the ADR-026 grab contract never gets
-          // re-illuminated.
-          lighting: PrincipledMaterial.Fragment
-          roughness: 0.7
-          // (metalness, not "metallic": the Qt6 PrincipledMaterial spelling
-          // - the live loader rejects "metallic", measured.)
-          metalness: 0.0
-          cullMode: Material.BackFaceCulling
-          alphaMode: root.layerOpacity < 0.99 ? PrincipledMaterial.Blend : PrincipledMaterial.Mask
-          alphaCutoff: 0.5
-          baseColor: root.edgeColor
-          opacity: root.layerOpacity
-        },
-        // Subset 2 (the BACK): THE SAME capture as the front, shared
-        // through layer.winTex - one Texture object referenced by two
-        // materials (verified: the engine accepts it and the item is
-        // grabbed ONCE per frame, no double capture). Per-position UVs
-        // (layerGeometry.slabVertices) make the thumbnail read MIRRORED
-        // from behind - exactly what the flat NoCulling quad shows today
-        // ("sería como la misma pantalla pero al revés"); the two-subset
-        // box instead showed a dark slab (the measured regression).
-        // NoLighting (it is content, not geometry), same threshold,
-        // pinned cutoff and BackFaceCulling.
-        PrincipledMaterial {
-          lighting: PrincipledMaterial.NoLighting
-          cullMode: Material.BackFaceCulling
-          alphaMode: root.layerOpacity < 0.99 ? PrincipledMaterial.Blend : PrincipledMaterial.Mask
-          alphaCutoff: 0.5
-          opacity: root.layerOpacity
-          baseColorMap: layer.winTex
-        }
-      ]
+      // The textured material lives on a delegate PROPERTY because the box
+      // lists it TWICE (subsets 0 = front and 1 = back share the exact same
+      // material object - and through it the exact same Texture, hence the
+      // same sub-rect crop on both faces; the mirror stays a pure
+      // consequence of the per-position mesh UVs and the viewpoint).
+      property PrincipledMaterial frontMat: PrincipledMaterial {
+        lighting: PrincipledMaterial.NoLighting
+        // Subsets 0 and 1 (front and back): NoCulling keeps the proven
+        // two-sided rule of the FLAT quad (the ADR-025 look when the box
+        // is off); the box itself must be culled - NoCulling on a closed
+        // box showed its inner black side through the thumbnail's
+        // transparent shadow margins (the measured bezel, 2026-11-28).
+        cullMode: layer.boxActive ? Material.BackFaceCulling : Material.NoCulling
+        // The ADR-026 threshold over the LAYER opacity (measured, the
+        // amendment to the amendment): a quad's sort centroid carries the
+        // window's lateral offset, so the transparent-pass centroid order
+        // does NOT follow the rank — at oblique angles at rest a lower
+        // rank painted over the top one. While the pile is effectively
+        // opaque (rest, or WindowLayerRotationOpacity 1.0 turning) the
+        // quad joins the OPAQUE pass with depth writes: real geometry
+        // settles the overlap (the outermost wins the pixel). Below
+        // 0.99 it is Blend again with the fade, and the residual centroid
+        // swaps last only WHILE turning (documented accepted behaviour).
+        // Unlike the face Mask (bounded to the cylinder, where the flat
+        // pile never overlapped), the quads always overlap each other at
+        // oblique angles, so the threshold applies on every shape.
+        alphaMode: layerOpacity < 0.99 ? PrincipledMaterial.Blend : PrincipledMaterial.Mask
+        // Pinned explicitly (the face argument: never rely on a Qt
+        // default moving the hard/soft edge). Trade-off measured: at rest
+        // the AA window edge/shadow cuts hard at the cutoff, same class
+        // as the cylinder face holes (ADR-026).
+        alphaCutoff: 0.5
+        opacity: root.layerOpacity
+        baseColorMap: layer.winTex
+      }
+      // Subset 2 (the four SIDES): the uniform edge colour.
+      // BackFaceCulling always on the box. Same threshold and opacity
+      // as the front: the rim joins the opaque depth-writing pass
+      // exactly when the pile is solid. The colour is baseColor:
+      // PrincipledMaterial has no diffuseColor (that name belongs to
+      // DefaultMaterial; assigning it here was a "non-existent
+      // property" load error, measured). While the layer is flat this
+      // material never binds a subset (the #Rectangle has one) - harmless,
+      // and it keeps the materials list shape constant for the gate.
+      property PrincipledMaterial edgeMat: PrincipledMaterial {
+        // FRAGMENT lighting on the edge only (measured 2026-11-28: the
+        // unlit flat colour "reads as a shadow, not a solid" - there was
+        // a band but no volume). The camera-anchored headlight of
+        // ScreenView (present iff WindowLayering) shades the four edge
+        // orientations differently; roughness keeps it a matte plastic,
+        // never a mirror. The TEXTURED front and every face of the cube
+        // stay NoLighting - the ADR-026 grab contract never gets
+        // re-illuminated.
+        lighting: PrincipledMaterial.Fragment
+        roughness: 0.7
+        // (metalness, not "metallic": the Qt6 PrincipledMaterial spelling
+        // - the live loader rejects "metallic", measured.)
+        metalness: 0.0
+        cullMode: Material.BackFaceCulling
+        alphaMode: root.layerOpacity < 0.99 ? PrincipledMaterial.Blend : PrincipledMaterial.Mask
+        alphaCutoff: 0.5
+        baseColor: root.edgeColor
+        opacity: root.layerOpacity
+      }
+      // Subset order of SlabMesh.qml: 0 = front, 1 = BACK, 2 = sides. The
+      // back reuses the front's material object - the SAME Texture, the
+      // SAME crop, the mirror given by the per-position UVs and the
+      // viewpoint ("sería como la misma pantalla pero al revés"), and one
+      // capture, never two.
+      materials: [layer.frontMat, layer.frontMat, layer.edgeMat]
 
       Connections {
         target: layer.win
@@ -549,7 +559,7 @@ Node {
   // while the gate relaxed on a false "Helpers missing") and the
   // DebugOverlay can show slab=N/N with the layers alive on screen.
   readonly property int slabLoaderStatus: slabMeshLoader.status
-  readonly property string slabLoaderError: slabMeshLoader.errorString
+  readonly property string slabLoaderError: slabMeshLoader.status === Loader.Error ? slabMeshLoader.errorString : ""
   // Layers currently rendered as a real box (all delegates of an active
   // face with the mesh loaded and an effective thickness above 0).
   readonly property int boxLiveCount: root.active && root.slabBox !== null && root.slabBox !== undefined && root.layerSlabEff > 0 ? quads.count : 0

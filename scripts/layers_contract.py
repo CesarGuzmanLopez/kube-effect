@@ -28,8 +28,8 @@ updated by the amendment):
       shape. eff 0 (or no QtQuick3D.Helpers) -> flat built-in #Rectangle,
       NoCulling front, unit z scale: pixel parity with the quad-only
       model. eff > 0 -> ONE closed ProceduralMesh box per layer: TWO
-      material subsets (0 = textured front, 1 = the four sides in the edge
-      colour, 2 = the mirrored BACK with the SAME shared texture
+      material subsets (0 = textured front, 1 = the mirrored BACK with the
+      SAME shared material/Texture, 2 = the four sides in the edge colour
       - the subset order is BUILT in SlabMesh.qml, not guessed from Qt
       docs, because Model has no customMaterials in 6.12: verified
       against the live engine), scale (win.w/100, win.h/100, eff/100) so
@@ -137,10 +137,12 @@ STUB_DROPPED = (3, 4, 5)
 STUB_COUNT = 3
 # Stub frame inset (keep in sync with qml_check_harness.STUB_MODULE):
 # the grab rect x/y/width/height carries the shadow margin, the VISIBLE
-# frame sits inside it by (6, 2) px with 12 px less on each axis. The box
-# must hug the FRAME - sized to the grab it left a wallpaper band between
-# content and edge (measured 2026-11-28).
-FRAME_DX, FRAME_DY, FRAME_DW, FRAME_DH = 6, 2, -12, -12
+# frame sits inside it ASYMMETRICALLY like the Breeze shadow (left 20, top
+# 10, right 40, bottom 35). The box must hug the FRAME and the front/back
+# UVs must cut the frame's sub-rect of the grab texture: sized to the grab
+# (or full UVs compressed to the frame) it left a wallpaper band, wider on
+# the right/bottom (measured 2026-11-28, twice).
+FRAME_DX, FRAME_DY, FRAME_DW, FRAME_DH = 20, 10, -60, -45
 
 
 def dump_face_center_y(i, face_height=700.0):
@@ -155,6 +157,22 @@ def stub_frame(i):
   gw = 320 - 40 * i
   gh = 200 + 30 * i
   return gx + FRAME_DX, gy + FRAME_DY, gw + FRAME_DW, gh + FRAME_DH
+
+
+def stub_sub_uv(i):
+  """Frame sub-rect of the grab texture (u0, v0, u1, v1; bottom-left v),
+  mirroring layerGeometry.slabSubUv over the stub layout."""
+  gx = 100 + 150 * i
+  gy = 80 + 120 * i
+  gw = 320 - 40 * i
+  gh = 200 + 30 * i
+  fx, fy, fw, fh = stub_frame(i)
+  return (
+    (fx - gx) / gw,
+    (gy + gh - fy - fh) / gh,
+    (fx + fw - gx) / gw,
+    (gy + gh - fy) / gh,
+  )
 
 
 # Node positions are float32 in the scene graph (QtQuick3D stores
@@ -699,6 +717,33 @@ def _slab_rect_problems(label, quad, problems):
     )
 
 
+def _slab_uv_problems(label, quad, ctx, problems):
+  """Per-layer sub-UV assert (the "sigue la separación" follow-up,
+  2026-11-28): with the frame available the FRONT (and with it the
+  mirrored BACK) must sample ONLY the frame's sub-rect of the grab
+  texture - full UVs compressed into a frame-sized quad leave the
+  asymmetric shadow margin as a wallpaper band (wider right/bottom for
+  Breeze). Without frame (stubNoGeometry or an older wrapper) the UVs are
+  the identity rect, matching the grab-sized box."""
+  i = int(quad["id"].rsplit("-", 1)[1])
+  if ctx["no_geometry"] or not quad.get("hasFrameNow", True):
+    pos_u, scale_u, pos_v, scale_v = 0.0, 1.0, 0.0, 1.0
+  else:
+    u0, v0, u1, v1 = stub_sub_uv(i)
+    pos_u, scale_u, pos_v, scale_v = u0, u1 - u0, v0, v1 - v0
+  for key, want in (
+    ("texPosU", pos_u),
+    ("texScaleU", scale_u),
+    ("texPosV", pos_v),
+    ("texScaleV", scale_v),
+  ):
+    got = quad.get(key, -1.0)
+    if not close(got, want, EDGE_TOL):
+      problems.append(
+        f"{label}: {quad['id']} {key} {got} != {want} (the grab texture must be cropped to the frame's sub-rect through the Texture transform - full mapping on a frame-sized box is the compressed-shadow band)"
+      )
+
+
 def _slab_flat_case(label, quad, eff, helpers, problems):
   """eff 0 (or no Helpers): the built-in #Rectangle with NoCulling and a
   unit z scale - pixel parity with the quad-only model."""
@@ -723,6 +768,7 @@ def _slab_box_case(label, quad, eff, ctx, previous_front, problems):
       f"{label}: {quad['id']} is not the three-subset box (mode {quad['boxMode']!r}, subsets {quad['boxSubsets']}) with eff {eff}"
     )
   _slab_back_problems(label, quad, expected_mode, problems)
+  _slab_uv_problems(label, quad, ctx, problems)
   if not close(quad["scaleZ"], eff / 100, POSITION_TOL):
     problems.append(
       f"{label}: {quad['id']} box z scale {quad['scaleZ']} != eff/100 = {eff / 100} (request beyond half the step must be CLIPPED)"
@@ -758,13 +804,17 @@ def _slab_box_case(label, quad, eff, ctx, previous_front, problems):
 
 def _slab_back_problems(label, quad, expected_mode, problems):
   """The glass-back family of the box case (kept apart from
-  _slab_box_case for S3776): three subsets with the counts [6, 24, 6],
+  _slab_box_case for S3776): three subsets with the counts [6, 6, 24],
   and the back textured with the SAME shared Texture and per-position
   mirror UVs - from behind the window must read reversed (like the flat
   quad), never as a dark slab or a second grab."""
-  if list(quad.get("boxSubsetCounts", [])) != [6, 24, 6]:
+  if list(quad.get("boxSubsetCounts", [])) != [6, 6, 24]:
     problems.append(
-      f"{label}: {quad['id']} box subset counts {quad.get('boxSubsetCounts')} != [6, 24, 6] (front, sides, mirrored back)"
+      f"{label}: {quad['id']} box subset counts {quad.get('boxSubsetCounts')} != [6, 6, 24] (front, back, sides)"
+    )
+  if not quad.get("backIsFrontMat", False):
+    problems.append(
+      f"{label}: {quad['id']} back is not the front material object - two materials for one capture invite a double grab and break the shared crop (the mirror must come from the UVs, not a second texture)"
     )
   if not quad.get("backHasMap"):
     problems.append(
@@ -774,9 +824,9 @@ def _slab_back_problems(label, quad, expected_mode, problems):
     problems.append(
       f"{label}: {quad['id']} back does not share the front Texture object (two grabs for one window - the capture must stay single)"
     )
-  if not quad.get("backMirrorUv"):
+  if not quad.get("backIsFrontMat"):
     problems.append(
-      f"{label}: {quad['id']} back UVs are not the per-position mirror set (u = 1 must sit at x = +w/2 like the front's)"
+      f"{label}: {quad['id']} back is not the SAME material object as the front - the crop and the single capture must be shared; the mirror comes from the per-position mesh UVs (pinned by check-constants), not from a second texture"
     )
   if quad.get("backCull") != "back":
     problems.append(f"{label}: {quad['id']} back cull {quad.get('backCull')!r} != back")
@@ -1020,7 +1070,11 @@ def _with_layer_fields(dump, layer=1.0):
       quad["texShared"] = True
       quad["backCull"] = "back"
       quad["backAlphaMode"] = "mask" if layer >= MASK_THRESHOLD else "blend"
-      quad["backMirrorUv"] = False
+      quad["backIsFrontMat"] = True
+      quad["texPosU"] = 0.0
+      quad["texScaleU"] = 1.0
+      quad["texPosV"] = 0.0
+      quad["texScaleV"] = 1.0
       quad["scaleX"] = (320 - 40 * i) / 100
       quad["scaleY"] = (200 + 30 * i) / 100
       quad["scaleZ"] = 1.0
@@ -1069,12 +1123,17 @@ def _thick_dump(raw, gap):
         quad["boxMode"] = "box"
         quad["boxSubsets"] = 3
         quad["hasFrameNow"] = True
-        quad["boxSubsetCounts"] = [6, 24, 6]
+        su0, sv0, su1, sv1 = stub_sub_uv(quad["order"])
+        quad["texPosU"] = su0
+        quad["texScaleU"] = su1 - su0
+        quad["texPosV"] = sv0
+        quad["texScaleV"] = sv1 - sv0
+        quad["boxSubsetCounts"] = [6, 6, 24]
         quad["backHasMap"] = True
         quad["texShared"] = True
         quad["backCull"] = "back"
         quad["backAlphaMode"] = "mask"
-        quad["backMirrorUv"] = True
+        quad["backIsFrontMat"] = True
         quad["scaleZ"] = eff / 100
         quad["frontCull"] = "back"
   return dump
@@ -1126,6 +1185,10 @@ def _noframe_dump(raw=300, gap=40):
   for face in dump["faces"]:
     for quad in face["quads"]:
       quad["hasFrameNow"] = False
+      quad["texPosU"] = 0.0
+      quad["texScaleU"] = 1.0
+      quad["texPosV"] = 0.0
+      quad["texScaleV"] = 1.0
       if quad["showLayer"]:
         i = quad["order"]
         quad["x"] = 100 + 150 * i + (320 - 40 * i) / 2 - dump["faceWidth"] / 2
@@ -1328,6 +1391,16 @@ def _slab_cases(expects_rejection, failures):
     failures.append(
       f"the stubNoGeometry fallback scene was rejected: {validate(noframe)}"
     )
+  # The UV half of today's bug: frame-sized box but FULL uv - the shadow
+  # compressed, band of wallpaper again (wider right/bottom).
+  expects_rejection(
+    "front with full UVs compressed to the frame (the band bug)",
+    lambda d: (
+      d["faces"][0]["quads"][0].__setitem__("texPosU", 0.0),
+      d["faces"][0]["quads"][0].__setitem__("texScaleU", 1.0),
+    ),
+    thick300,
+  )
   # The legitimate degradation: QtQuick3D.Helpers genuinely not installed
   # -> flat layers, validated as an OK scene (check-layers.py must PRINT a
   # visible SKIP for it).
@@ -1345,8 +1418,8 @@ def _slab_cases(expects_rejection, failures):
     thick300,
   )
   expects_rejection(
-    "back mirror missing (no per-position flip)",
-    lambda d: d["faces"][0]["quads"][0].__setitem__("backMirrorUv", False),
+    "back mirror missing (second material, shared crop lost)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("backIsFrontMat", False),
     thick300,
   )
   expects_rejection(

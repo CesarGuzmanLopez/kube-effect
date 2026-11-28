@@ -110,26 +110,30 @@ lint-ci: check
 # ampliación, rediseños medidos 2026-11-28): eff = min(solicitado, fitted/2)
 # con default 24 (con 2 no se leía); eff 0 (o sin QtQuick3D.Helpers) =
 # #Rectangle plano exacto;
-# eff > 0 = UNA caja ProceduralMesh de TRES subsets (0 frente texturizado con
-# UVs del #Rectangle probado, 1 los CUATRO cantos con el color resuelto y luz
-# Fragment, 2 la posterior con la MISMA Texture compartida y UVs
-# por-posición = imagen en espejo, como el quad plano NoCulling de hoy)
-# centrada eff/2 detrás de la ladder (el frente cae EXACTO en ella; el tope
-# y el no-cruce se miden en el frente); scale (frameW/100, frameH/100,
-# eff/100) = el rectángulo VISIBLE (`geometry` del efecto - ojo: NO
-# "frameGeometry", que es de scripting y dio undefined -; no el grab con
-# sombra) =
-# canto pegado al contenido; BackFaceCulling en los tres materiales
-# (NoCulling =
-# el bisel negro medido por los márgenes transparentes del thumbnail); el
+# eff > 0 = UNA caja ProceduralMesh COMPARTIDA de TRES subsets (0 frente
+# texturizado con UVs por-posición del #Rectangle probado, 1 la posterior con
+# el MISMO material/Texture que el frente -una captura, imagen en espejo por
+# el punto de vista-, 2 los CUATRO cantos con el color resuelto y luz
+# Fragment) centrada eff/2 detrás de la ladder (el frente cae EXACTO en ella;
+# el tope y el no-cruce se miden en el frente); scale (geometry.w/100,
+# geometry.h/100, eff/100) = el rectángulo VISIBLE (`geometry` del efecto -
+# ojo: NO "frameGeometry", que es de scripting y dio undefined -; no el grab
+# con sombra) = canto pegado al contenido, con el sub-rect del frame recortado
+# por la transform position/scale del Texture de cada capa (la malla jamás se
+# recompone); BackFaceCulling en los materiales de la caja (NoCulling = el
+# bisel negro medido por los márgenes transparentes del thumbnail); el
 # canto comparte umbral y opacidad del frente (baseColor, que diffuseColor
-# no existe en PrincipledMaterial) - y desde 2026-11-28 con el status del
-# Loader DURO: eff>0 con Helpers instalado exige slabLoaderStatus Ready;
-# Error (el caso real: boundsMin/boundsMax inventados en
-# ProceduralMeshSubset hacían fallar el compile SIEMPRE y la caja nunca
-# existió) es FAIL del gate, jamás relax; el relax solo vale si el módulo
-# no está instalado, con NOTE SKIP visible. El DebugOverlay pinta
-# slab=boxes/quads eff=N en pantalla. Y la correccion de claves sin guardar
+# no existe en PrincipledMaterial) - y desde 2026-11-28 con dos asserts
+# duros anti-vacío: slabLoaderStatus Ready con eff>0 y Helpers instalado
+# (el caso real: boundsMin/boundsMax inventados en ProceduralMeshSubset
+# hacían fallar el compile SIEMPRE y la caja nunca existió - FAIL jamás
+# relax, el relax solo con módulo ausente real y NOTE SKIP visible), y
+# hasFrameNow true en toda capa en caja (el efecto lee el marco como
+# "geometry" - "frameGeometry" es de scripting y dio undefined, segunda
+# propiedad inventada del día; el stub solo espeja Q_PROPERTY de
+# effectwindow.h) más el crop texPos/texScale == sub-rect del frame; el
+# escenario noframe ejercita el fallback con NOTE. El DebugOverlay pinta
+# slab=boxes/quads eff=N boxW/H grabW/H frame=0/1 en pantalla. Y la correccion de claves sin guardar
 # (medido 2026-11-28): el raw de las seis claves viaja en propiedades VAR
 # (undefined de effect.configuration no se coacciona a 0 antes del
 # resolvedor); el escenario defaultsunset lo exige end-to-end y

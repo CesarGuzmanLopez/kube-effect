@@ -227,8 +227,9 @@ layerDepthOut = (rank + 1) * fittedGap + epsilon        (pila flotante: abajo = 
 eff           = min(WindowLayerThickness, fittedGap / 2) (grosor simulado EFECTIVO; default 24; 0 = plano)
 position.z    = +layerDepthOut  (flat)  |  = layerDepthOut - eff/2 (box: el FRENTE cae en la ladder)
 plate z       = -2                                                  (velo de huecos, detrás de todos los quads)
-caja          = ProceduralMesh unit box (subsets: 0 = frente, 1 = cantos, 2 = posterior en espejo)
-caja scale    = (win.w/100, win.h/100, eff/100)  +  BackFaceCulling en ambos materiales
+caja          = ProceduralMesh unit box COMPARTIDO (subsets: 0 = frente, 1 = posterior, 2 = cantos; UVs por-posición identity)
+caja scale    = (geometry.w/100, geometry.h/100, eff/100)  +  BackFaceCulling en los materiales
+crop          = sub-rect del frame DENTRO del grab, llevado por la TEXTURE de cada capa: positionU/scaleU/positionV/scaleV (la malla NO se recompone nunca)
 ```
 
 El **velo (plate)** va a `z = −(2)`: justo detrás del plano de la cara, delante
@@ -398,16 +399,23 @@ tambor).
   geometry.height/100, eff/100) y se CENTRA en el centro del frame (coords de
   cara, Y flipped; ejemplo numérico en el comentario del delegate). Si el
   wrapper no expone geometry (solo scenes de prueba), fallback al rect del
-  grab con NOTE visible — nunca OK silencioso.
+  grab con NOTE visible — nunca OK silencioso. El sub-rect del frame DENTRO
+  del grab NO se hornea en la malla (la unidad es estática y compartida; un
+  intento con UVs por-ventana quedó en UVs completas y el gate lo cazó con
+  hasFrameNow/tex* en vivo): lo lleva la `Texture` de cada capa con
+  `positionU/scaleU/positionV/scaleV` (transform documentada, bottom-left
+  igual que las UVs por-posición; frente y posterior comparten el objeto →
+  un crop, una captura).
 - **El posterior repite el frente en espejo (cristal)** (medido 2026-11-28: la
   caja de dos subsets mostraba por detrás una losa negra — "debería verse,
   como la misma pantalla pero al revés", igual que el quad plano NoCulling de
-  hoy): THREE subsets — 0 frente (UVs `#Rectangle`), 1 los CUATRO cantos
-  (color de canto), 2 posterior con la MISMA `Texture` (objeto compartido, una
-  sola captura) y UVs por-posición `u = 0.5 + x/w`: el espejo EMERGE del punto
-  de vista (el vértice con u=1 queda a la izquierda del observador desde −z),
-  no de un `1-u` escrito. Gate: counts [6,24,6], back texturado + espejo +
-  textura compartida, y rechazos del losa-negra/espejo-ausente/doble-captura.
+  hoy): THREE subsets — 0 frente, 1 posterior, 2 los CUATRO cantos (color
+  de canto) — con el posterior compartiendo el MISMO material y Texture del
+  frente (una sola captura) y UVs por-posición `u = 0.5 + x/w`: el espejo
+  EMERGE del punto de vista (el vértice con u=1 queda a la izquierda del
+  observador desde −z), no de un `1-u` escrito. Gate: counts [6,6,24], back
+  == material del frente, crop en el Texture (texPos/texScale == sub-rect),
+  y rechazos del losa-negra/espejo-ausente/doble-captura.
 - **Claves ausentes = undefined, NUNCA 0** (medido 2026-11-28: el kwinrc del
   anidado solo tenía `WindowLayering=true`; en un scripted effect
   `effect.configuration.<clave ausente>` devuelve **undefined**, y

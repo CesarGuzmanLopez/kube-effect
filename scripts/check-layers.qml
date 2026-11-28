@@ -220,32 +220,38 @@ Item {
           materialOpacity: quad.materials[0].opacity,
           // Slab (fourth amendment, FINAL single-box design): one Model
           // per layer; flat = built-in #Rectangle, boxed = the shared
-          // unit ProceduralMesh (two subsets) scaled to the window.
+          // unit ProceduralMesh (three subsets: front/back/sides) scaled
           boxMode: quad.geometry !== null && quad.geometry !== undefined ? "box" : "flat",
           hasFrameNow: quad.hasFrame,
           boxSubsets: quad.geometry !== null && quad.geometry !== undefined ? quad.geometry.subsets.length : 0,
           boxSubsetCounts: quad.geometry !== null && quad.geometry !== undefined ? [quad.geometry.subsets[0].count, quad.geometry.subsets[1].count, quad.geometry.subsets[2].count] : [],
-          backHasMap: quad.materials[2].baseColorMap !== null && quad.materials[2].baseColorMap !== undefined,
-          texShared: quad.materials[0].baseColorMap === quad.materials[2].baseColorMap,
-          backCull: cullName(quad.materials[2].cullMode),
-          backAlphaMode: modeName(quad.materials[2].alphaMode),
-          backMirrorUv: quad.geometry !== null && quad.geometry !== undefined ? Math.abs(quad.geometry.uv0s[22].x - 1) < 1e-6 && Math.abs(quad.geometry.uv0s[20].x) < 1e-6 : false,
+          backHasMap: quad.materials[1].baseColorMap !== null && quad.materials[1].baseColorMap !== undefined,
+          texShared: quad.materials[1].baseColorMap === quad.materials[0].baseColorMap,
+          backCull: cullName(quad.materials[1].cullMode),
+          backAlphaMode: modeName(quad.materials[1].alphaMode),
+          texPosU: quad.materials[0].baseColorMap !== null && quad.materials[0].baseColorMap !== undefined ? quad.materials[0].baseColorMap.positionU : -1,
+          texScaleU: quad.materials[0].baseColorMap !== null && quad.materials[0].baseColorMap !== undefined ? quad.materials[0].baseColorMap.scaleU : -1,
+          texPosV: quad.materials[0].baseColorMap !== null && quad.materials[0].baseColorMap !== undefined ? quad.materials[0].baseColorMap.positionV : -1,
+          texScaleV: quad.materials[0].baseColorMap !== null && quad.materials[0].baseColorMap !== undefined ? quad.materials[0].baseColorMap.scaleV : -1,
+          // The back must be THE SAME material object as the front (one
+          // capture, one crop; the mirror lives in the per-position UVs).
+          backIsFrontMat: quad.materials[1] === quad.materials[0],
           scaleX: quad.scale.x,
           scaleY: quad.scale.y,
           scaleZ: quad.scale.z,
           frontCull: cullName(quad.materials[0].cullMode),
-          edgeCull: cullName(quad.materials[1].cullMode),
+          edgeCull: cullName(quad.materials[2].cullMode),
           frontHasMap: quad.materials[0].baseColorMap !== null && quad.materials[0].baseColorMap !== undefined,
           frontLighting: lightingName(quad.materials[0].lighting),
-          edgeLighting: lightingName(quad.materials[1].lighting),
-          edgeRoughness: quad.materials[1].roughness,
-          edgeMetallic: quad.materials[1].metalness,
-          edgeAlphaMode: modeName(quad.materials[1].alphaMode),
-          edgeOpacity: quad.materials[1].opacity,
-          edgeR: quad.materials[1].baseColor.r,
-          edgeG: quad.materials[1].baseColor.g,
-          edgeB: quad.materials[1].baseColor.b,
-          edgeA: quad.materials[1].baseColor.a
+          edgeLighting: lightingName(quad.materials[2].lighting),
+          edgeRoughness: quad.materials[2].roughness,
+          edgeMetallic: quad.materials[2].metalness,
+          edgeAlphaMode: modeName(quad.materials[2].alphaMode),
+          edgeOpacity: quad.materials[2].opacity,
+          edgeR: quad.materials[2].baseColor.r,
+          edgeG: quad.materials[2].baseColor.g,
+          edgeB: quad.materials[2].baseColor.b,
+          edgeA: quad.materials[2].baseColor.a
         });
       }
       const grabs = [];
