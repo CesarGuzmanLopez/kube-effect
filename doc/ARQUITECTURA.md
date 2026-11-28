@@ -227,7 +227,7 @@ layerDepthOut = (rank + 1) * fittedGap + epsilon        (pila flotante: abajo = 
 eff           = min(WindowLayerThickness, fittedGap / 2) (grosor simulado EFECTIVO; default 24; 0 = plano)
 position.z    = +layerDepthOut  (flat)  |  = layerDepthOut - eff/2 (box: el FRENTE cae en la ladder)
 plate z       = -2                                                  (velo de huecos, detrás de todos los quads)
-caja          = ProceduralMesh unit box (subsets: 0 = frente, 1 = cantos + posterior)
+caja          = ProceduralMesh unit box (subsets: 0 = frente, 1 = cantos, 2 = posterior en espejo)
 caja scale    = (win.w/100, win.h/100, eff/100)  +  BackFaceCulling en ambos materiales
 ```
 
@@ -335,7 +335,14 @@ tambor).
   = orden de `materials`, regla documentada de ProceduralMesh): subset 0 el
   frente (UVs idénticas al #Rectangle probado — bottom-left origin, nada que
   espejar; el índice "frontal" es así construido, no adivinado), subset 1 los
-  cuatro cantos + la posterior con `WindowLayerEdgeColor`. (El intento
+  cuatro cantos con `WindowLayerEdgeColor`; subset 2 la POSTERIOR, que
+  repite la MISMA captura del frente con UVs por-posición (desde atrás la
+  ventana se lee EN ESPEJO, "como la misma pantalla pero al revés" - el
+  posterior en color de canto dejaba una losa negra, medido 2026-11-28).
+  La caja se dimensiona al `frameGeometry` (rectángulo VISIBLE, dentro del
+  grab que incluye la sombra), no a `win.width/height`: con la caja al grab
+  el canto caía fuera del contenido con una franja de wallpaper en medio.
+  (El intento
   intermedio —quad Mask delante + #Cube uniforme detrás, sin culling— quedó
   refutado por píxeles: ver la trampa del bisel.) Y `PrincipledMaterial`
   llama `baseColor` a su color uniforme (`diffuseColor` es de
@@ -369,13 +376,32 @@ tambor).
   `Model.materials`). El Loader daba Error PERMANENTE → slabBox null →
   #Rectangle plano, y el gate se «relajaba» creyendo que faltaba Helpers.
   Reglas: CADA nombre de API se verifica con un probe QQmlComponent (load +
-  create limpios, subsetCount==2) ANTES de commitear; el gate exige el
+  create limpios, subsetCount==3) ANTES de commitear; el gate exige el
   `slabLoaderStatus` leído del motor (Ready duro con eff>0 y módulo
   instalado; Error con módulo presente = FAIL; relax SOLO si el errorString
   dice "not installed", con NOTE SKIP visible); y WindowLayers lanza
   `console.warn` único con el errorString para que nested.log (truco §D) lo
   capture. El DebugOverlay lo pinta en pantalla: `slab=<boxes>/<quads>
   eff=<n>` — si la caja no vive, se ve (slab=0/N) sin abrir logs.
+- **El grab incluye la sombra: la caja se dimensiona al `frameGeometry`**
+  (medido 2026-11-28: con grosor alto se veía contenido → franja de wallpaper
+  → banda negra: la caja usaba `win.width/height`, que es el rect del GRAB y
+  llega hasta el borde exterior de la sombra; el canto quedaba fuera del
+  contenido visible). El rect visible es `frameGeometry` (RectF expuesto por
+  el scripting de KWin junto a clientGeometry/bufferGeometry/
+  decorationHasAlpha): la caja escala a (frameW/100, frameH/100, eff/100) y se
+  CENTRA en el centro del frame (coords de cara, Y flipped; ejemplo numérico en
+  el comentario del delegate). Si el wrapper no expone frameGeometry, fallback
+  al rect del grab (degradado, no roto).
+- **El posterior repite el frente en espejo (cristal)** (medido 2026-11-28: la
+  caja de dos subsets mostraba por detrás una losa negra — "debería verse,
+  como la misma pantalla pero al revés", igual que el quad plano NoCulling de
+  hoy): THREE subsets — 0 frente (UVs `#Rectangle`), 1 los CUATRO cantos
+  (color de canto), 2 posterior con la MISMA `Texture` (objeto compartido, una
+  sola captura) y UVs por-posición `u = 0.5 + x/w`: el espejo EMERGE del punto
+  de vista (el vértice con u=1 queda a la izquierda del observador desde −z),
+  no de un `1-u` escrito. Gate: counts [6,24,6], back texturado + espejo +
+  textura compartida, y rechazos del losa-negra/espejo-ausente/doble-captura.
 - **Claves ausentes = undefined, NUNCA 0** (medido 2026-11-28: el kwinrc del
   anidado solo tenía `WindowLayering=true`; en un scripted effect
   `effect.configuration.<clave ausente>` devuelve **undefined**, y

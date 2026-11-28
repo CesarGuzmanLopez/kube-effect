@@ -107,14 +107,18 @@ lint-ci: check
 # siempre con opacity == plate × layer, y paridad con el flag apagado a
 # cualquier valor de la clave (cero quads, grab íntegro, la cara sigue
 # dependiendo SOLO de faceOpacity). Y la cláusula (h), la caja slab (cuarta
-# ampliación, rediseño medido 2026-11-28): eff = min(solicitado, fitted/2)
-# con default 2; eff 0 (o sin QtQuick3D.Helpers) = #Rectangle plano exacto;
-# eff > 0 = UNA caja ProceduralMesh de dos subsets (0 frente texturizado con
-# UVs del #Rectangle probado, 1 cantos + posterior con el color resuelto)
+# ampliación, rediseños medidos 2026-11-28): eff = min(solicitado, fitted/2)
+# con default 24 (con 2 no se leía); eff 0 (o sin QtQuick3D.Helpers) =
+# #Rectangle plano exacto;
+# eff > 0 = UNA caja ProceduralMesh de TRES subsets (0 frente texturizado con
+# UVs del #Rectangle probado, 1 los CUATRO cantos con el color resuelto y luz
+# Fragment, 2 la posterior con la MISMA Texture compartida y UVs
+# por-posición = imagen en espejo, como el quad plano NoCulling de hoy)
 # centrada eff/2 detrás de la ladder (el frente cae EXACTO en ella; el tope
-# y el no-cruce se miden en el frente); scale (w/100, h/100, eff/100) =
-# rectángulo exacto de la ventana (sin el margen de sombra: default 2 =
-# canto fino, no bisel); BackFaceCulling en ambos materiales (NoCulling =
+# y el no-cruce se miden en el frente); scale (frameW/100, frameH/100,
+# eff/100) = el rectángulo VISIBLE (frameGeometry, no el grab con sombra) =
+# canto pegado al contenido; BackFaceCulling en los tres materiales
+# (NoCulling =
 # el bisel negro medido por los márgenes transparentes del thumbnail); el
 # canto comparte umbral y opacidad del frente (baseColor, que diffuseColor
 # no existe en PrincipledMaterial) - y desde 2026-11-28 con el status del

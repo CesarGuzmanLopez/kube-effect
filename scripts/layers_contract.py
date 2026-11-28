@@ -28,7 +28,8 @@ updated by the amendment):
       shape. eff 0 (or no QtQuick3D.Helpers) -> flat built-in #Rectangle,
       NoCulling front, unit z scale: pixel parity with the quad-only
       model. eff > 0 -> ONE closed ProceduralMesh box per layer: TWO
-      material subsets (0 = textured front, 1 = sides + back edge colour
+      material subsets (0 = textured front, 1 = the four sides in the edge
+      colour, 2 = the mirrored BACK with the SAME shared texture
       - the subset order is BUILT in SlabMesh.qml, not guessed from Qt
       docs, because Model has no customMaterials in 6.12: verified
       against the live engine), scale (win.w/100, win.h/100, eff/100) so
@@ -82,8 +83,10 @@ updated by the amendment):
 Stub window layout (mirrored from qml_check_harness.STUB_MODULE; keep the
 two in sync when the stub changes): desktop n has rows i = 0..5 with
 internalId "stub-<n>-<i>", stackingOrder i, x = 100+150i, y = 80+120i,
-width = 320-40i, height = 200+30i; i=3 minimized, i=4 dock, i=5
-desktopWindow. The ordinary rows 0..2 must win quads; 3..5 must never.
+width = 320-40i, height = 200+30i; frameGeometry = (x+6, y+2, w-12,
+h-12) (the visible frame inside the shadow-bearing grab - the box must
+span THIS rect); i=3 minimized, i=4 dock, i=5 desktopWindow. The ordinary
+rows 0..2 must win quads; 3..5 must never.
 """
 
 import sys
@@ -132,6 +135,26 @@ STUB_ROWS = 6
 STUB_SHOWN = (0, 1, 2)
 STUB_DROPPED = (3, 4, 5)
 STUB_COUNT = 3
+# Stub frame inset (keep in sync with qml_check_harness.STUB_MODULE):
+# the grab rect x/y/width/height carries the shadow margin, the VISIBLE
+# frame sits inside it by (6, 2) px with 12 px less on each axis. The box
+# must hug the FRAME - sized to the grab it left a wallpaper band between
+# content and edge (measured 2026-11-28).
+FRAME_DX, FRAME_DY, FRAME_DW, FRAME_DH = 6, 2, -12, -12
+
+
+def dump_face_center_y(i, face_height=700.0):
+  """Grab-rect centre (Y flipped) in face coordinates - the WRONG centre
+  for a boxed layer, used by the "box centred on the grab" regression."""
+  return face_height / 2 - (80 + 120 * i + (200 + 30 * i) / 2)
+
+
+def stub_frame(i):
+  gx = 100 + 150 * i
+  gy = 80 + 120 * i
+  gw = 320 - 40 * i
+  gh = 200 + 30 * i
+  return gx + FRAME_DX, gy + FRAME_DY, gw + FRAME_DW, gh + FRAME_DH
 
 
 # Node positions are float32 in the scene graph (QtQuick3D stores
@@ -455,8 +478,15 @@ def _quad_depth_problems(label, quad, rank, fitted, dump, problems):
       f"{label}: quad {quad['id']} is not strictly in front of the face plane (z {quad['z']})"
     )
   i = int(quad["id"].rsplit("-", 1)[1])
-  center_x = 100 + 150 * i + (320 - 40 * i) / 2 - dump["faceWidth"] / 2
-  center_y = dump["faceHeight"] / 2 - (80 + 120 * i + (200 + 30 * i) / 2)
+  if quad.get("boxMode") == "box":
+    # Boxed layer: centred on the FRAME rect (the visible window), not on
+    # the grab (shadow margin) - the wallpaper-band regression.
+    fx, fy, fw, fh = stub_frame(i)
+    center_x = fx + fw / 2 - dump["faceWidth"] / 2
+    center_y = dump["faceHeight"] / 2 - (fy + fh / 2)
+  else:
+    center_x = 100 + 150 * i + (320 - 40 * i) / 2 - dump["faceWidth"] / 2
+    center_y = dump["faceHeight"] / 2 - (80 + 120 * i + (200 + 30 * i) / 2)
   if not close(quad["x"], center_x, POSITION_TOL):
     problems.append(
       f"{label}: quad {quad['id']} x {quad['x']} != window centre {center_x}"
@@ -647,12 +677,18 @@ def _slab_problems(ctx, shown, ladder, problems):
 
 
 def _slab_rect_problems(label, quad, problems):
-  """The box - flat or not - spans the EXACT window rect in x/y (a fatter
-  box is the bezel bug in geometry form: the shadow margins must not be
-  part of the slab)."""
+  """Boxed or flat, the x/y scale spans the EXACT rect that belongs to
+  the mode: the VISIBLE FRAME when the box is on (a box sized to the grab
+  pushed the edge past the content, with the wallpaper band between - the
+  measured bug), the grab rect when flat (pixel parity)."""
   i = int(quad["id"].rsplit("-", 1)[1])
-  expect_w = (320 - 40 * i) / 100
-  expect_h = (200 + 30 * i) / 100
+  if quad.get("boxMode") == "box":
+    _, _, expect_w, expect_h = stub_frame(i)
+    expect_w = expect_w / 100
+    expect_h = expect_h / 100
+  else:
+    expect_w = (320 - 40 * i) / 100
+    expect_h = (200 + 30 * i) / 100
   if not close(quad["scaleX"], expect_w, POSITION_TOL) or not close(
     quad["scaleY"], expect_h, POSITION_TOL
   ):
@@ -675,15 +711,16 @@ def _slab_flat_case(label, quad, eff, helpers, problems):
 
 
 def _slab_box_case(label, quad, eff, ctx, previous_front, problems):
-  """eff > 0 with Helpers: the two-subset closed box. Returns the front
+  """eff > 0 with Helpers: the three-subset closed box. Returns the front
   plane for the caller's no-crossing walk."""
   layer = ctx["layer"]
   expected_mode = "mask" if layer >= MASK_THRESHOLD else "blend"
   edge = edge_rgba(ctx["edge_raw"])
-  if quad["boxMode"] != "box" or int(quad["boxSubsets"]) != 2:
+  if quad["boxMode"] != "box" or int(quad["boxSubsets"]) != 3:
     problems.append(
-      f"{label}: {quad['id']} is not the two-subset box (mode {quad['boxMode']!r}, subsets {quad['boxSubsets']}) with eff {eff}"
+      f"{label}: {quad['id']} is not the three-subset box (mode {quad['boxMode']!r}, subsets {quad['boxSubsets']}) with eff {eff}"
     )
+  _slab_back_problems(label, quad, expected_mode, problems)
   if not close(quad["scaleZ"], eff / 100, POSITION_TOL):
     problems.append(
       f"{label}: {quad['id']} box z scale {quad['scaleZ']} != eff/100 = {eff / 100} (request beyond half the step must be CLIPPED)"
@@ -715,6 +752,36 @@ def _slab_box_case(label, quad, eff, ctx, previous_front, problems):
       f"{label}: boxes intersect: {quad['id']} reaches back to {front - eff}, behind the previous front {previous_front} (eff {eff} must stay <= half the step)"
     )
   return front
+
+
+def _slab_back_problems(label, quad, expected_mode, problems):
+  """The glass-back family of the box case (kept apart from
+  _slab_box_case for S3776): three subsets with the counts [6, 24, 6],
+  and the back textured with the SAME shared Texture and per-position
+  mirror UVs - from behind the window must read reversed (like the flat
+  quad), never as a dark slab or a second grab."""
+  if list(quad.get("boxSubsetCounts", [])) != [6, 24, 6]:
+    problems.append(
+      f"{label}: {quad['id']} box subset counts {quad.get('boxSubsetCounts')} != [6, 24, 6] (front, sides, mirrored back)"
+    )
+  if not quad.get("backHasMap"):
+    problems.append(
+      f"{label}: {quad['id']} box back is not textured - from behind it would read as a dark slab, not the mirrored window (the measured regression)"
+    )
+  if not quad.get("texShared"):
+    problems.append(
+      f"{label}: {quad['id']} back does not share the front Texture object (two grabs for one window - the capture must stay single)"
+    )
+  if not quad.get("backMirrorUv"):
+    problems.append(
+      f"{label}: {quad['id']} back UVs are not the per-position mirror set (u = 1 must sit at x = +w/2 like the front's)"
+    )
+  if quad.get("backCull") != "back":
+    problems.append(f"{label}: {quad['id']} back cull {quad.get('backCull')!r} != back")
+  if quad.get("backAlphaMode") != expected_mode:
+    problems.append(
+      f"{label}: back material alphaMode {quad.get('backAlphaMode')!r} != {expected_mode!r} (same threshold as the front)"
+    )
 
 
 def _slab_loader_problems(ctx, face, ladder, problems):
@@ -919,6 +986,12 @@ def _with_layer_fields(dump, layer=1.0):
       i = int(quad["id"].rsplit("-", 1)[1])
       quad["boxMode"] = "flat"
       quad["boxSubsets"] = 0
+      quad["boxSubsetCounts"] = []
+      quad["backHasMap"] = True
+      quad["texShared"] = True
+      quad["backCull"] = "back"
+      quad["backAlphaMode"] = "mask" if layer >= MASK_THRESHOLD else "blend"
+      quad["backMirrorUv"] = False
       quad["scaleX"] = (320 - 40 * i) / 100
       quad["scaleY"] = (200 + 30 * i) / 100
       quad["scaleZ"] = 1.0
@@ -957,8 +1030,21 @@ def _thick_dump(raw, gap):
     for quad in face["quads"]:
       if quad["showLayer"]:
         quad["z"] = (quad["order"] + 1) * fitted + EPSILON - eff / 2
+        # Boxed: the FRAME rect - size AND centre (the visible window,
+        # not the shadow-bearing grab: the wallpaper-band bug).
+        fx, fy, fw, fh = stub_frame(quad["order"])
+        quad["x"] = fx + fw / 2 - dump["faceWidth"] / 2
+        quad["y"] = dump["faceHeight"] / 2 - (fy + fh / 2)
+        quad["scaleX"] = fw / 100
+        quad["scaleY"] = fh / 100
         quad["boxMode"] = "box"
-        quad["boxSubsets"] = 2
+        quad["boxSubsets"] = 3
+        quad["boxSubsetCounts"] = [6, 24, 6]
+        quad["backHasMap"] = True
+        quad["texShared"] = True
+        quad["backCull"] = "back"
+        quad["backAlphaMode"] = "mask"
+        quad["backMirrorUv"] = True
         quad["scaleZ"] = eff / 100
         quad["frontCull"] = "back"
   return dump
@@ -987,6 +1073,12 @@ def _degraded_dump(raw=300, gap=40):
     for quad in face["quads"]:
       if quad["showLayer"]:
         quad["z"] = layer_depth_out(quad["order"], face["fittedGap"])
+        # Flat again: grab rect size and centre.
+        i = quad["order"]
+        quad["x"] = 100 + 150 * i + (320 - 40 * i) / 2 - dump["faceWidth"] / 2
+        quad["y"] = dump["faceHeight"] / 2 - (80 + 120 * i + (200 + 30 * i) / 2)
+        quad["scaleX"] = (320 - 40 * i) / 100
+        quad["scaleY"] = (200 + 30 * i) / 100
         quad["boxMode"] = "flat"
         quad["boxSubsets"] = 0
         quad["scaleZ"] = 1.0
@@ -1080,10 +1172,14 @@ def _material_cases(expects_rejection, failures):
 
 
 def _slab_cases(expects_rejection, failures):
-  """The (h) family: positive thick/fitting dumps and the regressions the
-  user's spec asked to kill — request beating the half-step clip, front
-  not pinned, a body surviving eff 0, a hard-coded edge alphaMode, and
-  two slabs intersecting. Apart from selftest() for S3776."""
+  """The (h) family: positive thick/fitting/coloured/degraded dumps and
+  the regressions the measurements asked to kill - request beating the
+  half-step clip, front not pinned, a box surviving eff 0, a fatter box,
+  the wallpaper-band (grab-sized box and grab-centred box), the loader
+  compile error wrongly relaxed, and the glass-back family (dark-slab
+  back, missing mirror, second grab, two-subset collapse), plus the fixed
+  edge alphaMode and the edge colour drift. Apart from selftest() for
+  S3776."""
 
   def thick300():
     return _thick_dump(300, 40)
@@ -1132,38 +1228,30 @@ def _slab_cases(expects_rejection, failures):
       d["faces"][0]["quads"][0].__setitem__("boxSubsets", 2),
     ),
   )
-  # The box must span the EXACT window rect (a fatter box is the bezel
-  # bug in geometry form).
+  # The box must span the EXACT rect of its mode (a fatter box is the
+  # bezel bug in geometry form).
   expects_rejection(
     "box larger than the window",
     lambda d: d["faces"][0]["quads"][0].__setitem__("scaleX", 4.0),
     thick300,
   )
-  # NoCulling on the closed box = the measured black bezel (the inner
-  # side showing through the thumbnail's transparent shadow margins).
+  # THE WALLPAPER-BAND BUG (measured 2026-11-28): sizing the box to the
+  # GRAB rect instead of the visible frame - the dark edge landed outside
+  # the content with the shadow margin between them.
   expects_rejection(
-    "edge culled NoCulling (the measured bezel)",
-    lambda d: d["faces"][0]["quads"][0].__setitem__("edgeCull", "none"),
+    "box sized to the grab (wallpaper band)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("scaleX", 3.2),
     thick300,
   )
-  # A hard-coded edge alphaMode (never following the threshold):
+  # Same bug through the centre: a boxed layer centred on the grab leaves
+  # the frame asymmetric in the box.
   expects_rejection(
-    "edge material with a fixed alphaMode",
-    lambda d: d["faces"][0]["quads"][0].__setitem__("edgeAlphaMode", "opaque"),
+    "box centred on the grab",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("y", dump_face_center_y(0)),
     thick300,
   )
-  # Intersecting boxes: rank 1 shifted forward enough that its back face
-  # crosses rank 0's front (the scale also stops matching the mirror, so
-  # this scene dies twice - fine for a regression).
-  expects_rejection(
-    "slabs intersect",
-    lambda d: d["faces"][0]["quads"][1].__setitem__(
-      "z", d["faces"][0]["quads"][1]["z"] + 30
-    ),
-    thick300,
-  )
-  # The bug this whole clause exists for: the SlabMesh Loader fails to
-  # COMPILE (an invented API) while the gate wrongly relaxes as if the
+  # The bug the never-relax clause exists for: the SlabMesh Loader fails
+  # to COMPILE (an invented API) while the gate wrongly relaxes as if the
   # module were missing - with the module installed, status 3 is fatal.
   expects_rejection(
     "loader compile error relaxed as missing module (the silent flat bug)",
@@ -1177,13 +1265,39 @@ def _slab_cases(expects_rejection, failures):
     thick300,
   )
   # The legitimate degradation: QtQuick3D.Helpers genuinely not installed
-  # -> flat layers with the plain ladder and status Null, validated as an
-  # OK scene (check-layers.py must PRINT a visible SKIP for it).
+  # -> flat layers, validated as an OK scene (check-layers.py must PRINT a
+  # visible SKIP for it).
   degraded = _degraded_dump()
   if validate(degraded):
     failures.append(
       f"the helpers-missing degradation was rejected: {validate(degraded)}"
     )
+
+  # The glass-back family (the "por detras no se ve" fix): the back must
+  # carry the SAME capture, mirrored by the per-position UVs.
+  expects_rejection(
+    "back wearing the edge material (the dark slab seen)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("backHasMap", False),
+    thick300,
+  )
+  expects_rejection(
+    "back mirror missing (no per-position flip)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("backMirrorUv", False),
+    thick300,
+  )
+  expects_rejection(
+    "second grab for the same window (texture not shared)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("texShared", False),
+    thick300,
+  )
+  expects_rejection(
+    "subsets collapsed to two (back counted as edge)",
+    lambda d: (
+      d["faces"][0]["quads"][0].__setitem__("boxSubsets", 2),
+      d["faces"][0]["quads"][0].__setitem__("boxSubsetCounts", [6, 30, 0]),
+    ),
+    thick300,
+  )
   # Edge colour off the resolved value:
   expects_rejection(
     "edge colour drift",
@@ -1194,8 +1308,8 @@ def _slab_cases(expects_rejection, failures):
 
 def _lighting_cases(expects_rejection):
   """The lighting family (measured 2026-11-28: an unlit edge band reads as
-  a shadow, not a solid). Edge Fragment + rough matte; front, faces and
-  plate keep NoLighting (ADR-026); the camera headlight exists iff the
+  a shadow, not a solid). Edge Fragment + rough/matte pins; front, faces
+  and plate keep NoLighting (ADR-026); the camera headlight exists iff the
   flag does (virgin-tree parity)."""
   expects_rejection(
     "edge unlit again (reads as a shadow, not a solid)",
@@ -1213,7 +1327,6 @@ def _lighting_cases(expects_rejection):
     "face material touched by the headlight lighting",
     lambda d: d["faces"][0].__setitem__("faceLighting", "fragment"),
   )
-  # The headlight gate, both directions.
   expects_rejection(
     "headlight present with the flag off (virgin tree broken)",
     lambda d: d.__setitem__("headlightCount", 1),
@@ -1231,8 +1344,8 @@ def _unset_cases(expects_rejection, failures):
   properties in the chain coerced it to 0 BEFORE the resolvers, so the
   slab never built, the veil vanished and the ladder collapsed). Every
   resolver must answer the SCHEMA DEFAULT for undefined/None, never the
-  range floor; and a full synthetic dump built from nothing but Nones
-  must validate as defaults-gap-120."""
+  range floor; and a dump built from nothing but Nones must validate as
+  defaults-gap-120."""
   for name, got, want in (
     ("gap", resolved_gap(None), 120),
     ("lod", resolved_lod(None), 1),
@@ -1247,9 +1360,6 @@ def _unset_cases(expects_rejection, failures):
   unset = _thick_dump(None, None)
   if validate(unset):
     failures.append(f"the all-undefined dump was rejected: {validate(unset)}")
-  # The collapse this exists to catch: raw undefined silently becoming 0
-  # (flat slab, epsilon ladder). The engine dump would show it as a
-  # boxed-off scene; synthetically, a box-less scene with eff demanded.
   expects_rejection(
     "unset keys collapsed to zero (flat slab, no box)",
     lambda d: (
@@ -1261,17 +1371,13 @@ def _unset_cases(expects_rejection, failures):
 
 
 def _ladder_cases(failures):
-  """The exact-fit (non-fitting), single-window and zero-gap ladders,
-  each with their own regression mutation. Lives apart from selftest()
-  for cognitive complexity (Sonar S3776); the geometry clause it pins is
-  the THIRD amendment: (rank + 1) fitted steps, nobody parked on the
-  plane."""
+  """The exact-fit (non-fitting), single-window and zero-gap ladders, each
+  with their own regression mutation. Apart from selftest() for cognitive
+  complexity (Sonar S3776); the geometry clause is the THIRD amendment:
+  (rank + 1) fitted steps, nobody parked on the plane."""
   if validate(_good_dump()):
     failures.append(f"the good synthetic dump did not pass: {validate(_good_dump())}")
 
-  # The exact-fit and zero-gap clauses must fire on their own scenarios:
-  # outermost exactly on the cap (maxRank + 1 fitted steps spanning it)
-  # and everyone on +epsilon (gap 0).
   tight = _good_dump()
   tight["gapRaw"] = 600
   for face in tight["faces"]:
@@ -1284,10 +1390,6 @@ def _ladder_cases(failures):
   if not validate(tight):
     failures.append("per-layer clamp to a plane short of the cap passed the (b) clause")
 
-  # The single-layer ladder (maxRank + 1 == 1): a big raw gap fits the
-  # whole cap in its one step, so the lone window floats EXACTLY at
-  # cap + epsilon - the anchor-free placement the third amendment asks
-  # for even with a single window (the maximized E2/E3 of the harness).
   lone_fitted = expected_fitted_gap(resolved_gap(600), 0)
   if not close(lone_fitted, CAP):
     failures.append(f"single-window stack: fitted {lone_fitted} != cap {CAP}")
@@ -1319,6 +1421,7 @@ def selftest():
     if not found:
       failures.append(f"{name}: a broken scene passed the oracle")
 
+  # Geometry family (the original ADR-028 gates + the amendments).
   expects_rejection(
     "coplanar layers",
     lambda d: d["faces"][0]["quads"][1].__setitem__(
@@ -1345,7 +1448,8 @@ def selftest():
     ),
   )
   expects_rejection(
-    "dropped row released", lambda d: d["faces"][0]["grabs"][3].__setitem__("wId", "")
+    "dropped row released",
+    lambda d: d["faces"][0]["grabs"][3].__setitem__("wId", ""),
   )
   expects_rejection(
     "lod face instantiates", lambda d: d["faces"][0].__setitem__("active", False)
@@ -1355,19 +1459,16 @@ def selftest():
     lambda d: (d.__setitem__("layering", False), d["faces"][0]["quads"].pop()),
   )
   expects_rejection(
-    # The plate in front of the bottom layer (z > +epsilon): it would cover
-    # the windows instead of veiling the holes.
     "plate in front of the bottom layer",
     lambda d: d["faces"][0].__setitem__("plateZ", EPSILON + 1),
   )
   expects_rejection(
-    # The plate deep behind the face, at the retired inwards position: no
-    # longer the veil plane, the interior would show through the holes.
     "plate off the veil plane",
     lambda d: d["faces"][0].__setitem__("plateZ", -(CAP + PLATE_EXTRA)),
   )
   expects_rejection(
-    "fitted gap stretched", lambda d: d["faces"][0].__setitem__("fittedGap", CAP / 2)
+    "fitted gap stretched",
+    lambda d: d["faces"][0].__setitem__("fittedGap", CAP / 2),
   )
   expects_rejection(
     "rank map counts dropped rows", lambda d: d["faces"][0].__setitem__("maxRank", 5)
@@ -1375,10 +1476,6 @@ def selftest():
   expects_rejection(
     "wrong current face", lambda d: d.__setitem__("currentFaceIndex", 2)
   )
-  # The bug the user saw (2026-11-27): the bottom of the pile parked on
-  # the bare epsilon plane - "the bottom window is glued to the desktop
-  # all the time". With gap > 0 rank 0 MUST float one fitted step off the
-  # face; the exact-ladder clause rejects the old anchored placement.
   expects_rejection(
     "bottom quad anchored on the plane with gap > 0",
     lambda d: d["faces"][0]["quads"][0].__setitem__("z", EPSILON),

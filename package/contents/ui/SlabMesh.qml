@@ -11,8 +11,11 @@
 // arrive through the Model scale, never through the vertices) with TWO
 // material subsets: indexes 0..5 are the FRONT face (subset 0 -> the
 // textured WindowThumbnail material, proven #Rectangle UVs from
-// layerGeometry.slabVertices), the remaining 30 indexes are the four sides
-// plus the back (subset 1 -> the uniform edge colour). The subset order IS
+// layerGeometry.slabVertices), the next 24 are the FOUR SIDES (subset 1 ->
+// the uniform edge colour) and the last 6 are the BACK (subset 2 -> the
+// SAME shared Texture, mirrored by per-position UVs: from behind the box
+// reads like the flat NoCulling quad - the same window, reversed - not a
+// dark slab). The subset order IS
 // the Model.materials order (the documented ProceduralMesh rule), so
 // "which index is the front" is not a guess — it is built here: the front
 // is subset 0 by construction. (The first attempt assumed
@@ -61,25 +64,29 @@ Item {
     uv0s: slabHolder.box.uvs
     indexes: slabHolder.box.indexes
     subsets: [
-      // Subset 0: the FRONT (two triangles = the first 6 indexes). A
-      // ProceduralMeshSubset has ONLY offset/count/name - the boundsMin/
-      // boundsMax once written here do not exist and made this file a
-      // permanent Loader.Error ("Cannot assign to non-existent property
-      // boundsMax", measured 2026-11-28): the slab silently never loaded.
-      // The subsets split the ONE indexes list, so the front-first order
-      // of layerGeometry.slabVertices IS the material order (subset 0 ->
-      // Model.materials[0] = the textured front, subset 1 -> materials[1]
-      // = the lit edge colour).
+      // Three subsets, split of the ONE indexes list; the order IS
+      // Model.materials (the documented ProceduralMesh rule), so the
+      // FRONT index is constructed, never guessed: 0 = front (the
+      // textured face), 1 = the FOUR SIDES (the lit edge colour - and
+      // NOT the back any more), 2 = the BACK.
+      // The back is a full textured subset: seen from behind the box
+      // must read like the flat NoCulling quad does today - the same
+      // window MIRRORED ("como la misma pantalla pero al reves"), not a
+      // dark slab (measured with the first two-subset build).
       ProceduralMeshSubset {
         offset: 0
         count: slabHolder.box.frontCount
         name: "front"
       },
-      // Subset 1: the four sides and the back (30 indexes).
       ProceduralMeshSubset {
         offset: slabHolder.box.frontCount
         count: slabHolder.box.sideCount
         name: "edges"
+      },
+      ProceduralMeshSubset {
+        offset: slabHolder.box.frontCount + slabHolder.box.sideCount
+        count: slabHolder.box.backCount
+        name: "back"
       }
     ]
   }

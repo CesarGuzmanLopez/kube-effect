@@ -343,11 +343,20 @@ Reglas:
   2026-11-28)**: con `WindowLayerThickness` > 0 (default **24**; el primer
   default 2 se midió invisible en el anidado — «sigue sin grosor»: la caja se
   construía pero el canto de 2 px no se leía) cada capa es
-  **una sola caja cerrada** — un `ProceduralMesh` unitario compartido con dos
+  **una sola caja cerrada** — un `ProceduralMesh` unitario compartido con TRES
   subsets de material: subset 0 el frente (texturizado con la ventana, UVs
   idénticas al `#Rectangle` probado — el índice frontal es construido, no
-  adivinado), subset 1 los cuatro cantos + la posterior con
-  `WindowLayerEdgeColor`; ambos materiales con `BackFaceCulling`. La vía "un
+  adivinado), subset 1 los CUATRO cantos con `WindowLayerEdgeColor` (con luz:
+  lighting Fragment + headlight en la cámara, gateado por el flag) y subset 2
+  la POSTERIOR, que repite la MISMA captura del frente (Textura compartida,
+  UNA grabación) con UVs por-posición: desde atrás la ventana se ve EN ESPEJO
+  — "como la misma pantalla pero al revés", igual que el quad plano hoy; el
+  posterior en color de canto era una losa negra (medido 2026-11-28); los tres
+  materiales con `BackFaceCulling`. La caja mide el rectángulo VISIBLE
+  (`frameGeometry`, dentro del grab que incluye la sombra) — dimensionada al
+  grab, el canto quedaba separado del contenido por una franja de wallpaper
+  (medido 2026-11-28); wrapper sin frameGeometry → fallback al rect del grab
+  (degradado, nunca roto). La vía "un
   cubo con seis materiales" no existe (`Model.customMaterials` no está en Qt
   6.12, medido en el motor vivo; el built-in **#Cube** es un solo subset), y el
   intermedio "quad delante + cubo detrás sin culling" quedó refutado con

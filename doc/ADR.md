@@ -1507,7 +1507,8 @@ alguno.
 **Diseño final (decidido sobre la medición)**: UNA sola caja cerrada por capa —
 `ProceduralMesh` unitario compartido (SlabMesh.qml, Loader aislado de
 QtQuick3D.Helpers con el patrón arc/capas: sin el módulo, la capa degrada a
-plano y el efecto sigue vivo) con **dos subsets** de material: subset 0 = cara
+plano y el efecto sigue vivo) con **tres subsets** de material (el tercero
+llegó con el cristal posterior, ver nota abajo): subset 0 = cara
 frontal (material texturizado, UVs idénticas al `#Rectangle` probado —
 bottom-left origin, nada espejado; el índice frontal es **construido**, no
 adivinado, porque la premisa de los seis materiales murió arriba), subset 1 =
@@ -1521,7 +1522,7 @@ nunca en el centro — y la caja escala a (win.w/100, win.h/100, eff/100): el
 rectángulo EXACTO de la ventana, sin el margen de sombra. Con `eff 0`
 (o sin Helpers) el Model conserva el built-in `#Rectangle` con NoCulling:
 píxel a píxel el modelo plano. Gate:
-cláusula (h) leída en vivo del motor (modo plano vs caja, **dos subsets**,
+cláusula (h) leída en vivo del motor (modo plano vs caja, **tres subsets**,
 scale (w/100, h/100, eff/100), culling back/back del frente y del canto,
 frente exacto en la ladder, alphaMode/opacidad/color resuelto del canto,
 no-cruce entre ranks consecutivos, y sonda de Helpers con la degradación a
@@ -1553,6 +1554,24 @@ solo si "not installed" con NOTE SKIP visible); `console.warn` único del
 errorString (nested.log, truco §D); DebugOverlay muestra `slab=boxes/quads
 eff=N` en pantalla. La lema de la ampliación (caja, subsets, culling, luz)
 permanece; solo ahora EXISTE.
+
+**Cristal posterior y tamaño al frame (medidos el mismo día, tras el fix del
+Loader)**: dos correcciones visuales más sobre la caja viva —
+(1) el posterior era subset del color de canto → **losa negra al girar por
+detrás**; ahora TRES subsets (0 frente, 1 los cuatro cantos, 2 posterior) con
+el posterior llevando la MISMA `Texture` compartida (una única captura) y UVs
+por-posición, de modo que la imagen sale ESPEJADA desde −z — exactamente lo que
+hoy hace el quad plano NoCulling ("sería como la misma pantalla pero al revés",
+palabras del usuario); la coherencia flat↔caja es la regla. (2) la caja se
+dimensionaba al rect del GRAB (`win.width/height`, que incluye la sombra del
+compositor) → "el grosor está separado de la imagen": franja de wallpaper entre
+contenido y canto; la caja pasa a dimensionarse y centrarse en el
+`frameGeometry` (rect visible, verificado en los headers instalados: RectF
+expuesto junto a client/buffer/decorationHasAlpha), con fallback al grab si el
+wrapper no lo expone. Gates: subsetCounts [6,24,6] leídos del motor, back
+texturado/espejo/textura compartida, caja == frame (size AND centre) con
+rechazos «posterior losa negra», «espejo ausente», «doble captura», «caja al
+grab (wallpaper band)» y «centro del grab».
 
 **Canto con luz (medido el mismo 2026-11-28, segunda corrección visual)**: con
 grosor alto la caja dibujaba canto, pero «sin canto sólido, solo un cuadro como

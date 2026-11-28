@@ -50,14 +50,20 @@ import "layerGeometry.js" as LayerGeometry
 //
 // The slab (fourth amendment, FINAL design): with an effective thickness
 // above 0 a layer is ONE closed ProceduralMesh box (SlabMesh.qml, shared
-// unit box, scaled to win.width x win.height x eff) instead of the flat
+// unit box, scaled to frameGeometry.width x frameGeometry.height x eff -
+// the VISIBLE rect, not the shadow-bearing grab rect) instead of the flat
 // quad: subset 0 is the FRONT with the textured material and the proven
-// #Rectangle UVs, subset 1 the four sides plus the back with the edge
-// colour. The front stays exactly on the ladder - the cap is marked by
+// #Rectangle UVs, subset 1 the four sides with the edge
+// colour (lit: Fragment + camera headlight) and subset 2 the BACK with
+// the SAME shared Texture and per-position UVs - from behind the window
+// reads MIRRORED, exactly like the flat NoCulling quad today ("como la
+// misma pantalla pero al reves"); a coloured back was a dark slab (the
+// measured regression that made the third subset). The front stays
+// exactly on the ladder - the cap is marked by
 // the FRONT, not by the centre - and eff is clipped to half the fitted
 // step (layerGeometry.thicknessEffective), so the back of one box never
-// reaches the front of the next: two layers can never intersect. Both
-// materials use BackFaceCulling on the box: the first attempt (a separate
+// reaches the front of the next: two layers can never intersect. All
+// box materials use BackFaceCulling: the first attempt (a separate
 // solid #Cube behind a Mask quad, NoCulling everywhere) let the
 // TRANSPARENT shadow margins of the thumbnail show the box's inner black
 // side - a giant bezel, measured 2026-11-28; a closed culled box cannot
@@ -301,6 +307,51 @@ Node {
       // (Y flipped, QML down -> +Y up in the scene).
       readonly property real localX: win !== null ? win.x - root.screenGeometry.x + win.width / 2 - root.faceSize.width / 2 : 0
       readonly property real localY: win !== null ? root.faceSize.height / 2 - (win.y - root.screenGeometry.y + win.height / 2) : 0
+      // The VISIBLE rect (measured 2026-11-28: the grab rect x/y/width/
+      // height extends past the window by the SHADOW margin; a box sized
+      // to it placed the dark edge OUTSIDE the visible content with a
+      // strip of wallpaper between - "el grosor esta separado de la
+      // imagen"). KWin's Scripting Window exposes frameGeometry (RectF,
+      // alongside clientGeometry/bufferGeometry/decorationHasAlpha) - the
+      // window WITHOUT the shadow, strictly inside the grab. The box is
+      // sized and centred on the FRAME; the flat quad stays on the grab
+      // (pixel parity). If a wrapper has no frameGeometry (older KWin) the
+      // box falls back to the grab rect - degraded but never broken.
+      //
+      // Numbered convention (the stub's geometry as a worked example, a
+      // 1000x700 face, screen at (0,0), window row i=0): grab
+      // (x=100,y=80,w=320,h=200) -> localX = 100+160-500 = -240, localY =
+      // 350-(80+100) = 170. frame (106, 82, 308, 188) -> boxCenterX =
+      // 106+154-500 = -240 (shadows symmetric left/right here), boxCenterY
+      // = 350-(82+94) = 174 -> the box rides 4 px higher (asymmetric
+      // shadow). The front face spans the frame rect but the item texture
+      // maps the WHOLE grab (uv 0..1 across the quad, slabVertices keeps
+      // the proven #Rectangle mapping): the grab is COMPRESSED into the
+      // frame by (308/320, 188/200) = (0.9625, 0.94) - a few percent,
+      // centred on the content - so the shadow margins shrink slightly
+      // instead of the box growing into the wallpaper. No pixels clip and
+      // no band can appear; on a maximised window the margin is bare
+      // shadow, under 1%.
+      readonly property var frameGeom: win !== null ? win.frameGeometry : undefined
+      readonly property bool hasFrame: frameGeom !== undefined && frameGeom !== null && frameGeom.width > 0 && frameGeom.height > 0
+      readonly property real boxW: hasFrame ? frameGeom.width : (win !== null && win.width > 0 ? win.width : 100)
+      readonly property real boxH: hasFrame ? frameGeom.height : (win !== null && win.height > 0 ? win.height : 100)
+      readonly property real boxCenterX: hasFrame ? frameGeom.x - root.screenGeometry.x + frameGeom.width / 2 - root.faceSize.width / 2 : localX
+      readonly property real boxCenterY: hasFrame ? root.faceSize.height / 2 - (frameGeom.y - root.screenGeometry.y + frameGeom.height / 2) : localY
+
+      // ONE WindowThumbnail capture shared by the front AND the
+      // back material (the mirror is in the UVs, not in a second grab - the
+      // box costs exactly the same captures as the flat quad).
+      property Texture winTex: Texture {
+        sourceItem: KWinComponents.WindowThumbnail {
+          // A dropped window (hidden while the delegate still exists,
+          // e.g. it just became a dock) releases the capture too: the
+          // null QUuid as the EMPTY STRING, never an integer 0.
+          wId: layer.showLayer && layer.win !== null ? layer.win.internalId : ""
+          width: layer.win !== null && layer.win.width > 0 ? layer.win.width : 1
+          height: layer.win !== null && layer.win.height > 0 ? layer.win.height : 1
+        }
+      }
       // Raw stacking order; the ROW index is only the tie-breaker of a
       // wrapper without the property (never expected, never hole-y: the
       // rank math below still produces distinct depths per order).
@@ -357,10 +408,10 @@ Node {
       // geometry requires source "" - the CubeFace/arc rule).
       source: layer.boxActive ? "" : "#Rectangle"
       geometry: layer.boxActive ? root.slabBox : null
-      // Exactly the window size in face units (1 unit = 1 px); the box's
-      // z scale turns the unit depth 100 into the EFFECTIVE thickness (a
-      // raw request beyond half the step is clipped, never obeyed).
-      scale: Qt.vector3d(win !== null && win.width > 0 ? win.width / 100 : 1, win !== null && win.height > 0 ? win.height / 100 : 1, layer.boxActive ? layer.slabEff / 100 : 1)
+      // Flat: the grab rect (pixel parity). Box: the FRAME rect (the
+      // visible window), z = the effective thickness clipped to half the
+      // step (a raw request beyond it is clipped, never obeyed).
+      scale: Qt.vector3d(layer.boxActive ? layer.boxW / 100 : (win !== null && win.width > 0 ? win.width / 100 : 1), layer.boxActive ? layer.boxH / 100 : (win !== null && win.height > 0 ? win.height / 100 : 1), layer.boxActive ? layer.slabEff / 100 : 1)
       // Outwards (+z is the face normal), the whole stack floating: the
       // bottom sits one fitted step + epsilon off the face, the top window
       // is the outermost (exactly cap + epsilon when the stack overflows).
@@ -368,8 +419,9 @@ Node {
       // front of the face plane even at gap 0. The box CENTRES on that
       // rule: its FRONT (local +50 z, scaled) lands exactly back on the
       // ladder, so the cap and the no-crossing guarantee are all measured
-      // at the front face, never at the centre.
-      position: Qt.vector3d(localX, localY, layer.boxActive ? layerDepthOut - layer.slabEff / 2 : layerDepthOut)
+      // at the front face, never at the centre. x/y: the BOX centres on
+      // the FRAME rect (the visible window), the flat quad on the grab.
+      position: Qt.vector3d(layer.boxActive ? layer.boxCenterX : localX, layer.boxActive ? layer.boxCenterY : localY, layer.boxActive ? layerDepthOut - layer.slabEff / 2 : layerDepthOut)
       materials: [
         PrincipledMaterial {
           lighting: PrincipledMaterial.NoLighting
@@ -399,28 +451,18 @@ Node {
           // as the cylinder face holes (ADR-026).
           alphaCutoff: 0.5
           opacity: root.layerOpacity
-          baseColorMap: Texture {
-            sourceItem: KWinComponents.WindowThumbnail {
-              // A dropped window (hidden while the delegate still exists,
-              // e.g. it just became a dock) releases the capture too: the
-              // null QUuid as the EMPTY STRING, never an integer 0.
-              wId: layer.showLayer && layer.win !== null ? layer.win.internalId : ""
-              width: layer.win !== null && layer.win.width > 0 ? layer.win.width : 1
-              height: layer.win !== null && layer.win.height > 0 ? layer.win.height : 1
-            }
-          }
+          baseColorMap: layer.winTex
         },
-        // Subset 1 (the four sides + the back): the uniform edge colour.
-        // BackFaceCulling always on the box — through the back you must
-        // see the plate/interior (the flat-model behaviour), never the
-        // inside of the box. Same threshold and opacity as the front: the
-        // rim joins the opaque depth-writing pass exactly when the pile
-        // is solid. The colour is baseColor: PrincipledMaterial has no
-        // diffuseColor (that name belongs to DefaultMaterial; assigning
-        // it here was a "non-existent property" load error, measured).
-        // While the layer is flat this material simply never binds a
-        // subset (the #Rectangle has one) - harmless, and it keeps the
-        // materials list shape constant for the gate.
+        // Subset 1 (the four SIDES only - the back is its own textured
+        // subset since the "glass back" fix): the uniform edge colour.
+        // BackFaceCulling always on the box. Same threshold and opacity
+        // as the front: the rim joins the opaque depth-writing pass
+        // exactly when the pile is solid. The colour is baseColor:
+        // PrincipledMaterial has no diffuseColor (that name belongs to
+        // DefaultMaterial; assigning it here was a "non-existent
+        // property" load error, measured). While the layer is flat this
+        // material never binds a subset (the #Rectangle has one) - harmless,
+        // and it keeps the materials list shape constant for the gate.
         PrincipledMaterial {
           // FRAGMENT lighting on the edge only (measured 2026-11-28: the
           // unlit flat colour "reads as a shadow, not a solid" - there was
@@ -440,6 +482,24 @@ Node {
           alphaCutoff: 0.5
           baseColor: root.edgeColor
           opacity: root.layerOpacity
+        },
+        // Subset 2 (the BACK): THE SAME capture as the front, shared
+        // through layer.winTex - one Texture object referenced by two
+        // materials (verified: the engine accepts it and the item is
+        // grabbed ONCE per frame, no double capture). Per-position UVs
+        // (layerGeometry.slabVertices) make the thumbnail read MIRRORED
+        // from behind - exactly what the flat NoCulling quad shows today
+        // ("sería como la misma pantalla pero al revés"); the two-subset
+        // box instead showed a dark slab (the measured regression).
+        // NoLighting (it is content, not geometry), same threshold,
+        // pinned cutoff and BackFaceCulling.
+        PrincipledMaterial {
+          lighting: PrincipledMaterial.NoLighting
+          cullMode: Material.BackFaceCulling
+          alphaMode: root.layerOpacity < 0.99 ? PrincipledMaterial.Blend : PrincipledMaterial.Mask
+          alphaCutoff: 0.5
+          opacity: root.layerOpacity
+          baseColorMap: layer.winTex
         }
       ]
 

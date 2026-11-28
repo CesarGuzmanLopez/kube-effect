@@ -169,94 +169,93 @@ function thicknessEffective(raw, fitted) {
   return Math.min(thicknessUnits(raw), limit);
 }
 
-// The slab box as ONE closed volume with two material subsets (the fourth
-// amendment, final shape after the bevel was measured 2026-11-28: two
-// objects per layer - textured Mask quad + solid cube behind - let the
-// TRANSPARENT shadow margins of the thumbnail discard under the cutoff and
-// showed the cube's black front face through them: a giant bezel, no rim
-// at all. A single closed box cannot do that: there is no second surface
-// behind the front's transparent pixels, and with BackFaceCulling the box
-// is opaque from outside and invisible from inside, so the margins reveal
-// the plate/interior exactly as the flat model did).
+// The slab box as ONE closed volume with THREE material subsets (the
+// fourth amendment; the back became its own subset after the first
+// boxed build showed a plain dark slab from behind - the user compared
+// it to the FLAT quad, which, being NoCulling, shows the window MIRRORED
+// from behind: "debería verse, sería como la misma pantalla pero al
+// revés"). The box must keep that glass-like behaviour.
 //
 // slabVertices(width, height, depth): an axis-aligned box centred on the
-// origin, the FRONT face at +depth/2 (the outward normal, +z), the BACK at
-// -depth/2, exact width x height in face pixels - one unit is one pixel,
-// the same convention as every other surface. Returns {positions, normals,
-// uvs, indexes, frontCount, sideCount}: the first frontCount (6) indexes
-// are the front (material/subset 0), the remaining sideCount (30) are the
-// four sides + the back (material/subset 1). 24 vertices (4 per face) with
-// true per-face outward normals, CCW winding seen from OUTSIDE - the
-// arcGeometry/capGeometry generator contract, so check-constants can
-// validate it without an engine.
+// origin, FRONT at +depth/2 (the outward normal, +z), BACK at -depth/2,
+// exact width x height in face pixels - one unit is one pixel. Returns
+// {positions, normals, uvs, indexes, frontCount, sideCount, backCount}:
+// the indexes run FRONT first (0..5 = subset 0), then the FOUR SIDES
+// (6..29 = subset 1, sides only - NOT the back any more), then the BACK
+// (30..35 = subset 2). 24 vertices (4 per face), per-face outward
+// normals, CCW seen from OUTSIDE (each entry below hand-checked with
+// (v1-v0) x (v3-v0) = normal), triangles (0,1,3) and (3,2,0).
 //
-// The front UVs repeat the proven built-in #Rectangle mapping (the arc
-// wall note in arcGeometry.js: bottom-left origin, v = 0 at the bottom
-// row): u = 0.5 + x/W, v = 0.5 + y/H - a WindowThumbnail item texture
-// lands upright and unmirrored exactly like the flat quad's today. The
-// side/back UVs are arbitrary (those faces take a uniform colour).
+// UV convention - all in the SAME per-position formula
+// uv = (0.5 + x/width, 0.5 + y/height): the front keeps the proven
+// #Rectangle mapping (bottom-left origin, arcGeometry note) and THE BACK
+// USES THE IDENTICAL PER-POSITION UVs. The mirror is not written into
+// the numbers, it EMERGES from the viewpoint: looking at the back from
+// -z, the vertex at +x (u = 1) lands on the observer's LEFT, so the same
+// thumbnail reads horizontally flipped - exactly what the flat NoCulling
+// quad shows today (equivalently: in the back face's own natural order
+// the uv would be u' = 1 - u). Numbered: face at x = +50 (unit box) ->
+// u = 1 from either side; seen from behind u = 1 appears left. The side
+// faces take a harmless planar uv (uniform colour material).
 //
-// Degenerate input (non-finite or <= 0 in any dimension) answers empty
-// arrays - the mesh simply renders nothing until the numbers settle, the
-// cap/arc convention. The QML side calls it once with the unit size
-// (100 x 100 x 100) and per-window dimensions arrive through the Model
-// scale (w/100, h/100, eff/100): one shared mesh for every layer, exactly
-// like the shared arc.
+// Degenerate input answers empty arrays (the cap/arc convention). The
+// QML side calls it once with the unit size (100 x 100 x 100); per-window
+// dimensions and the EFFECTIVE thickness arrive through the Model scale -
+// one shared mesh for every layer, exactly like the shared arc.
 function slabVertices(width, height, depth) {
   const w = finiteOr(width);
   const h = finiteOr(height);
   const d = finiteOr(depth);
   if (w === null || h === null || d === null || w <= 0 || h <= 0 || d <= 0) {
-    return { positions: [], normals: [], uvs: [], indexes: [], frontCount: 0, sideCount: 0 };
+    return { positions: [], normals: [], uvs: [], indexes: [], frontCount: 0, sideCount: 0, backCount: 0 };
   }
   const hw = w / 2;
   const hh = h / 2;
   const hd = d / 2;
-  // Six faces written explicitly: outward normal + four corners, in CCW
-  // order seen from OUTSIDE (the arc/cap contract; every entry below was
-  // hand-checked with (v1-v0) x (v3-v0) = normal), triangles (0,1,3) and
-  // (3,2,0).
+  // Faces in SUBSET order: front first, then the four sides, back last.
+  // Corners are listed CCW seen from outside, and EVERY face uses the
+  // same per-position uv formula built from the corner coordinates.
   const faces = [
-    // front (+z): from +z looking -z, x grows right and y grows up.
+    // front (+z): subset 0.
     { n: [0, 0, 1], c: [[-hw, -hh, hd], [hw, -hh, hd], [-hw, hh, hd], [hw, hh, hd]] },
-    // back (-z).
-    { n: [0, 0, -1], c: [[-hw, -hh, -hd], [-hw, hh, -hd], [hw, -hh, -hd], [hw, hh, -hd]] },
-    // right (+x).
+    // right (+x): subset 1 starts here...
     { n: [1, 0, 0], c: [[hw, -hh, hd], [hw, -hh, -hd], [hw, hh, hd], [hw, hh, -hd]] },
-    // left (-x).
+    // left (-x)
     { n: [-1, 0, 0], c: [[-hw, -hh, -hd], [-hw, -hh, hd], [-hw, hh, -hd], [-hw, hh, hd]] },
-    // top (+y).
+    // top (+y)
     { n: [0, 1, 0], c: [[-hw, hh, hd], [hw, hh, hd], [-hw, hh, -hd], [hw, hh, -hd]] },
-    // bottom (-y).
+    // bottom (-y)
     { n: [0, -1, 0], c: [[-hw, -hh, -hd], [hw, -hh, -hd], [-hw, -hh, hd], [hw, -hh, hd]] },
+    // back (-z): subset 2 - same per-position uv formula as the front,
+    // which makes it read MIRRORED from -z exactly like the flat quad.
+    { n: [0, 0, -1], c: [[-hw, -hh, -hd], [-hw, hh, -hd], [hw, -hh, -hd], [hw, hh, -hd]] },
   ];
   const positions = [];
   const normals = [];
   const uvs = [];
   const indexes = [];
-  for (let f = 0; f < 6; ++f) {
+  for (let f = 0; f < faces.length; ++f) {
     const face = faces[f];
     const base = f * 4;
     for (let c = 0; c < 4; ++c) {
       positions.push(Qt.vector3d(face.c[c][0], face.c[c][1], face.c[c][2]));
       normals.push(Qt.vector3d(face.n[0], face.n[1], face.n[2]));
-      // The FRONT keeps the proven #Rectangle UVs (bottom-left origin: u
-      // grows with x, v with y - arcGeometry.js note), so a
-      // WindowThumbnail item texture lands upright and unmirrored exactly
-      // like the flat quad's today. The other faces take the same planar
-      // UV: the edge material is a uniform colour, it never matters.
-      uvs.push(Qt.vector2d(c === 1 || c === 3 ? 1 : 0, c >= 2 ? 1 : 0));
+      // Per-position uv (the mirror of the back face emerges from the
+      // viewpoint, see the numbered convention above).
+      uvs.push(Qt.vector2d(0.5 + face.c[c][0] / w, 0.5 + face.c[c][1] / h));
     }
     indexes.push(base + 0, base + 1, base + 3, base + 3, base + 2, base + 0);
   }
-  return { positions: positions, normals: normals, uvs: uvs, indexes: indexes, frontCount: 6, sideCount: 30 };
+  return {
+    positions: positions,
+    normals: normals,
+    uvs: uvs,
+    indexes: indexes,
+    frontCount: 6,
+    sideCount: 24,
+    backCount: 6
+  };
 }
-
-// WindowLayerEdgeColor: the colour of the slab sides. KConfig delivers a
-// string; anything empty or not a #hex (hand-edited garbage) falls back to
-// the schema default, the same never-to-the-floor rule as the numeric
-// resolvers. "#rgb" is accepted (Qt parses it; the face/plate share the
-// exact default string "#141719").
 function edgeColor(rawColor) {
   if (typeof rawColor !== "string") {
     return EDGE_COLOR_DEFAULT;

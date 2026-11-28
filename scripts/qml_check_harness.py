@@ -275,12 +275,24 @@ ListModel {
         const number = desktop.x11DesktopNumber;
         for (let i = 0; i < 6; ++i) {
             // createQmlObject: a ListModel parses any nested element as a ListElement.
-            const win = Qt.createQmlObject("import QtQuick; QtObject { property string internalId; property real x; property real y; property real width; property real height; property int stackingOrder; property bool minimized; property bool dock; property bool desktopWindow }", wfm);
+            const win = Qt.createQmlObject("import QtQuick; QtObject { property string internalId; property real x; property real y; property real width; property real height; property var frameGeometry; property int stackingOrder; property bool minimized; property bool dock; property bool desktopWindow }", wfm);
             win.internalId = "stub-" + number + "-" + i;
             win.x = 100 + 150 * i;
             win.y = 80 + 120 * i;
             win.width = 320 - 40 * i;
             win.height = 200 + 30 * i;
+            // frameGeometry (measured API: KWin Scripting Window exposes it
+            // as a RectF alongside clientGeometry/bufferGeometry/
+            // decorationHasAlpha): the VISIBLE rect. The grab
+            // (x/y/width/height) extends past it by the SHADOW margin, so
+            // in reality the frame sits INSIDE the grab - the stub mirrors
+            // that with an asymmetric inset (shadow heavier at the
+            // bottom/left): frame = (x+6, y+2, w-12, h-12). Deliberately
+            // different from the grab in size AND center so the slab gate
+            // moves real geometry: the box must span the frame, and the
+            // front's whole-grab texture gets compressed into it (no
+            // wallpaper band between content and edge).
+            win.frameGeometry = Qt.rect(win.x + 6, win.y + 2, win.width - 12, win.height - 12);
             win.stackingOrder = i;
             win.minimized = i === 3;
             win.dock = i === 4;

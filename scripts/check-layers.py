@@ -66,11 +66,17 @@ the ADR-028 "Puertas" (amended):
                                    transparency.
   thick    request 300 against -> (h) the EFFECTIVE thickness is half
            a step of 40            the step (20) and the layer is ONE
-                                   closed two-subset box (front textured
-                                   at exactly the ladder z - eff/2, sides
-                                   + back in the edge colour, both
-                                   materials BackFaceCulling: NoCulling
-                                   was the measured black bezel).
+                                   closed THREE-subset box sized to the
+                                   VISIBLE FRAME (front textured at
+                                   exactly the ladder z - eff/2, four
+                                   sides in the lit edge colour, BACK
+                                   with the same capture mirrored -
+                                   "como la misma pantalla pero al
+                                   reves" - all materials
+                                   BackFaceCulling: NoCulling was the
+                                   measured black bezel, grab-sizing the
+                                   wallpaper band, an edge-material back
+                                   the dark slab).
   thickfit request 10 (< half  -> eff 10: the request survives when it
            the step)               already fits.
   thickdefault raw UNSET        -> a fresh kwinrc: the resolver answers 24
@@ -518,8 +524,9 @@ def main():
     "key 1.0 solid Mask, plate Blend x plate-opacity times the fade), the "
     "face-material parity with the flag off at any rotation value, and "
     "the single closed slab box (flat #Rectangle at effective thickness 0 "
-    "= parity; two-subset ProceduralMesh with BackFaceCulling when "
-    "requested, z scale clipped to half the fitted step; the textured "
+    "= parity; three-subset ProceduralMesh with BackFaceCulling when "
+    "requested (textured front on the FRAME rect, lit sides, mirrored "
+    "shared-texture back); the textured "
     "front exactly on the ladder; consecutive boxes never crossing; "
     "edge Fragment-lit with the rough matte pin while front/faces/plate "
     "stay NoLighting; camera headlight present iff the flag (zero light "

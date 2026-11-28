@@ -222,6 +222,12 @@ Item {
           // unit ProceduralMesh (two subsets) scaled to the window.
           boxMode: quad.geometry !== null && quad.geometry !== undefined ? "box" : "flat",
           boxSubsets: quad.geometry !== null && quad.geometry !== undefined ? quad.geometry.subsets.length : 0,
+          boxSubsetCounts: quad.geometry !== null && quad.geometry !== undefined ? [quad.geometry.subsets[0].count, quad.geometry.subsets[1].count, quad.geometry.subsets[2].count] : [],
+          backHasMap: quad.materials[2].baseColorMap !== null && quad.materials[2].baseColorMap !== undefined,
+          texShared: quad.materials[0].baseColorMap === quad.materials[2].baseColorMap,
+          backCull: cullName(quad.materials[2].cullMode),
+          backAlphaMode: modeName(quad.materials[2].alphaMode),
+          backMirrorUv: quad.geometry !== null && quad.geometry !== undefined ? Math.abs(quad.geometry.uv0s[22].x - 1) < 1e-6 && Math.abs(quad.geometry.uv0s[20].x) < 1e-6 : false,
           scaleX: quad.scale.x,
           scaleY: quad.scale.y,
           scaleZ: quad.scale.z,
