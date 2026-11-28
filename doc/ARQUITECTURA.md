@@ -226,14 +226,13 @@ solo se ve a través de los huecos. Quads y plate heredan la opacidad de la cara
 (ADR-021): la pila funde entera, no solo la base.
 
 Descartados en ADR-028 (para no reabrirlos): **retraer la cara** detrás del stack
-dejando los quads en la posición del shell (así lo resuelve el proyecto de
-referencia anterior, cuya cara no grababa el escritorio completo; aquí abriría la
-silueta: al girar se mira dentro del cubo por cada cara, y el wallpaper
-retraído arrastra el fondo al interior del sólido) y **quads hacia fuera** (`+z`:
-al orbitar cruzan paredes y caras vecinas — leído como ventanas hundiéndose a
-través del escritorio; medido en la referencia). Detrás de una cara opaca que
-conserva sus ventanas planas la pila es directamente invisible (el `Mask` en
-reposo escribe profundidad).
+dejando los quads en la posición del shell — aquí la cara ES el grab del
+escritorio completo (wallpaper incluido), así que retraerla abriría la silueta
+(al girar se mira dentro del cubo por cada cara) y arrastraría el fondo al
+interior del sólido — y **quads hacia fuera** (`+z`: al orbitar cruzan paredes y
+caras vecinas y se leen como ventanas hundiéndose a través del escritorio). Detrás
+de una cara opaca que conserva sus ventanas planas la pila es directamente
+invisible (el `Mask` en reposo escribe profundidad).
 
 ### Cómo se aplicará
 

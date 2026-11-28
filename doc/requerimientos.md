@@ -300,7 +300,7 @@ Reglas:
 - La ventana de arriba (mayor z-index) es la más cercana; las de abajo se hunden un
   paso por rango.
 - Profundidad **fija** mientras gira (no se anima): el stack se lee como un sólido;
-  animar el hueco produce un «pop» al parar (medido en el proyecto de referencia).
+  animar el hueco produce un «pop» al parar.
 - Solo cuentan las ventanas de esa cara/escritorio/pantalla. Descartes: las
   minimizadas no existen (igual que en el plano); **docks y ventana-wallpaper
   quedan planos en el grab, nunca se huecan** (un hueco sin quad detrás abriría el

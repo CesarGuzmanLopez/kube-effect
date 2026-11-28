@@ -43,7 +43,7 @@ native-install` lo pone en `/usr` y sí aparece en Preferencias → Gestión de
 - `scripts/` — checks y arnés de test anidado.
 - `../kdeplasma-addons/kwin/effects/cube/` — cubo oficial KDE (referencia viva).
 - `../kwin-effects-cube/` — cubo C++ de zzag (referencia de geometría).
-- `../kwin-effect-kkube/` — proyecto anterior (exploración con features), referencia. no copiar codigo entenderlo
+- `../kwin-effect-kkube/` — **solo nota histórica**: experimento anterior de capas 3D cuyo diseño quedó descartado (ADR-028); no es referencia de nada.
 
 ## Recarga de QML (CRÍTICO)
 

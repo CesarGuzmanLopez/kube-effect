@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Convierte un modelo (glTF/GLB/OBJ/FBX/DAE) a .mesh para KKube.
-# Opcional: KKube carga glTF/GLB/OBJ en runtime con RuntimeLoader si el plugin
+# Convierte un modelo (glTF/GLB/OBJ/FBX/DAE) a .mesh para Kube Effect.
+# Opcional: Kube Effect carga glTF/GLB/OBJ en runtime con RuntimeLoader si el plugin
 # importador de Qt está operativo (paquete assimp). Convertir a .mesh antes
 # evita depender de ese plugin y es más rápido en cada frame.
 # Uso: scripts/import-model.sh modelo.glb [destino/]
@@ -37,4 +37,4 @@ MESH=$(find "$OUT" -name "*.mesh" -print 2>/dev/null | head -1)
 }
 echo "mesh=$MESH"
 find "$OUT" -maxdepth 2 -type d -name meshes -print -quit
-echo "Pégalo en Ajustes > Efectos de escritorio > KKube > Model file"
+echo "Pégalo en Ajustes > Efectos de escritorio > Kube Effect > Model file"

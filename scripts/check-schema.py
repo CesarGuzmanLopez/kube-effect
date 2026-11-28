@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Schema invariants for the KKube effect (stdlib only, runs in CI).
+"""Schema invariants for the Kube Effect (stdlib only, runs in CI).
 
 The generic scripted KCM binds config.ui widgets to config/main.xml entries by
 name, and a non-editable QComboBox to the *stored integer index* of an Enum.

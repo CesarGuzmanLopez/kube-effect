@@ -1326,11 +1326,10 @@ detrás de los cuales flota cada capa. Fórmula y presupuesto por representació
 ARQUITECTURA §2.4; reglas completas en requerimientos §2.1. Puntos:
 
 1. **Huecos (H), no pared retraída (P) ni quads exteriores (F).** La cara de
-   kube-effect SÍ es el grab del escritorio completo (wallpaper incluido, a
-   diferencia del proyecto de referencia anterior, cuya cara no lo grababa): P
+   kube-effect es el grab del escritorio completo (wallpaper incluido): P
    arrastraría el wallpaper al fondo del cubo y abriría la silueta al girar (se
    miraría dentro del sólido por cada cara, rompiendo el cilindro cerrado de
-   ADR-025/026); F fue medido allí y cruzó paredes y caras vecinas («ventanas
+   ADR-025/026); F cruzaría paredes y caras vecinas al orbitar («ventanas
    hundiéndose a través del escritorio»); y una cara que conserve sus ventanas
    opacas frente a la pila (C) es muerta: el `Mask` en reposo escribe profundidad
    y la ventana plana ocluye a su propia capa.
@@ -1365,8 +1364,8 @@ ARQUITECTURA §2.4; reglas completas en requerimientos §2.1. Puntos:
    escritorio), luego tambor (cilindro 1-2). Si la verificación en el anidado no
    cierra en el tambor (coste o visual), las capas del tambor se apagan por código y
    esa fase se pospone — misma versión. Curvar/deformar capas con el cilindro y las
-   colisiones con otros efectos quedan como features futuras con clave propia (la
-   referencia usó quads planos sobre la normal; aquí igual).
+   colisiones con otros efectos quedan como features futuras con clave propia
+   (esta feature: quads planos sobre la normal de la cara).
 8. **Código**: helpers puros en módulo nuevo `layerGeometry.js` (rank, fittedGap,
    layerDepth, plateDepth — patrón arcGeometry.js/capGeometry.js de la enmienda de
    ADR-027: constants.js guarda solo resolvedores de valor). `constants.js` (882

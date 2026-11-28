@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dependency check for KKube.
+# Dependency check for Kube Effect.
 #
 # Required entries are shipped with Plasma 6; if one is missing the effect
 # cannot load. Optional entries only enable extra features (user glTF models,
@@ -32,7 +32,7 @@ check() {
 }
 
 QML=/usr/lib/qt6/qml
-echo "KKube dependency check"
+echo "Kube Effect dependency check"
 echo
 echo "Required (shipped with Plasma 6; no extra installs needed):"
 check "QtQuick3D" "$QML/QtQuick3D/qmldir" required qt6-quick3d qml6-module-qtquick3d

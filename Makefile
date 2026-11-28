@@ -167,13 +167,14 @@ sonar-scan:
 		-Dsonar.projectVersion=$(KUBE_PKG_VERSION) \
 		-Dsonar.externalIssuesReportPaths=build/qmllint-sonar.json
 
-# SonarQube local COMPARTIDO (contenedores kkube-sonar + kkube-sonar-db, una
-# única instancia en localhost:9000). kube-effect es un proyecto MÁS en esa
-# instancia; no crea una propia. Los contenedores se crean/gestionan desde
-# kwin-effect-kkube (docker-compose.sonar.yml); aquí solo se arrancan/paran.
+# SonarQube local COMPARTIDO (contenedores kkube-sonar + kkube-sonar-db — el
+# nombre del recurso es literal, no una referencia de proyecto —, una única
+# instancia en localhost:9000). kube-effect es un proyecto MÁS en esa instancia;
+# no crea una propia. Los contenedores se crean/gestionan fuera de este repo;
+# aquí solo se arrancan/paran.
 sonar-up:
 	@if ! docker inspect kkube-sonar >/dev/null 2>&1; then \
-		echo 'error: no existe la instancia compartida kkube-sonar; créala desde kwin-effect-kkube (docker-compose.sonar.yml)' >&2; exit 1; fi
+		echo 'error: no existe la instancia compartida kkube-sonar (contenedores definidos fuera de este repo)' >&2; exit 1; fi
 	@docker start kkube-sonar-db kkube-sonar >/dev/null 2>&1 || true
 	@echo 'esperando a SonarQube en $(SONAR_URL) (máx. 120 s)...'; \
 	for i in $$(seq 1 60); do \
