@@ -298,16 +298,21 @@ se ve por los bordes del hueco (parallax). Con el flag apagado (default) una car
 
 Reglas:
 
-- Tope global del stack: **150 px**. Si no cabe, se **reparte** el paso (mismo paso
-  menor para cada rango, orden preservado, sin aplanar dos capas en un plano) y la
-  capa **más exterior** cae EXACTA en el tope (+`cap`, con el ε fuera).
+- Tope global del stack: **150 px**. Si no cabe, se **reparte** el paso sobre
+  los `maxRank + 1` pasos que ocupa el stack (mismo paso menor para cada rango,
+  orden preservado, sin aplanar dos capas en un plano) y la capa **más exterior**
+  cae EXACTA en el tope (+`cap`, con el ε fuera).
 - Presupuesto: **cap directo en TODAS las formas** (polígono, hoja y tambor). El
   presupuesto por representación `min(faceDistance · 0.5, cap)` quedó **sin
   efecto** con la enmienda: hacia fuera no hay paredes interiores que proteger
   (el `maxLayerDepth` por forma desapareció del código).
 - Dirección: la ventana de **mayor z-index es la más cercana al observador** (la
-  más exterior); la de abajo (rank 0) queda casi pegada a la cara, en +ε; cada
-  rango sube un paso hacia fuera.
+  más exterior). **El stack flota entero** (medido 2026-11-27: con la de abajo
+  en el +ε puro se leía «pegada al escritorio todo el tiempo»): la de abajo
+  (rank 0) arranca a **+paso** (`fittedGap + ε`), cada rango sube un paso más y
+  la de arriba cae en el tope (+`cap + ε` con overflow; una sola ventana con gap
+  grande queda EXACTA en +cap). Excepción deliberada: **gap 0 = todas pegadas al
+  plano (+ε, paridad con el cubo vírgen)**.
 - **Orden en reposo (medido 2026-11-27)**: el centroide del quad no respeta el
   rank (lleva el offset lateral de su ventana), así que los quads usan el umbral
   Mask/Blend de ADR-026 sobre su opacidad efectiva: `≥ 0.99 → Mask` con

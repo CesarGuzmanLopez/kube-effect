@@ -16,10 +16,13 @@ Clause families (the five innegociable asserts of the ADR-028 "Puertas",
 updated by the amendment):
   (a) strict monotony: z STRICTLY INCREASING with rank and POSITIVE (the
       top window is the outermost; no two layers of a face coplanar);
-  (b) budget: every rank*fitted <= cap and a stack that does not fit lands
-      the OUTERMOST layer EXACTLY on cap (one fitted step for all, no
-      per-layer clamp, no stretch when the configured gap already fits) —
-      the same fixed cap for every shape, sheet included;
+  (b) budget: the WHOLE stack floats (third amendment: z = (rank + 1) *
+      fitted + epsilon — rank 0 one step off the face, never parked on the
+      bare epsilon while the gap is positive), every (rank+1)*fitted <=
+      cap and a stack that does not fit lands the OUTERMOST layer EXACTLY
+      on cap (maxRank + 1 steps span the budget; one fitted step for all,
+      no per-layer clamp, no stretch when the configured gap already fits)
+      — the same fixed cap for every shape, sheet included;
   (c) LOD off and flag off: zero quads instantiated and the grab keeps
       every internalId (pixel parity with the cube of before);
   (d) every id in layeredIds has wId == "" in its face grab, and every id
@@ -141,8 +144,17 @@ def expected_layer_opacity(rotating, raw):
 
 
 def expected_fitted_gap(gap, max_rank):
-  steps = max(1, int(max_rank))
+  # The stack occupies maxRank + 1 steps (the bottom floats one step off
+  # the plane - the third amendment), so the fitted step divides the cap by
+  # maxRank + 1 and the TOP layer lands exactly on cap when it does not fit.
+  steps = max(1, int(max_rank) + 1)
   return min(gap, CAP / steps)
+
+
+def layer_depth_out(rank, fitted):
+  """Mirror of layerGeometry.layerDepthOut: the whole stack floats, one
+  step per rank counting rank 0, plus the epsilon off the plane."""
+  return (rank + 1) * fitted + EPSILON
 
 
 def lod_distance(index, current, face_count):
@@ -309,18 +321,19 @@ def _depths_problems(ctx, face, dump, shown, problems):
   depths = {}
   for quad in shown:
     rank = sum(1 for other in orders if other < quad["order"])
-    depths[quad["id"]] = rank * fitted
+    depths[quad["id"]] = (rank + 1) * fitted
     _quad_depth_problems(label, quad, rank, fitted, dump, problems)
   return {"depths": depths, "fitted": fitted, "max_rank": max_rank, "orders": orders}
 
 
 def _quad_depth_problems(label, quad, rank, fitted, dump, problems):
-  """One quad on the ladder: exact outward z (rank * fitted + epsilon — the
-  bottom of the pile almost on the face, the top the outermost), never past
-  the cap, strictly IN FRONT of the face plane, centred over its own window
-  (the hole and the quad coincide; local px, Y flips)."""
-  depth = rank * fitted
-  expected_z = depth + EPSILON
+  """One quad on the ladder: exact outward z ((rank + 1) * fitted +
+  epsilon - the WHOLE stack floats: the bottom one step off the face, the
+  top the outermost), never past the cap, strictly IN FRONT of the face
+  plane, centred over its own window (the hole and the quad coincide;
+  local px, Y flips)."""
+  depth = (rank + 1) * fitted
+  expected_z = layer_depth_out(rank, fitted)
   if not close(quad["z"], expected_z, POSITION_TOL):
     problems.append(
       f"{label}: quad {quad['id']} z {quad['z']} != {expected_z} (rank {rank}, fitted {fitted})"
@@ -368,15 +381,16 @@ def _stack_shape_problems(ctx, shown, ladder, problems):
     if zs[k][1] <= zs[k - 1][1] + 1e-9:
       problems.append(f"{label}: layers not strictly ordered outwards by rank: {zs}")
   # A stack that does not fit MUST land exactly on the cap (repartido, no
-  # per-layer clamp): the outermost quad (max rank) reaches CAP.
-  if gap * max_rank > CAP + 1e-9:
+  # per-layer clamp): maxRank + 1 fitted steps span the whole budget, so
+  # the outermost quad (max rank) reaches CAP.
+  if gap * (max_rank + 1) > CAP + 1e-9:
     outermost = max(ladder["depths"].values())
     if not close(outermost, CAP, POSITION_TOL):
       problems.append(
         f"{label}: non-fitting stack outermost depth {outermost} != cap {CAP}"
       )
   # A gap that fits is never stretched to fill the cap.
-  if gap * max_rank <= CAP and not close(fitted, gap):
+  if gap * (max_rank + 1) <= CAP and not close(fitted, gap):
     problems.append(f"{label}: fitting gap {gap} was stretched to {fitted}")
 
 
@@ -560,9 +574,11 @@ def _good_dump():
             "order": i,
             "x": 100 + 150 * i + (320 - 40 * i) / 2 - 500,
             "y": 350 - (80 + 120 * i + (200 + 30 * i) / 2),
-            # Outward ladder (amendment): rank == order for the stub, so
-            # z = order * gap + epsilon — the top window the outermost.
-            "z": i * 20 + EPSILON,
+            # Outward ladder (third amendment: the WHOLE stack floats):
+            # rank == order for the stub, so z = (order + 1) * gap +
+            # epsilon - the bottom one step off the face, the top window
+            # the outermost.
+            "z": (i + 1) * 20 + EPSILON,
             "visible": True,
             "showLayer": True,
             "pickable": True,
@@ -716,6 +732,55 @@ def _material_cases(expects_rejection, failures):
   )
 
 
+def _ladder_cases(failures):
+  """The exact-fit (non-fitting), single-window and zero-gap ladders,
+  each with their own regression mutation. Lives apart from selftest()
+  for cognitive complexity (Sonar S3776); the geometry clause it pins is
+  the THIRD amendment: (rank + 1) fitted steps, nobody parked on the
+  plane."""
+  if validate(_good_dump()):
+    failures.append(f"the good synthetic dump did not pass: {validate(_good_dump())}")
+
+  # The exact-fit and zero-gap clauses must fire on their own scenarios:
+  # outermost exactly on the cap (maxRank + 1 fitted steps spanning it)
+  # and everyone on +epsilon (gap 0).
+  tight = _good_dump()
+  tight["gapRaw"] = 600
+  for face in tight["faces"]:
+    face["fittedGap"] = CAP / 3
+    for quad in face["quads"]:
+      quad["z"] = (quad["order"] + 1) * (CAP / 3) + EPSILON
+  if validate(tight):
+    failures.append(f"the non-fitting stack (gap 600) was rejected: {validate(tight)}")
+  tight["faces"][0]["quads"][2]["z"] = CAP - 10 + EPSILON  # per-layer clamp regression
+  if not validate(tight):
+    failures.append("per-layer clamp to a plane short of the cap passed the (b) clause")
+
+  # The single-layer ladder (maxRank + 1 == 1): a big raw gap fits the
+  # whole cap in its one step, so the lone window floats EXACTLY at
+  # cap + epsilon - the anchor-free placement the third amendment asks
+  # for even with a single window (the maximized E2/E3 of the harness).
+  lone_fitted = expected_fitted_gap(resolved_gap(600), 0)
+  if not close(lone_fitted, CAP):
+    failures.append(f"single-window stack: fitted {lone_fitted} != cap {CAP}")
+  if not close(layer_depth_out(0, lone_fitted), CAP + EPSILON):
+    failures.append(
+      f"single-window stack: z {layer_depth_out(0, lone_fitted)} != cap + epsilon"
+    )
+
+  zero = _good_dump()
+  zero["gapRaw"] = 0
+  for face in zero["faces"]:
+    face["fittedGap"] = 0
+    for quad in face["quads"]:
+      quad["z"] = EPSILON
+  if validate(zero):
+    failures.append(f"the gap-0 parity dump was rejected: {validate(zero)}")
+  zero["faces"][0]["quads"][1]["z"] = EPSILON + 5
+  if not validate(zero):
+    failures.append("a gap-0 layer off the +epsilon plane passed the (e) clause")
+
+
 def selftest():
   failures = []
 
@@ -782,37 +847,18 @@ def selftest():
   expects_rejection(
     "wrong current face", lambda d: d.__setitem__("currentFaceIndex", 2)
   )
+  # The bug the user saw (2026-11-27): the bottom of the pile parked on
+  # the bare epsilon plane - "the bottom window is glued to the desktop
+  # all the time". With gap > 0 rank 0 MUST float one fitted step off the
+  # face; the exact-ladder clause rejects the old anchored placement.
+  expects_rejection(
+    "bottom quad anchored on the plane with gap > 0",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("z", EPSILON),
+  )
 
   _material_cases(expects_rejection, failures)
 
-  if validate(_good_dump()):
-    failures.append(f"the good synthetic dump did not pass: {validate(_good_dump())}")
-
-  # The exact-fit and zero-gap clauses must fire on their own scenarios:
-  # outermost exactly on the cap (fitted) and everyone on +epsilon (gap 0).
-  tight = _good_dump()
-  tight["gapRaw"] = 600
-  for face in tight["faces"]:
-    face["fittedGap"] = CAP / 2
-    for quad in face["quads"]:
-      quad["z"] = quad["order"] * (CAP / 2) + EPSILON
-  if validate(tight):
-    failures.append(f"the non-fitting stack (gap 600) was rejected: {validate(tight)}")
-  tight["faces"][0]["quads"][2]["z"] = CAP - 10 + EPSILON  # per-layer clamp regression
-  if not validate(tight):
-    failures.append("per-layer clamp to a plane short of the cap passed the (b) clause")
-
-  zero = _good_dump()
-  zero["gapRaw"] = 0
-  for face in zero["faces"]:
-    face["fittedGap"] = 0
-    for quad in face["quads"]:
-      quad["z"] = EPSILON
-  if validate(zero):
-    failures.append(f"the gap-0 parity dump was rejected: {validate(zero)}")
-  zero["faces"][0]["quads"][1]["z"] = EPSILON + 5
-  if not validate(zero):
-    failures.append("a gap-0 layer off the +epsilon plane passed the (e) clause")
+  _ladder_cases(failures)
   return failures
 
 

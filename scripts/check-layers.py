@@ -16,11 +16,18 @@ the ADR-028 "Puertas" (amended):
                                  keeps its internalId, plate hidden:
                                  pixel parity with the cube of before.
   fits     gap 20, lod 0        -> (a) z strictly INCREASING with rank and
-                                 positive (top window outermost), no
-                                 coplanar pair, and the fitting gap is
-                                 NEVER stretched to fill the cap (b).
-  overflow gap 600 (raw)        -> (b) fitted step repartido: the outermost
-                                 quad lands EXACTLY on cap (150) + epsilon.
+                                 positive, the WHOLE stack floating (bottom
+                                 one fitted step off the plane, top window
+                                 outermost), no coplanar pair, and the
+                                 fitting gap is NEVER stretched to fill
+                                 the cap (b).
+  overflow gap 600 (raw)        -> (b) fitted step repartido over the
+                                 maxRank + 1 steps of the stack: the
+                                 outermost quad lands EXACTLY on cap
+                                 (150) + epsilon (a single window with a
+                                 gap that does not fit: alone at cap +
+                                 epsilon; the bottom rises to cap/3 +
+                                 epsilon).
   gap0     gap 0                -> (e) every layer shares z = +epsilon.
   lod      5 faces, lod 1       -> (c) faces at index distance 2 from the
                                  current desktop instantiate NO quads and
@@ -355,8 +362,9 @@ def main():
     return 1
   print(
     "check-layers: OK (real Cube/WindowLayers: z strictly increasing with "
-    "rank and positive (outward stack), outermost exactly on the fixed cap "
-    "with the fitted step for every shape including the sheet, gap-0 "
+    "rank and positive with the WHOLE stack floating (outward, bottom one "
+    "fitted step off the plane), outermost exactly on the fixed cap with "
+    "the fitted step for every shape including the sheet, gap-0 "
     "+epsilon parity, LOD and flag-off pixel parity, holes exactly where "
     "layeredIds say, dropped rows flat, plate on the -2 veil plane behind "
     "every quad, kwinrc clamps, the Mask/Blend material contract over "

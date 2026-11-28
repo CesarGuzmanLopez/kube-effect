@@ -22,8 +22,11 @@
 // the nested session (2026-11-27) and the face holes then showed the INSIDE
 // of the solid (white wedges of far quads/faces, the mirrored "ABA" label),
 // with the windows reading as sunken into the cube. Outwards is the desk
-// metaphor: rank 0 stays almost on the face and the top window is the
-// CLOSEST to the observer. There are no inner walls to protect any more, so
+// metaphor: the WHOLE stack floats outwards — the bottom of the pile
+// starts one fitted step off the face and the top window is the CLOSEST to
+// the observer (measured the other way: rank 0 parked at bare +epsilon
+// read as "the bottom window is glued to the desktop all the time").
+// There are no inner walls to protect any more, so
 // the budget is the fixed cap for EVERY shape (the old per-representation
 // min(faceDistance * 0.5, cap) is retired) and the holes of the face grab
 // (they stay — without a hole the flat window and its quad would double)
@@ -62,13 +65,16 @@ function finiteOr(nullable) {
 // inner walls to protect, so the per-representation formula disappeared.
 const LAYER_DEPTH_CAP = 150;
 // Every quad sits this much IN FRONT of its computed depth, so no layer ever
-// lands exactly on z = 0, the face plane itself. With WindowLayerGap 0 all
-// the layers share this minimal depth (the flat-parity case, gate (e)).
+// lands exactly on z = 0, the face plane itself. With the whole stack
+// floating (the third amendment) even the bottom layer is one fitted step
+// ahead of this plane; only WindowLayerGap 0 collapses every layer onto
+// this minimal depth (the flat-parity case, gate (e)).
 const LAYER_EPSILON = 0.01;
 // The plate sits this much BEHIND the face plane (z = -PLATE_DEPTH_EXTRA):
 // just behind the grab, in front of the solid's interior. Its job is to veil
 // the face holes so the inside of the cube never shows through them, and it
-// is always behind every quad (the quads start at +epsilon).
+// is always behind every quad (the quads start at +step+epsilon, +epsilon
+// only when the gap is 0).
 const PLATE_DEPTH_EXTRA = 2;
 // The dark veil colour behind the whole stack (WindowLayerPlateOpacity only
 // scales it); it is visible through the face holes and nothing else.
@@ -131,32 +137,37 @@ function rotationOpacity(rawOpacity) {
 }
 
 // The step actually used between two consecutive ranks: the configured gap,
-// SMALLER when the whole stack would not fit the cap. Repartitioning one
-// common (smaller) step keeps the strict rank order and lands the outermost
-// layer exactly on the cap — clamping per layer instead would flatten the
-// outer ones onto one plane and lose their order (ARQUITECTURA 2.4, the
-// trap). The budget is the fixed cap for every shape (amendment: outward
-// stacking crosses no walls, so the old per-representation maxLayerDepth
-// became dead code and was removed). A gap that already fits is never
-// stretched to fill the budget.
+// SMALLER when the whole stack would not fit the cap. The stack occupies
+// maxRank + 1 STEPS (the bottom layer floats one step off the plane — the
+// third amendment; parking it on the bare epsilon read as "the bottom
+// window is glued to the desktop"): repartitioning one common (smaller)
+// step keeps the strict rank order and lands the outermost layer exactly on
+// the cap — clamping per layer instead would flatten the outer ones onto one
+// plane and lose their order (ARQUITECTURA 2.4, the trap). The budget is the
+// fixed cap for every shape (amendment: outward stacking crosses no walls,
+// so the old per-representation maxLayerDepth became dead code and was
+// removed). A gap that already fits is never stretched to fill the cap.
 function fittedGap(gap, maxRank) {
   const rank = finiteOr(maxRank);
-  const steps = Math.max(1, rank === null ? 1 : Math.floor(rank));
+  const steps = Math.max(1, (rank === null ? 1 : Math.floor(rank)) + 1);
   return Math.min(gapUnits(gap), LAYER_DEPTH_CAP / steps);
 }
 
 // The depth of one layer, measured OUTWARDS from the face plane: rank is the
-// number of windows of this face with a SMALLER stackingOrder, so rank 0 (the
-// bottom of the pile) sits almost on the face and the top window (rank ==
-// maxRank) is the outermost, exactly at the cap when the stack does not fit.
-// The epsilon keeps every quad strictly in front of z = 0, the face plane.
+// number of windows of this face with a SMALLER stackingOrder. The whole
+// stack floats: rank 0 (the bottom of the pile) sits one fitted step off the
+// face, the top window (rank == maxRank) is the outermost — exactly at the
+// cap + epsilon when the stack does not fit (with a single window and a gap
+// that does not fit: exactly at the cap too). The epsilon keeps every quad
+// strictly in front of z = 0, the face plane; gap 0 puts them ALL on
+// +epsilon (flat parity, gate (e)).
 function layerDepthOut(rank, step) {
   const mine = finiteOr(rank);
   const gap = finiteOr(step);
   if (mine === null || gap === null) {
     return LAYER_EPSILON;
   }
-  return mine * gap + LAYER_EPSILON;
+  return (mine + 1) * gap + LAYER_EPSILON;
 }
 
 // Where the plate sits: a magnitude of PLATE_DEPTH_EXTRA BEHIND the face

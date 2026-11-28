@@ -1449,6 +1449,17 @@ no de aspecto. Las claves de main.xml y sus rangos/default no cambian; solo se
 reubica la UI (gate: check-ui/check-schema validan widget, tipo, rango y
 conexión por nombre, sin depender del tab).
 
+**Tercera corrección (medida 2026-11-27) — el stack flota ENTERO**: con la fórmula
+de arriba rank 0 quedaba en el +ε puro y la ventana de abajo (la maximizada del
+arnés) se leía «pegada al escritorio todo el tiempo». Nuevo ladder:
+`layerDepthOut = (rank + 1) · fittedGap + ε` con
+`fittedGap = min(WindowLayerGap, cap / (maxRank + 1))` — la de abajo arranca a
++paso, la de arriba cae EXACTA en cap + ε cuando no cabe (una sola ventana con
+gap grande: exactamente a +cap), la monotonía por rank y el gap 0 → todas a +ε
+se conservan intactos. Gate: cláusula (b) espejada + rechazo sintético nuevo
+«bottom quad anchored on the plane with gap > 0» (el bug visto) y unidad
+single-window a +cap.
+
 **Orden por profundidad en reposo (medido 2026-11-27, segunda corrección del
 flip)**: con los quads en `Blend` fijo QtQuick3D ordena la pasada transparente
 por **centroide**, y el centroide de un quad = centro de cara + offset lateral

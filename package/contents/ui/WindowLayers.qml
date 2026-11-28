@@ -33,11 +33,15 @@ import "layerGeometry.js" as LayerGeometry
 // Each quad is a "#Rectangle" Model scaled by the WINDOW size / 100, so one
 // unit is one pixel (the same convention as the flat face, ARQUITECTURA 2.4
 // "Units") and every quad covers exactly its own hole. Depth counts
-// OUTWARDS: rank = how many windows of this face have a smaller
-// stackingOrder, the bottom of the pile (rank 0) stays almost on the face
-// (at +epsilon) and every rank above rises one fitted step further. The
+// OUTWARDS and the WHOLE stack floats (third amendment, measured
+// 2026-11-27: parking rank 0 at bare +epsilon made the maximized window
+// read as "glued to the desktop all the time"): rank = how many windows of
+// this face have a smaller stackingOrder, the bottom of the pile floats one
+// fitted step off the face and every rank above rises one more step. The
 // step is fitted (never clamped per layer): a stack that does not fit the
-// cap keeps its order and the outermost layer lands EXACTLY on the cap.
+// cap keeps its order and the outermost layer lands EXACTLY on the cap;
+// the step also separates the layers from the face itself. Only gap 0
+// collapses everything back onto +epsilon (flat parity).
 //
 // The plate is the optional dark veil (WindowLayerPlateOpacity) just BEHIND
 // the face plane (z = -2), in front of the interior: through the holes it is
@@ -293,9 +297,11 @@ Node {
       source: "#Rectangle"
       // Exactly the window size in face units (1 unit = 1 px).
       scale: Qt.vector3d(win !== null && win.width > 0 ? win.width / 100 : 1, win !== null && win.height > 0 ? win.height / 100 : 1, 1)
-      // Outwards (+z is the face normal, the amended model): rank 0 almost
-      // on the face, the top window the outermost; the epsilon inside
-      // layerDepthOut keeps every quad strictly in front of the face plane.
+      // Outwards (+z is the face normal), the whole stack floating: the
+      // bottom sits one fitted step + epsilon off the face, the top window
+      // is the outermost (exactly cap + epsilon when the stack overflows).
+      // The epsilon inside layerDepthOut keeps every quad strictly in
+      // front of the face plane even at gap 0.
       position: Qt.vector3d(localX, localY, layerDepthOut)
       materials: [
         PrincipledMaterial {

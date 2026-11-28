@@ -221,16 +221,18 @@ su cara (ventanas flotando sobre el escritorio — el look pedido).
 ```
 rank          = nº de ventanas de la cara con menor stackingOrder (rank 0 = la de abajo)
 cap           = 150 px                                             (tope duro del stack, todas las formas)
-fittedGap     = min(WindowLayerGap, cap / max(1, maxRank))          (cap directo en todas las formas)
-layerDepthOut = rank * fittedGap + epsilon                          (la de arriba = la más exterior)
+fittedGap     = min(WindowLayerGap, cap / (maxRank + 1))            (cap directo en todas las formas;
+                                                                  el stack ocupa maxRank+1 pasos)
+layerDepthOut = (rank + 1) * fittedGap + epsilon        (pila flotante: abajo = +paso, arriba = +cap)
 position.z    = +layerDepthOut                                      (+z = normal hacia fuera)
 plate z       = -2                                                  (velo de huecos, detrás de todos los quads)
 ```
 
 El **velo (plate)** va a `z = −(2)`: justo detrás del plano de la cara, delante
 del interior — su papel es velar los huecos (hueco sin velo = interior del cubo
-asomando, medido). Como los quads empiezan en +ε, el plate queda SIEMPRE detrás
-de todos y nunca tapa una ventana. Solo se ve a través de los huecos.
+asomando, medido). Con el stack flotando entero (la capa de abajo arranca en
++step+ε) el plate queda SIEMPRE detrás de todos y nunca tapa una ventana. Solo
+se ve a través de los huecos.
 
 **Opacidad de la pila (enmienda del orden, 2026-11-27)**: los quads ya NO
 heredan la opacidad de la cara — tienen la suya propia,
@@ -295,8 +297,14 @@ tambor).
 ### Consejos (trampas)
 
 - **Tope duro + paso repartido**: no hacer clamp por capa (aplana las exteriores en
-  un mismo plano y se pierde el orden). Repartir un paso menor conserva el orden y
-  que la más exterior caiga justo en el cap.
+  un mismo plano y se pierde el orden). Repartir un paso menor sobre los
+  `maxRank + 1` pasos que ocupa el stack conserva el orden y que la más exterior
+  caiga justo en el cap.
+- **No anclar el fondo al plano** (medido 2026-11-27): con rank 0 en el +ε puro
+  la ventana de abajo —la maximizada del arnés— se leía «pegada al escritorio
+  todo el tiempo». El stack flota ENTERO: la de abajo a +paso (y una sola
+  ventana con gap que no cabe queda EXACTA en +cap), la de arriba en el tope.
+  Excepción deliberada: gap 0 colapsa todas en +ε (paridad con el plano).
 - **Profundidad FIJA mientras gira**: animar el hueco produce un «pop» al parar.
   El stack se lee como un sólido rígido.
 - **Hueco sin velo = interior del cubo asomando** (medido 2026-11-27: cuña blanca

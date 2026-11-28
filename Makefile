@@ -90,9 +90,11 @@ lint-ci: check
 # 2026-11-27: pila hacia FUERA, +z) — y valida las capas vivas
 # (WindowLayers.qml) con el oráculo puro layers_contract.py: z estrictamente
 # CRECIENTE con el rank y POSITIVA (nunca coplanares, la de arriba = la más
-# cercana al observador), fittedGap repartido con la capa más EXTERIOR
-# EXACTAMENTE en el cap fijo de 150 px (todas las formas, hoja incluida),
-# gap 0 → todas a +ε, caras fuera del LOD o con el flag apagado no instancian
+# cercana al observador), el stack flotando ENTERO (tercera corrección:
+# (rank+1) pasos, la de abajo a +paso+ε y no anclada al plano, con rechazo
+# sintético del bug «pegada al escritorio»), fittedGap repartido sobre
+# maxRank+1 pasos con la capa más EXTERIOR EXACTAMENTE en el cap fijo de
+# 150 px (todas las formas, hoja incluida), gap 0 → todas a +ε, caras fuera del LOD o con el flag apagado no instancian
 # quads y el grab conserva cada internalId (paridad píxel), hueco (wId = "")
 # solo donde layeredIds lo declara, las filas descartadas quedan planas,
 # pickable + desktop reexpuesto y el plate SIEMPRE en su plano de velo
