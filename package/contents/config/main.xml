@@ -235,5 +235,34 @@
       <min>0</min>
       <max>100</max>
     </entry>
+    <!-- Window layers (ADR-028, model H): each window of a face becomes a
+             quad sunk INWARDS by its stacking rank, and the face grab keeps
+             a transparent hole exactly where that window was. No new enums
+             (the KConfigXT integer rule): WindowLayerGap is an Int 0-600 px
+             and WindowLayerPlateOpacity a plain Double 0-1 — the ranges are
+             declared here for the KCM widgets AND re-resolved by
+             layerGeometry.js, so a hand-edited kwinrc can only ever mean a
+             valid depth step, a valid LOD face count (0 = all faces) and a
+             valid plate alpha. WindowLayering defaults FALSE: pixel parity
+             with the virgin cube (the caps' opt-in pattern, ADR-027).
+             Appended last: the convention for new entries. -->
+    <entry name="WindowLayering" type="Bool">
+      <default>false</default>
+    </entry>
+    <entry name="WindowLayerGap" type="Int">
+      <default>120</default>
+      <min>0</min>
+      <max>600</max>
+    </entry>
+    <entry name="WindowLayerLodFaces" type="Int">
+      <default>1</default>
+      <min>0</min>
+      <max>8</max>
+    </entry>
+    <entry name="WindowLayerPlateOpacity" type="Double">
+      <default>0.25</default>
+      <min>0</min>
+      <max>1</max>
+    </entry>
   </group>
 </kcfg>

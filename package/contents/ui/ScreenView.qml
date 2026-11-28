@@ -587,6 +587,17 @@ Item {
       capImage: effect.configuration.CapImage
       capImageFit: effect.configuration.CapImageFit
       capOpacity: effect.configuration.CapOpacity
+      // Window layers (ADR-028): raw config values again (the caps
+      // pattern); Cube resolves every range through layerGeometry.js, so
+      // a hand-edited kwinrc cannot reach the scene with an out-of-range
+      // gap, LOD face count or plate alpha. Default off: pixel parity
+      // with the cube of before. currentDesktop feeds the LOD distance
+      // (root.currentDesktop already follows onCurrentDesktopChanged).
+      windowLayering: effect.configuration.WindowLayering === true
+      windowLayerGap: effect.configuration.WindowLayerGap
+      windowLayerLodFaces: effect.configuration.WindowLayerLodFaces
+      windowLayerPlateOpacity: effect.configuration.WindowLayerPlateOpacity
+      currentDesktop: root.currentDesktop
       // Live camera distance for the culling seed kept ready
       // (ADR-025 point 12 reverted): the runtime ignores it
       // (faceCullMode is pinned to NoCulling) but the documented

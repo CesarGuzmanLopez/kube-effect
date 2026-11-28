@@ -247,13 +247,20 @@ ListModel {
 ListModel {
 }
 """,
-  # One fake window per desktop so every DesktopView face carries a FLAT
-  # COLOUR the render tests can identify (check-cylinder-overlap.py samples
-  # pixels per face). internalId carries the desktop number: the stub maps
-  # it to red/green/blue. The thumbnail fills the face by default; with the
-  # stubFaceCoverage context property below 1 it leaves an alpha-0 border
-  # (keeps the "wallpaper shows through the face texture" case visible in
-  # the grabs: a blending material reveals it, an opaque one paints black).
+  # Six fake windows per desktop (the layering gate needs a real stack):
+  # three ordinary ones with DISTINCT stackingOrder values (i = 0, 1, 2,
+  # varied x/y/w/h) that must win quads, and one each flagged minimized,
+  # dock and desktopWindow (i = 3, 4, 5) that must NEVER be layered nor
+  # released from the face grab (ADR-028 discards). internalId is
+  # "stub-<desktop>-<i>"; the retired render gates mapped the trailing
+  # digit to red/green/blue per face, the WindowThumbnail stub below keeps
+  # the same colour rule. With the stubFaceCoverage context property below
+  # 1 the thumbnail leaves an alpha-0 border (kept the "wallpaper shows
+  # through the face texture" case visible in the grabs: a blending
+  # material reveals it, an opaque one paints black). The old gates (cap,
+  # cylinder, video) only need the rows to exist with window/x/y/
+  # stackingOrder/minimized present; the extra rows and properties are
+  # additive, nothing was removed.
   "WindowFilterModel.qml": """import QtQuick
 ListModel {
     id: wfm
@@ -266,14 +273,20 @@ ListModel {
             return;
         }
         const number = desktop.x11DesktopNumber;
-        // createQmlObject: a ListModel parses any nested element as a ListElement.
-        const win = Qt.createQmlObject("import QtQuick; QtObject { property string internalId; property real x; property real y; property int stackingOrder; property bool minimized }", wfm);
-        win.internalId = "stub-" + number;
-        win.x = 0;
-        win.y = 0;
-        win.stackingOrder = 0;
-        win.minimized = false;
-        append({ "window": win });
+        for (let i = 0; i < 6; ++i) {
+            // createQmlObject: a ListModel parses any nested element as a ListElement.
+            const win = Qt.createQmlObject("import QtQuick; QtObject { property string internalId; property real x; property real y; property real width; property real height; property int stackingOrder; property bool minimized; property bool dock; property bool desktopWindow }", wfm);
+            win.internalId = "stub-" + number + "-" + i;
+            win.x = 100 + 150 * i;
+            win.y = 80 + 120 * i;
+            win.width = 320 - 40 * i;
+            win.height = 200 + 30 * i;
+            win.stackingOrder = i;
+            win.minimized = i === 3;
+            win.dock = i === 4;
+            win.desktopWindow = i === 5;
+            append({ "window": win });
+        }
     }
 }
 """,

@@ -9,6 +9,7 @@ import QtQuick3D
 import org.kde.kwin as KWinComponents
 
 import "constants.js" as Constants
+import "layerGeometry.js" as LayerGeometry
 
 Node {
   id: cube
@@ -381,6 +382,69 @@ Node {
   // effect into showing ONLY the inner wall).
   readonly property int faceCullMode: Material.NoCulling
 
+  // -----------------------------------------------------------------
+  // Window layers (ADR-028, model H): every window of a face becomes a
+  // quad sunk along the face normal by its stacking rank, and the face
+  // grab releases exactly those ids (transparent holes). Dead by default
+  // (WindowLayering false): pixel parity with the cube of before, the
+  // caps' opt-in pattern (ADR-027). Raw config values arrive here (the
+  // ScreenView binding passes effect.configuration as-is) and are
+  // RESOLVED here through the pure layerGeometry.js helpers — a
+  // hand-edited kwinrc can never reach the scene with an out-of-range
+  // gap, LOD or plate alpha. None of these feeds faceDistance/
+  // viewRadius/sheetGap: the block only READS the existing geometry
+  // (isSheet, faceDistance, faceCount), so it cannot recreate the
+  // ADR-026b binding-loop class.
+  property bool windowLayering: false
+  property int windowLayerGap: LayerGeometry.GAP_DEFAULT
+  property int windowLayerLodFaces: LayerGeometry.LOD_FACES_DEFAULT
+  property real windowLayerPlateOpacity: LayerGeometry.PLATE_OPACITY_DEFAULT
+  // The desktop the camera is aimed at (ScreenView's currentDesktop), for
+  // the LOD distance. Compared by desktop NUMBER, not by wrapper identity:
+  // the model rows and Workspace.currentDesktopForScreen may hand out
+  // different wrapper objects around the same desktop.
+  property var currentDesktop: null
+  readonly property real layerGapResolved: LayerGeometry.gapUnits(cube.windowLayerGap)
+  readonly property int layerLodResolved: LayerGeometry.lodFaces(cube.windowLayerLodFaces)
+  readonly property real layerPlateResolved: LayerGeometry.plateOpacity(cube.windowLayerPlateOpacity)
+  // The depth budget of this representation (solids: half the way to the
+  // centre, capped; the flat sheet: the cap directly — the sheet's
+  // faceDistance is a few-pixel gap and the solid formula would crush the
+  // stack to ~1 px, ADR-028 rule 2).
+  readonly property real layerMaxDepth: LayerGeometry.maxLayerDepth(cube.isSheet, cube.faceDistance, LayerGeometry.LAYER_DEPTH_CAP)
+  // The face index the current desktop sits on (-1 mid-sync: no desktop
+  // found yet, so no face is "current" and the LOD keeps every face flat).
+  readonly property int currentFaceIndex: {
+    const current = cube.currentDesktop;
+    const count = faceRepeater.count;
+    if (current === null || current === undefined) {
+      return -1;
+    }
+    const number = current.x11DesktopNumber;
+    for (let i = 0; i < count; ++i) {
+      const node = faceRepeater.objectAt(i);
+      if (node !== null && node !== undefined && node.desktop !== null && node.desktop !== undefined && node.desktop.x11DesktopNumber === number) {
+        return i;
+      }
+    }
+    return -1;
+  }
+  // Per-face decision: flag AND LOD distance of indices (window 0 = all
+  // faces; ADR-028 rule 3 — a COST budget, never an ordering rule: an
+  // instantiated quad costs a capture per frame even when culled).
+  function layerFaceActive(index) {
+    if (!cube.windowLayering) {
+      return false;
+    }
+    return LayerGeometry.layerWithinLod(index, cube.currentFaceIndex, cube.faceCount, cube.layerLodResolved);
+  }
+  // The face node (CubeFace) of one index, null mid-sync. Used by the
+  // layering gate (scripts/check-layers.py) to read the live quads and
+  // grabs per face; desktopAt keeps its own path untouched.
+  function faceNodeAt(index) {
+    return faceRepeater.objectAt(index);
+  }
+
   Repeater3D {
     id: faceRepeater
     model: KWinComponents.VirtualDesktopModel {}
@@ -407,7 +471,18 @@ Node {
       // diagnosed with op + blend in the overlay.)
       // The arc mesh is already in face units (W x H at radius R), so
       // the rectangle's 100-unit scale must NOT be applied to it.
-      scale: cube.cylinderActive ? Qt.vector3d(1, 1, 1) : Qt.vector3d(faceSize.width / 100, faceSize.height / 100, 1)
+      // (Since ADR-028 the scale lives on the face Model inside the
+      // CubeFace node, not on the node itself: the layer quads apply
+      // their own px scale and must not inherit this one twice. The
+      // composed world transform is identical to the old Model-root.)
+      faceScale: cube.cylinderActive ? Qt.vector3d(1, 1, 1) : Qt.vector3d(faceSize.width / 100, faceSize.height / 100, 1)
+      // Window layers (ADR-028): the per-face LOD decision and the
+      // resolved numbers; the face node forwards them to WindowLayers
+      // untouched (raw kwinrc values are clamped above, in Cube).
+      layersActive: cube.layerFaceActive(index)
+      layerGap: cube.layerGapResolved
+      layerMaxDepth: cube.layerMaxDepth
+      layerPlateOpacity: cube.layerPlateResolved
       // Flat sheet (ADR-024): both quads at the centre, one facing each
       // way (0 deg / 180 deg), separated by +/-sheetGap in z
       // (proportional, >= 2 units total) so the near-coplanar triangles

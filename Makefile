@@ -84,6 +84,18 @@ lint-ci: check
 # cubo). Su --selftest verifica que el validador rechaza mallas rotas (NaN,
 # winding invertido, UV/índice fuera, triángulo ausente) en polígono y disco.
 # Se salta (exit 0) si faltan PySide6 o QtQuick3D.Helpers.
+# check-layers.py instancia el Cube.qml REAL contra el stub compartido —
+# extendido: 6 ventanas por cara con stackingOrder 0..5, ids "stub-<cara>-<i>",
+# x/y/w/h variados y una fila minimized/dock/desktopWindow (ADR-028) — y
+# valida las capas vivas (WindowLayers.qml) con el oráculo puro
+# layers_contract.py: monotonía estricta por rank (nunca coplanares),
+# fittedGap repartido con la capa más profunda EXACTAMENTE en maxLayerDepth,
+# hoja 2D con el cap directo (150 px), gap 0 → todas a −ε, caras fuera del
+# LOD o con el flag apagado no instancian quads y el grab conserva cada
+# internalId (paridad píxel), hueco (wId = "") solo donde layeredIds lo
+# declara, las filas descartadas quedan planas, pickable + desktop reexpuesto
+# y el plate justo detrás de la capa más profunda. Su --selftest comprueba
+# el oráculo sin motor. Se salta (exit 0) si falta PySide6.
 # check-cylinder-wiring.py instancia el Cube.qml REAL (no la malla suelta) contra
 # el stub org.kde.kwin del harness comun (qml_check_harness.STUB_MODULE)
 # con Shape=Cylinder: 3 escritorios
@@ -140,6 +152,8 @@ check:
 	@python3 scripts/check-cylinder.py --selftest
 	@python3 scripts/check-cap.py
 	@python3 scripts/check-cap.py --selftest
+	@python3 scripts/check-layers.py
+	@python3 scripts/check-layers.py --selftest
 	@python3 scripts/check-cylinder-wiring.py
 	@python3 scripts/check-video.py
 	@python3 scripts/check-features.py

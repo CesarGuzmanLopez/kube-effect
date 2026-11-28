@@ -2,6 +2,7 @@ import QtQuick
 import "../package/contents/ui/constants.js" as Constants
 import "../package/contents/ui/capGeometry.js" as CapGeo
 import "../package/contents/ui/arcGeometry.js" as ArcGeo
+import "../package/contents/ui/layerGeometry.js" as LayerGeo
 
 // Runs inside scripts/check-constants.py. The holder `h` exposes QUrl
 // properties, i.e. exactly what KConfigLoader hands QML for a Url entry: the
@@ -289,9 +290,10 @@ Item {
     // Arc geometry (ADR-025): structure only here — check-cylinder.py
     // validates the REAL ProceduralMesh (radius, isometry, winding, arc
     // length) offscreen. Degenerate input answers empty arrays.
-    // The three JS modules carry their own copy of the finite guard
+    // The four JS modules carry their own copy of the finite guard
     // (QML scripts cannot import each other: the documented isolation of
-    // arcGeometry.js/capGeometry.js). These cases pin them to the SAME
+    // arcGeometry.js/capGeometry.js, extended by layerGeometry.js in
+    // ADR-028). These cases pin them to the SAME
     // string-coercion behaviour as constants.js, so a copy can never
     // drift into rejecting "50" (KConfig delivers strings).
     // Equality (not absolutes): the shared coercion is documented in
@@ -302,6 +304,7 @@ Item {
       var base = Constants.isFiniteNumber(probe);
       check("guard parity arc " + String(probe), ArcGeo.isFiniteNumber(probe), base);
       check("guard parity cap " + String(probe), CapGeo.isFiniteNumber(probe), base);
+      check("guard parity layer " + String(probe), LayerGeo.isFiniteNumber(probe), base);
     });
 
     const arc = ArcGeo.cylinderArcGeometry(2560, 1440, Constants.cylinderRadius(4, 2560, 100), Constants.CYLINDER_SEGMENTS);
