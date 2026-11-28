@@ -383,18 +383,20 @@ Node {
   readonly property int faceCullMode: Material.NoCulling
 
   // -----------------------------------------------------------------
-  // Window layers (ADR-028, model H): every window of a face becomes a
-  // quad sunk along the face normal by its stacking rank, and the face
-  // grab releases exactly those ids (transparent holes). Dead by default
-  // (WindowLayering false): pixel parity with the cube of before, the
-  // caps' opt-in pattern (ADR-027). Raw config values arrive here (the
-  // ScreenView binding passes effect.configuration as-is) and are
-  // RESOLVED here through the pure layerGeometry.js helpers — a
-  // hand-edited kwinrc can never reach the scene with an out-of-range
-  // gap, LOD or plate alpha. None of these feeds faceDistance/
-  // viewRadius/sheetGap: the block only READS the existing geometry
-  // (isSheet, faceDistance, faceCount), so it cannot recreate the
-  // ADR-026b binding-loop class.
+  // Window layers (ADR-028 model H as amended 2026-11-27): every window of
+  // a face becomes a quad pushed OUTWARDS along the face normal by its
+  // stacking rank, and the face grab releases exactly those ids (the holes
+  // stay; the plate at z = -2 veils them so the solid's interior never
+  // shows). Dead by default (WindowLayering false): pixel parity with the
+  // cube of before, the caps' opt-in pattern (ADR-027). Raw config values
+  // arrive here (the ScreenView binding passes effect.configuration
+  // as-is) and are RESOLVED here through the pure layerGeometry.js helpers
+  // — a hand-edited kwinrc can never reach the scene with an out-of-range
+  // gap, LOD or plate alpha. None of these feeds faceDistance/viewRadius/
+  // sheetGap: the block only READS faceCount/currentFaceIndex for the LOD,
+  // so it cannot recreate the ADR-026b binding-loop class. The depth budget
+  // is the fixed cap in layerGeometry.js for every shape — the amended
+  // outward stack has no per-representation wiring left.
   property bool windowLayering: false
   property int windowLayerGap: LayerGeometry.GAP_DEFAULT
   property int windowLayerLodFaces: LayerGeometry.LOD_FACES_DEFAULT
@@ -407,11 +409,6 @@ Node {
   readonly property real layerGapResolved: LayerGeometry.gapUnits(cube.windowLayerGap)
   readonly property int layerLodResolved: LayerGeometry.lodFaces(cube.windowLayerLodFaces)
   readonly property real layerPlateResolved: LayerGeometry.plateOpacity(cube.windowLayerPlateOpacity)
-  // The depth budget of this representation (solids: half the way to the
-  // centre, capped; the flat sheet: the cap directly — the sheet's
-  // faceDistance is a few-pixel gap and the solid formula would crush the
-  // stack to ~1 px, ADR-028 rule 2).
-  readonly property real layerMaxDepth: LayerGeometry.maxLayerDepth(cube.isSheet, cube.faceDistance, LayerGeometry.LAYER_DEPTH_CAP)
   // The face index the current desktop sits on (-1 mid-sync: no desktop
   // found yet, so no face is "current" and the LOD keeps every face flat).
   readonly property int currentFaceIndex: {
@@ -476,12 +473,12 @@ Node {
       // their own px scale and must not inherit this one twice. The
       // composed world transform is identical to the old Model-root.)
       faceScale: cube.cylinderActive ? Qt.vector3d(1, 1, 1) : Qt.vector3d(faceSize.width / 100, faceSize.height / 100, 1)
-      // Window layers (ADR-028): the per-face LOD decision and the
-      // resolved numbers; the face node forwards them to WindowLayers
-      // untouched (raw kwinrc values are clamped above, in Cube).
+      // Window layers (ADR-028 as amended): the per-face LOD decision and
+      // the resolved numbers; the face node forwards them to WindowLayers
+      // untouched (raw kwinrc values are clamped above, in Cube; the depth
+      // budget is the fixed cap inside layerGeometry.js — nothing to pass).
       layersActive: cube.layerFaceActive(index)
       layerGap: cube.layerGapResolved
-      layerMaxDepth: cube.layerMaxDepth
       layerPlateOpacity: cube.layerPlateResolved
       // Flat sheet (ADR-024): both quads at the centre, one facing each
       // way (0 deg / 180 deg), separated by +/-sheetGap in z

@@ -3,9 +3,9 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-// Window-layer geometry (ADR-028, model H): the pure depth formulas behind
-// WindowLayers.qml and the Cube LOD gate, plus the kwinrc clamps for the
-// four WindowLayer* keys.
+// Window-layer geometry (ADR-028 model H as amended 2026-11-27): the pure
+// depth formulas behind WindowLayers.qml and the Cube LOD gate, plus the
+// kwinrc clamps for the four WindowLayer* keys.
 //
 // This module lives apart from constants.js on purpose, exactly like
 // arcGeometry.js and capGeometry.js (the ADR-027 precedent): constants.js
@@ -18,12 +18,21 @@
 // string-coercion behaviour as constants.js.
 //
 // Conventions (ARQUITECTURA 2.4): +z on the face node is the OUTWARD normal,
-// so every depth is applied as -z (inwards, never outwards — quads pushed
-// outside crossed walls and neighbouring faces in the earlier exploration
-// and that design is discarded). One face unit is one pixel: the quads use
-// the "#Rectangle" primitive (100 units) scaled by size/100, the same
-// convention as the flat face itself — no extra /100, or every window would
-// pile at the centre of the face.
+// and the amended model pushes the stack OUTWARDS: inwards was measured in
+// the nested session (2026-11-27) and the face holes then showed the INSIDE
+// of the solid (white wedges of far quads/faces, the mirrored "ABA" label),
+// with the windows reading as sunken into the cube. Outwards is the desk
+// metaphor: rank 0 stays almost on the face and the top window is the
+// CLOSEST to the observer. There are no inner walls to protect any more, so
+// the budget is the fixed cap for EVERY shape (the old per-representation
+// min(faceDistance * 0.5, cap) is retired) and the holes of the face grab
+// (they stay — without a hole the flat window and its quad would double)
+// are veiled by the plate just behind the face plane. The earlier
+// exploration's rejection of outward quads ("crossing walls") does not
+// apply here: that model had no holes and no veil. One face unit is one
+// pixel: the quads use the "#Rectangle" primitive (100 units) scaled by
+// size/100, the same convention as the flat face itself — no extra /100, or
+// every window would pile at the centre of the face.
 
 // Finite test with the same coercion as the historical isFinite(): KConfig
 // values can arrive as strings and Number.isFinite() would reject them. The
@@ -48,14 +57,18 @@ function finiteOr(nullable) {
 }
 
 // Hard cap of the whole stack in px (the 150 px budget of ADR-028): no layer
-// ever sinks further, no matter how many windows a face holds.
+// ever travels further out, no matter how many windows a face holds. Since
+// the amendment this is the budget for EVERY shape — outward stacking has no
+// inner walls to protect, so the per-representation formula disappeared.
 const LAYER_DEPTH_CAP = 150;
-// Every quad sits this much BEHIND its computed depth, so no layer ever
+// Every quad sits this much IN FRONT of its computed depth, so no layer ever
 // lands exactly on z = 0, the face plane itself. With WindowLayerGap 0 all
 // the layers share this minimal depth (the flat-parity case, gate (e)).
 const LAYER_EPSILON = 0.01;
-// The plate sits this much behind the deepest layer (never in front of it:
-// a veil before the top layer would cover the windows it should back).
+// The plate sits this much BEHIND the face plane (z = -PLATE_DEPTH_EXTRA):
+// just behind the grab, in front of the solid's interior. Its job is to veil
+// the face holes so the inside of the cube never shows through them, and it
+// is always behind every quad (the quads start at +epsilon).
 const PLATE_DEPTH_EXTRA = 2;
 // The dark veil colour behind the whole stack (WindowLayerPlateOpacity only
 // scales it); it is visible through the face holes and nothing else.
@@ -98,56 +111,41 @@ function plateOpacity(rawOpacity) {
   return clamped(rawOpacity, 0, 1, PLATE_OPACITY_DEFAULT);
 }
 
-// The depth budget of one face. Solids (polygon >= 3 faces, drum) keep the
-// stack within half the way to the centre, so a quad can never pass the
-// middle of the solid; the flat sheet (ADR-024) has no walls behind it and
-// its faceDistance is a few-pixel gap, so it gets the cap directly (measured:
-// the solid formula would crush the sheet stack to ~1 px). A non-finite
-// distance (mid-sync geometry) gets the cap too, never NaN depths.
-function maxLayerDepth(isSheet, faceDistance, cap) {
-  const budget = finiteOr(cap);
-  const limit = budget === null ? LAYER_DEPTH_CAP : Math.max(0, budget);
-  if (isSheet === true) {
-    return limit;
-  }
-  const distance = finiteOr(faceDistance);
-  if (distance === null) {
-    return limit;
-  }
-  return Math.max(0, Math.min(distance * 0.5, limit));
-}
-
 // The step actually used between two consecutive ranks: the configured gap,
-// SMALLER when the whole stack would not fit the budget. Repartitioning one
-// common (smaller) step keeps the strict rank order and lands the deepest
-// layer exactly on maxLayerDepth — clamping per layer instead would flatten
-// the deep ones onto one plane and lose their order (ARQUITECTURA 2.4, the
-// trap). A gap that already fits is never stretched to fill the budget.
-function fittedGap(gap, maxDepth, maxRank) {
+// SMALLER when the whole stack would not fit the cap. Repartitioning one
+// common (smaller) step keeps the strict rank order and lands the outermost
+// layer exactly on the cap — clamping per layer instead would flatten the
+// outer ones onto one plane and lose their order (ARQUITECTURA 2.4, the
+// trap). The budget is the fixed cap for every shape (amendment: outward
+// stacking crosses no walls, so the old per-representation maxLayerDepth
+// became dead code and was removed). A gap that already fits is never
+// stretched to fill the budget.
+function fittedGap(gap, maxRank) {
   const rank = finiteOr(maxRank);
   const steps = Math.max(1, rank === null ? 1 : Math.floor(rank));
-  const depth = finiteOr(maxDepth);
-  const budget = depth === null ? 0 : Math.max(0, depth);
-  return Math.min(gapUnits(gap), budget / steps);
+  return Math.min(gapUnits(gap), LAYER_DEPTH_CAP / steps);
 }
 
-// The depth of one layer, measured from the TOP of the stack: the front-most
-// window (rank == maxRank) sits at 0 (just behind the face, at -epsilon),
-// every rank below sinks one fitted step further.
-function layerDepth(maxRank, rank, gap) {
-  const top = finiteOr(maxRank);
+// The depth of one layer, measured OUTWARDS from the face plane: rank is the
+// number of windows of this face with a SMALLER stackingOrder, so rank 0 (the
+// bottom of the pile) sits almost on the face and the top window (rank ==
+// maxRank) is the outermost, exactly at the cap when the stack does not fit.
+// The epsilon keeps every quad strictly in front of z = 0, the face plane.
+function layerDepthOut(rank, step) {
   const mine = finiteOr(rank);
-  const step = finiteOr(gap);
-  if (top === null || mine === null || step === null) {
-    return 0;
+  const gap = finiteOr(step);
+  if (mine === null || gap === null) {
+    return LAYER_EPSILON;
   }
-  return (top - mine) * step;
+  return mine * gap + LAYER_EPSILON;
 }
 
-// Where the plate sits, behind the deepest layer. NEVER in front of it.
-function plateDepth(maxDepth) {
-  const depth = finiteOr(maxDepth);
-  return (depth === null ? 0 : Math.max(0, depth)) + PLATE_DEPTH_EXTRA;
+// Where the plate sits: a magnitude of PLATE_DEPTH_EXTRA BEHIND the face
+// plane (callers negate it: z = -2). It veils the face holes — never in
+// front of any quad (those start at +epsilon), never deep enough to be
+// reached by the interior geometry either.
+function plateDepth() {
+  return PLATE_DEPTH_EXTRA;
 }
 
 // The LOD gate (ADR-028 rule 3): distance of a face INDEX to the current

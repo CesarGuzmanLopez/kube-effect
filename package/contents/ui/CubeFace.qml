@@ -7,12 +7,13 @@
 import QtQuick
 import QtQuick3D
 
-// One face of the solid (the face node) plus its window layers (ADR-028).
+// One face of the solid (the face node) plus its window layers (ADR-028 as
+// amended: the stack travels outwards).
 // The root is a plain Node carrying ONLY the placement transform (the
 // position/eulerRotation.y the Cube delegate sets, ADR-026: rotate(tick * i)
 // translate(0, 0, faceDistance)); the face Model and the layer quads hang
-// under it so they inherit exactly that transform — the layer stack sinks
-// along the face normal, never in world space.
+// under it so they inherit exactly that transform — the layer stack rises
+// along the face normal (outwards, +z), never in world space.
 //
 // The SCALE moved from the root to the face Model (faceScale): with a
 // unit-scale root the quads can apply their own "#Rectangle" scale in face
@@ -76,15 +77,15 @@ Node {
   // (sort centroids + the explicit alphaMode above), not by culling, and
   // the cylinderCullMode seed note lives in Cube.qml.
   property int cullMode: Material.NoCulling
-  // Window layers (ADR-028), resolved upstream in Cube: whether THIS face
-  // instantiates quads (flag AND LOD distance), the fitted-step request in
-  // px, the depth budget of the representation and the plate alpha. Raw
-  // kwinrc values never reach here. With layersActive false WindowLayers
-  // adds zero nodes with a visible effect and layeredIds stays empty:
-  // pixel-for-pixel the cube of before.
+  // Window layers (ADR-028 as amended), resolved upstream in Cube: whether
+  // THIS face instantiates quads (flag AND LOD distance), the fitted-step
+  // request in px and the plate alpha. Raw kwinrc values never reach here;
+  // the depth budget is the fixed cap inside layerGeometry.js (outward
+  // stacking needs no per-shape value). With layersActive false
+  // WindowLayers adds zero nodes with a visible effect and layeredIds
+  // stays empty: pixel-for-pixel the cube of before.
   property bool layersActive: false
   property real layerGap: 120
-  property real layerMaxDepth: 150
   property real layerPlateOpacity: 0.25
 
   // The face surface: the grab of the whole desktop EXCEPT the windows that
@@ -135,7 +136,6 @@ Node {
     screenGeometry: faceRoot.screenGeometry
     active: faceRoot.layersActive
     layerGap: faceRoot.layerGap
-    maxLayerDepth: faceRoot.layerMaxDepth
     plateOpacity: faceRoot.layerPlateOpacity
     faceOpacity: faceRoot.faceOpacity
   }

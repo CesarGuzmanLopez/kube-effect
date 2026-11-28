@@ -9,30 +9,41 @@ import org.kde.kwin as KWinComponents
 
 import "layerGeometry.js" as LayerGeometry
 
-// The window layers of ONE face (ADR-028, model H).
+// The window layers of ONE face (ADR-028 model H, as amended 2026-11-27:
+// the stack travels OUTWARDS, +z along the face normal).
 //
 // The face itself does not move: it stays the surface of the shell, and its
 // grab releases (wId = "", the null QUuid of KWin 6 — an integer 0 does NOT
 // detach a thumbnail, doc/trucos-aprendidos.md section N) exactly the windows
-// that win a quad here, leaving a transparent hole behind which the quad
-// floats. The hole clips every layer to the face in any view, so nothing
-// ever protrudes from the solid: the transparency guarantees it, not the
-// distance to the axis.
+// that win a quad here, leaving a transparent hole where each window used to
+// be. The hole stays on purpose: without it the flat window in the grab and
+// its quad would render twice.
+//
+// Why outwards (measured in the nested session, 3 desks, pitch=30, yaw=71,
+// opacity 1.00, gap 120): with the stack pushed INWARDS the holes of the
+// face showed the INTERIOR of the solid — white wedges of far quads/faces
+// and the wallpaper label "ABA" mirrored through the gaps — and the windows
+// read as sunk inside the cube. Outwards is the desk metaphor: every quad
+// floats in front of its hole, the window with the HIGHEST stackingOrder is
+// the CLOSEST to the observer. Accepted trade-off: orbiting, a quad can
+// leave the silhouette of its face (windows floating over the desk — the
+// requested look; the earlier exploration discarded outward quads only
+// because that model had no holes and no veil to cross).
 //
 // Each quad is a "#Rectangle" Model scaled by the WINDOW size / 100, so one
 // unit is one pixel (the same convention as the flat face, ARQUITECTURA 2.4
 // "Units") and every quad covers exactly its own hole. Depth counts
-// INWARDS from the top of the stack: rank = how many windows of this face
-// have a smaller stackingOrder, the front-most window (rank == maxRank)
-// stays at -epsilon and every rank below sinks one fitted step further.
-// The step is fitted (never clamped per layer): a stack that does not fit
-// the budget keeps its order and the deepest layer lands EXACTLY on
-// maxLayerDepth.
+// OUTWARDS: rank = how many windows of this face have a smaller
+// stackingOrder, the bottom of the pile (rank 0) stays almost on the face
+// (at +epsilon) and every rank above rises one fitted step further. The
+// step is fitted (never clamped per layer): a stack that does not fit the
+// cap keeps its order and the outermost layer lands EXACTLY on the cap.
 //
-// The plate is the optional dark veil (WindowLayerPlateOpacity) just behind
-// the deepest layer; through the holes it is what the windows read against.
-// Quads and plate multiply the FACE opacity (ADR-021): turning fades the
-// whole pile, not only the base.
+// The plate is the optional dark veil (WindowLayerPlateOpacity) just BEHIND
+// the face plane (z = -2), in front of the interior: through the holes it is
+// what the windows read against, and it is what stops the inside of the cube
+// from showing through them. Quads and plate multiply the FACE opacity
+// (ADR-021): turning fades the whole pile, not only the base.
 //
 // Discards (ADR-028 rule 4): minimized windows do not exist (same as the
 // flat grab) and docks/panels plus the desktop (wallpaper) window stay
@@ -87,10 +98,11 @@ Node {
   // WindowLayerLodFaces distance (false => zero nodes with a visible effect).
   property bool active: false
   // Resolved by Cube through layerGeometry.js: the requested step in px
-  // (already clamped 0-600), the depth budget of this representation and
-  // the plate alpha (0-1). Raw kwinrc values never reach this component.
+  // (already clamped 0-600) and the plate alpha (0-1). Raw kwinrc values
+  // never reach this component. The budget needs no wiring any more: since
+  // the amendment the stack travels outwards and the cap (LAYER_DEPTH_CAP)
+  // is the same fixed budget for every shape.
   property real layerGap: LayerGeometry.GAP_DEFAULT
-  property real maxLayerDepth: LayerGeometry.LAYER_DEPTH_CAP
   property real plateOpacity: LayerGeometry.PLATE_OPACITY_DEFAULT
   // The face material opacity (ADR-021): the whole pile fades with it.
   property real faceOpacity: 1
@@ -110,7 +122,7 @@ Node {
   // so every binding here re-evaluates when any delegate notes/forgets an
   // order — ranks never depend on the completion order of the delegates.
   readonly property int maxRank: root.revision >= 0 ? Math.max(0, Object.keys(root.orderById).length - 1) : 0
-  readonly property real fittedGap: LayerGeometry.fittedGap(root.layerGap, root.maxLayerDepth, root.maxRank)
+  readonly property real fittedGap: LayerGeometry.fittedGap(root.layerGap, root.maxRank)
 
   function noteOrder(id, order) {
     if (id === null || id === undefined || order === undefined || order === null) {
@@ -178,14 +190,16 @@ Node {
     windowModel: KWinComponents.WindowModel {}
   }
 
-  // The veil behind the deepest layer (never in front of any quad, the
-  // ARQUITECTURA 2.4 trap). Plain dark colour, two-sided like the face it
-  // backs; visible only while the face instantiates layers at all.
+  // The veil just behind the face plane (z = -2, the amended ARQUITECTURA
+  // 2.4 rule): it veils the grab holes so the interior of the solid never
+  // shows through them, and it stays strictly behind every quad (those start
+  // at +epsilon). Plain dark colour, two-sided like the face it backs;
+  // visible only while the face instantiates layers at all.
   Model {
     id: plate
     visible: root.active && root.plateOpacity > 0.001
     source: "#Rectangle"
-    position: Qt.vector3d(0, 0, -LayerGeometry.plateDepth(root.maxLayerDepth))
+    position: Qt.vector3d(0, 0, -LayerGeometry.plateDepth())
     scale: Qt.vector3d(root.faceSize.width / 100, root.faceSize.height / 100, 1)
     castsShadows: false
     receivesShadows: false
@@ -233,7 +247,7 @@ Node {
       // re-evaluates whenever the rank map changes, keeping the fitted step
       // and the depth of THIS quad in sync with the others without a bare
       // statement qmllint would flag.
-      readonly property real layerDepth: root.revision >= 0 ? LayerGeometry.layerDepth(root.maxRank, root.rankOf(layer.winnerId()), root.fittedGap) : 0
+      readonly property real layerDepthOut: root.revision >= 0 ? LayerGeometry.layerDepthOut(root.rankOf(layer.winnerId()), root.fittedGap) : LayerGeometry.LAYER_EPSILON
       // Captured while the window still exists: onDestruction may already
       // face a null row, and the id is still needed to prune the map.
       property var trackedId: null
@@ -265,9 +279,10 @@ Node {
       source: "#Rectangle"
       // Exactly the window size in face units (1 unit = 1 px).
       scale: Qt.vector3d(win !== null && win.width > 0 ? win.width / 100 : 1, win !== null && win.height > 0 ? win.height / 100 : 1, 1)
-      // Inwards, never outwards (+z is the outward normal); the epsilon
-      // keeps every quad strictly behind the face plane.
-      position: Qt.vector3d(localX, localY, -(layerDepth + LayerGeometry.LAYER_EPSILON))
+      // Outwards (+z is the face normal, the amended model): rank 0 almost
+      // on the face, the top window the outermost; the epsilon inside
+      // layerDepthOut keeps every quad strictly in front of the face plane.
+      position: Qt.vector3d(localX, localY, layerDepthOut)
       materials: [
         PrincipledMaterial {
           lighting: PrincipledMaterial.NoLighting

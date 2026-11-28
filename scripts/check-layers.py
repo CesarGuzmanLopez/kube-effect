@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Offscreen gate for the window layers (ADR-028, model H).
+"""Offscreen gate for the window layers (ADR-028, model H as amended
+2026-11-27: the stack travels OUTWARDS, +z along the face normal).
 
 Instantiates the REAL Cube.qml against the shared stub org.kde.kwin module
 (qml_check_harness.STUB_MODULE — one copy, the same VirtualDesktopModel/
@@ -7,43 +8,49 @@ WindowFilterModel the wiring gate uses) inside an offscreen QML engine —
 and through Cube the live CubeFace node, the WindowLayers quads and plate,
 the WindowFilterModel rows and the face grab (DesktopView thumbnails).
 Nothing is rendered: the object tree is dumped as JSON and validated by
-the pure oracle in layers_contract.py against an independent re-derivation
-of the ADR-028 formulas. The scenario families cover the ADR-028 "Puertas":
+the pure oracle in layers_contract.py against an independent
+re-derivation of the amended ADR-028 formulas. The scenario families cover
+the ADR-028 "Puertas" (amended):
 
   off      flag false, 3 faces  -> (c) zero quads everywhere, every grab
                                  keeps its internalId, plate hidden:
                                  pixel parity with the cube of before.
-  fits     gap 20, lod 0        -> (a) strict rank monotony, no coplanar
-                                 pair, and the fitting gap is NEVER
-                                 stretched to fill the budget (b).
-  overflow gap 600 (raw)        -> (b) fitted step repartido: the deepest
-                                 quad lands EXACTLY on maxLayerDepth (150).
-  gap0     gap 0                -> (e) every layer shares z = -epsilon.
+  fits     gap 20, lod 0        -> (a) z strictly INCREASING with rank and
+                                 positive (top window outermost), no
+                                 coplanar pair, and the fitting gap is
+                                 NEVER stretched to fill the cap (b).
+  overflow gap 600 (raw)        -> (b) fitted step repartido: the outermost
+                                 quad lands EXACTLY on cap (150) + epsilon.
+  gap0     gap 0                -> (e) every layer shares z = +epsilon.
   lod      5 faces, lod 1       -> (c) faces at index distance 2 from the
                                  current desktop instantiate NO quads and
                                  the grab keeps every id there.
-  sheet    2 faces (flat sheet) -> the sheet budget is the CAP directly
-                                 (ADR-028 rule 2: faceDistance here is the
-                                 few-px sheetGap; the solid formula would
-                                 crush the stack to ~1 px).
+  sheet    2 faces (flat sheet) -> the FIXED cap applies to the sheet too
+                                 (amendment rule: no per-shape budget left;
+                                 the old sheet branch died with the inward
+                                 stack) — same exact-landing check as the
+                                 polygon overflow scenario.
   plate0   plate 0              -> the plate hides, its z still exactly
-                                 maxLayerDepth + 2 behind.
+                                 -2: the veil plane just behind the face
+                                 (clause (f): it must stay behind EVERY
+                                 quad so the holes never show the interior).
   clamp    gap -50, lod 13,     -> the resolvedors: gap clamps to 0 (all
-           plate 3.0               layers at -epsilon), lod to 8 (all
+           plate 3.0               layers at +epsilon), lod to 8 (all
                                    faces active), plate to 1 (visible).
 
 For EVERY active face the oracle additionally pins the (d) hole contract
-(each layeredIds entry has wId == "" in ITS OWN face grab; the minimized/
-dock/desktopWindow rows keep their id flat — a hole without a quad is a
-hole in the shell), the rank map size (dropped rows never count), the
-window-centre positions of the quads, pickable + desktop re-exposure and
-the plate position.
+(each layeredIds entry has wId == "" in ITS OWN face grab — the hole
+stays, the outward quad floats in front of it — the minimized/dock/
+desktopWindow rows keep their id flat), the rank map size (dropped rows
+never count), the window-centre positions of the quads, pickable + desktop
+re-exposure and the plate position.
 
 --selftest validates the ORACLE (layers_contract.selftest): coplanar
-layers, over-budget depths, holes without quads, unreleased grabs,
-LOD-active faces instantiating, plate in front, stretched fitted steps,
-per-layer clamps and off-epsilon gap-0 planes must all be rejected; the
-fitting, exact-fit and zero-gap good dumps must pass.
+layers, over-cap depths, holes without quads, unreleased grabs, LOD-active
+faces instantiating, a plate in front of the bottom layer or off the veil
+plane, stretched fitted steps, per-layer clamps short of the cap and
+off-+epsilon gap-0 planes must all be rejected; the fitting, exact-fit and
+zero-gap good dumps must pass.
 
 Skipped (exit 0) when PySide6 is missing (the shared skip contract).
 """
@@ -202,25 +209,19 @@ def main():
       for message in messages:
         problems.append(f"{name} qml: {message.strip()}")
       counts = [len(face["quads"]) for face in dump["faces"]]
-      print(
-        name
-        + ": faces="
-        + str(len(counts))
-        + " sheet="
-        + str(int(dump["isSheet"]))
-        + " quads="
-        + str(counts)
-      )
+      print(name + ": faces=" + str(len(counts)) + " quads=" + str(counts))
   if problems:
     print("check-layers: FAIL")
     for problem in problems:
       print(f" - {problem}")
     return 1
   print(
-    "check-layers: OK (real Cube/WindowLayers: strict rank monotony, exact "
-    "budget landing with the fitted step, cap-direct sheet, gap-0 epsilon "
-    "parity, LOD and flag-off pixel parity, holes exactly where layeredIds "
-    "say, dropped rows flat, plate behind the deepest layer, kwinrc clamps)"
+    "check-layers: OK (real Cube/WindowLayers: z strictly increasing with "
+    "rank and positive (outward stack), outermost exactly on the fixed cap "
+    "with the fitted step for every shape including the sheet, gap-0 "
+    "+epsilon parity, LOD and flag-off pixel parity, holes exactly where "
+    "layeredIds say, dropped rows flat, plate on the -2 veil plane behind "
+    "every quad, kwinrc clamps)"
   )
   return 0
 

@@ -206,33 +206,48 @@ y para el fallback sin `QtQuick3D.Helpers`.
 `WindowLayering` (Bool, default **false** → paridad píxel con el cubo virgen;
 patrón opt-in de las tapas, ADR-027). Cada ventana de una cara = un quad propio
 (con su `WindowThumbnail`) colocado en la normal de la cara y **empujado hacia
-dentro** según su rango de apilado. La cara se queda en el shell: su grab suelta
-(`wId = ""`) solo las ventanas que ganan quad → hueco transparente exacto donde
-estaba cada una, y el quad flota detrás de su propio hueco. El hueco recorta la
-capa a su cara en cualquier vista: «nada sobresale del sólido» lo garantiza la
-transparencia, no la distancia al eje.
+FUERA** según su rango de apilado (**enmienda medida 2026-11-27**: hacia dentro
+los huecos dejaban ver el interior del sólido —cuña blanca de quads/caras
+lejanas, «ABA» espejado— y las ventanas se leían hundidas; además el quad casi
+co-planar con su cara parpadeaba al girar por el sort de centroides). La cara se
+queda en el shell: su grab suelta (`wId = ""`) solo las ventanas que ganan quad
+→ hueco transparente exacto donde estaba cada una (el hueco SE QUEDA: sin él la
+ventana plana y su quad se dibujarían doble), y el quad flota **delante de su
+propio hueco**, con la ventana de mayor z-index como la más cercana al
+observador. El plate (velo, z = −2) cubre los huecos para que no asome el
+interior. Trade-off aceptado: al orbitar los quads pueden salir de la silueta de
+su cara (ventanas flotando sobre el escritorio — el look pedido).
 
 ```
-rank          = nº de ventanas de la cara con menor stackingOrder (la de arriba = maxRank)
-cap           = 150 px                                             (tope duro del stack)
-maxLayerDepth = isSheet ? cap : min(faceDistance * 0.5, cap)       (hoja: sin paredes que cruzar)
-fittedGap     = min(WindowLayerGap, maxLayerDepth / max(1, maxRank))
-layerDepth    = (maxRank - rank) * fittedGap                       (la de arriba = 0)
-position.z    = -(layerDepth + epsilon)                            (+z = normal hacia fuera)
+rank          = nº de ventanas de la cara con menor stackingOrder (rank 0 = la de abajo)
+cap           = 150 px                                             (tope duro del stack, todas las formas)
+fittedGap     = min(WindowLayerGap, cap / max(1, maxRank))          (cap directo en todas las formas)
+layerDepthOut = rank * fittedGap + epsilon                          (la de arriba = la más exterior)
+position.z    = +layerDepthOut                                      (+z = normal hacia fuera)
+plate z       = -2                                                  (velo de huecos, detrás de todos los quads)
 ```
 
-El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 2)`;
-solo se ve a través de los huecos. Quads y plate heredan la opacidad de la cara
-(ADR-021): la pila funde entera, no solo la base.
+El **velo (plate)** va a `z = −(2)`: justo detrás del plano de la cara, delante
+del interior — su papel es velar los huecos (hueco sin velo = interior del cubo
+asomando, medido). Como los quads empiezan en +ε, el plate queda SIEMPRE detrás
+de todos y nunca tapa una ventana. Solo se ve a través de los huecos. Quads y
+plate heredan la opacidad de la cara (ADR-021): la pila funde entera, no solo la
+base.
 
 Descartados en ADR-028 (para no reabrirlos): **retraer la cara** detrás del stack
 dejando los quads en la posición del shell — aquí la cara ES el grab del
 escritorio completo (wallpaper incluido), así que retraerla abriría la silueta
 (al girar se mira dentro del cubo por cada cara) y arrastraría el fondo al
-interior del sólido — y **quads hacia fuera** (`+z`: al orbitar cruzan paredes y
-caras vecinas y se leen como ventanas hundiéndose a través del escritorio). Detrás
-de una cara opaca que conserva sus ventanas planas la pila es directamente
-invisible (el `Mask` en reposo escribe profundidad).
+interior del sólido — y **una cara que conserve sus ventanas planas opacas frente
+a la pila** (el `Mask` en reposo escribe profundidad y la ventana plana ocluye a
+su propia capa). Los **quads hacia fuera** (`+z`) fueron el tercer descartado del
+modelo original; la **enmienda 2026-11-27 los adopta**: el fallo medido en la
+exploración vieja era cruzar paredes con una cara SIN huecos y doble superficie
+(ventana plana + quad); aquí la cara lleva el hueco exacto de cada ventana y el
+plate a z = −2 vela el interior, así que ese fallo no aplica. El presupuesto por
+forma (`min(faceDistance · 0.5, cap)`) muere con la enmienda: hacia fuera no hay
+paredes que proteger y el cap aplica directo a todas las formas (polígono, hoja y
+tambor).
 
 ### Cómo se aplicará
 
@@ -257,12 +272,19 @@ invisible (el `Mask` en reposo escribe profundidad).
 
 ### Consejos (trampas)
 
-- **Tope duro + paso repartido**: no hacer clamp por capa (aplana las profundas en
+- **Tope duro + paso repartido**: no hacer clamp por capa (aplana las exteriores en
   un mismo plano y se pierde el orden). Repartir un paso menor conserva el orden y
-  que el más profundo caiga justo en el tope.
+  que la más exterior caiga justo en el cap.
 - **Profundidad FIJA mientras gira**: animar el hueco produce un «pop» al parar.
   El stack se lee como un sólido rígido.
-- **`plate` detrás de la más profunda**; si va delante, tapa las ventanas.
+- **Hueco sin velo = interior del cubo asomando** (medido 2026-11-27: cuña blanca
+  de quads/caras lejanas y «ABA» espejado por los huecos de la cara);
+  **el plate a z = −2 lo tapa**. Si el plate se va delante de la capa de abajo
+  (z ≥ +ε) tapa ventanas en vez de velar huecos: debe quedar estrictamente
+  detrás de TODOS los quads.
+- **Signo hacia fuera**: un quad con z negativa (o la pila antigua
+  `-((maxRank-rank)·fitted + ε)`) vuelve a medir dentro del sólido los dos
+  problemas: interior asomando + parpadeo con la cara por el sort de centroides.
 - **Hueco con borde duro**: el `alphaCutoff 0.5` del Mask corta en seco el borde
   AA/sombras de la ventana contra el hueco en reposo (solo cilindro; hoja y
   polígono funden su alfa natural). Verificar en el anidado; si molesta, tocar el

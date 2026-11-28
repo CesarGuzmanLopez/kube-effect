@@ -86,15 +86,18 @@ lint-ci: check
 # Se salta (exit 0) si faltan PySide6 o QtQuick3D.Helpers.
 # check-layers.py instancia el Cube.qml REAL contra el stub compartido —
 # extendido: 6 ventanas por cara con stackingOrder 0..5, ids "stub-<cara>-<i>",
-# x/y/w/h variados y una fila minimized/dock/desktopWindow (ADR-028) — y
-# valida las capas vivas (WindowLayers.qml) con el oráculo puro
-# layers_contract.py: monotonía estricta por rank (nunca coplanares),
-# fittedGap repartido con la capa más profunda EXACTAMENTE en maxLayerDepth,
-# hoja 2D con el cap directo (150 px), gap 0 → todas a −ε, caras fuera del
-# LOD o con el flag apagado no instancian quads y el grab conserva cada
-# internalId (paridad píxel), hueco (wId = "") solo donde layeredIds lo
-# declara, las filas descartadas quedan planas, pickable + desktop reexpuesto
-# y el plate justo detrás de la capa más profunda. Su --selftest comprueba
+# x/y/w/h variados y una fila minimized/dock/desktopWindow (ADR-028 enmendado
+# 2026-11-27: pila hacia FUERA, +z) — y valida las capas vivas
+# (WindowLayers.qml) con el oráculo puro layers_contract.py: z estrictamente
+# CRECIENTE con el rank y POSITIVA (nunca coplanares, la de arriba = la más
+# cercana al observador), fittedGap repartido con la capa más EXTERIOR
+# EXACTAMENTE en el cap fijo de 150 px (todas las formas, hoja incluida),
+# gap 0 → todas a +ε, caras fuera del LOD o con el flag apagado no instancian
+# quads y el grab conserva cada internalId (paridad píxel), hueco (wId = "")
+# solo donde layeredIds lo declara, las filas descartadas quedan planas,
+# pickable + desktop reexpuesto y el plate SIEMPRE en su plano de velo
+# (z = −2, detrás de todos los quads: tapa los huecos para que no asome el
+# interior). Su --selftest comprueba
 # el oráculo sin motor. Se salta (exit 0) si falta PySide6.
 # check-cylinder-wiring.py instancia el Cube.qml REAL (no la malla suelta) contra
 # el stub org.kde.kwin del harness comun (qml_check_harness.STUB_MODULE)

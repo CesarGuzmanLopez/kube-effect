@@ -41,10 +41,11 @@ Item {
 
   UI.Cube {
     id: cube
-    // A small synthetic screen keeps the budgets at the hard cap (W=1000
-    // polygon at 3+ faces: apothem ~866+100 -> half 483 > 150; the 2-face
-    // sheet: faceDistance = sheetGap ~2 px -> the cap branch is the ONLY
-    // thing that can reach 150 there, which is what clause (b) pins).
+    // A small synthetic screen (1000x700): since the amendment the budget is
+    // the FIXED cap (150 px) for every shape — polygon, sheet and drum alike
+    // — so the gap-600 scenarios must land the outermost quad exactly on
+    // cap + epsilon on the 3-face polygon AND on the 2-face sheet, which is
+    // what clause (b) pins.
     faceSize: Qt.size(1000, 700)
     screenName: ""
     screenGeometry: Qt.rect(0, 0, 1000, 700)
@@ -108,7 +109,6 @@ Item {
         desktopNumber: face.desktop !== null && face.desktop !== undefined ? face.desktop.x11DesktopNumber : -1,
         active: wl.active,
         revision: revision,
-        maxDepthFromCube: cube.layerMaxDepth,
         maxRank: wl.maxRank,
         fittedGap: wl.fittedGap,
         layeredIds: Object.keys(wl.layeredIds),
@@ -123,8 +123,6 @@ Item {
       faceCount: count,
       currentFaceIndex: currentIdx,
       currentStubNumber: harness.rawCurrent,
-      isSheet: cube.isSheet,
-      faceDistance: cube.faceDistance,
       faceWidth: 1000,
       faceHeight: 700,
       gapRaw: harness.rawGap,

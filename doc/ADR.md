@@ -1391,3 +1391,60 @@ muchas ventanas, borde del hueco (el cutoff 0.5 corta en seco las sombras AA en
 reposo — riesgo conocido), rejilla del wallpaper para confirmar que nada asoma del
 hueco, gap 0 vs 120. `features.json`: window-layering planned→stable con
 `since 0.0.0.6` y metadata 0.0.0.5→0.0.0.6 en el mismo commit final.
+
+### Enmienda (medida en el anidado 2026-11-27) — la pila va hacia FUERA (+z); el plate vela los huecos
+
+**Qué midió el usuario** (anidado, polígono 3 escritorios, pitch=30, yaw=71,
+opacidad 1.00, gap=120): con la pila empujada hacia DENTRO los huecos de la cara
+dejaban ver el **interior del sólido** — cuña blanca de los quads/caras lejanas y
+la etiqueta del wallpaper «ABA» espejada a través de los huecos — y las ventanas
+se leían **hundidas dentro del cubo**. Además las capas interiores competían con
+la propia cara en el sort por centroides de la pasada transparente (ADR-026): al
+girar **parpadeaba el quad entero** (quad y cara quedaban casi coplanares por
+delante y por detrás según el ángulo).
+
+**Se adopta la dirección hacia FUERA**: +z sobre la normal de la cara, la ventana
+de mayor `stackingOrder` es la **más cercana al observador** (la más exterior).
+
+- Fórmula: `layerDepthOut(rank) = rank · fittedGap + ε` con
+  `fittedGap = min(WindowLayerGap, cap / max(1, maxRank))` — rank 0 (la de abajo)
+  queda casi pegada a la cara (+ε) y la más exterior cae EXACTO en el cap cuando
+  el stack no cabe (paso repartido, sin clamp por capa). El hueco en el grab **se
+  queda**: sin él la ventana plana y su quad se dibujarían doble.
+- El **plate pasa a z = −2**: justo detrás del plano de la cara, delante del
+  interior. Su papel nuevo es **velar los huecos** para que no asome el interior
+  del cubo por ellos; queda estrictamente detrás de TODOS los quads (−2 < +ε),
+  así que nunca tapa una ventana.
+- Sort: el quad queda **estricto delante del plano de su cara** en cualquier
+  pose, el problema del parpadeo desaparece con la regla de signo (la cara sigue
+  ordenada por su centroide ADR-026; el quad de su ventana está siempre entre la
+  cara y el observador).
+- Presupuesto: el `min(faceDistance · 0.5, cap)` por forma **queda sin efecto** —
+  cap directo (150 px) en TODAS las formas. Hacia fuera no hay paredes interiores
+  que proteger; `maxLayerDepth()` desaparece del módulo.
+- **Por qué el descarte original del modelo F (quads exteriores) NO aplica aquí**:
+  el fallo medido en la exploración vieja era cruzar paredes y doblar la
+  superficie **sin huecos** (la opaca tapaba a la capa y se veía el doble). Aquí
+  la cara tiene el hueco exacto de cada ventana y el plate vela el interior: no
+  hay doble dibujo y no se mira dentro del sólido.
+
+**Trade-off aceptado**: al orbitar, los quads pueden **salir de la silueta de su
+cara** — ventanas flotando sobre el escritorio. Es el look pedido (metáfora del
+escritorio), no un defecto; la rejilla del wallpaper direccional del arnés
+permite medir que el quad no deforma la cara.
+
+**Gates actualizados**: `layers_contract.py` exige z estrictamente CRECIENTE con
+el rank y POSITIVA; la más exterior EXACTA en cap + ε con overflow (todas las
+formas, hoja incluida); gap 0 → todas a +ε; plate SIEMPRE en −2 y detrás de
+todos los quads. El selftest añade los rechazos «plate delante de la capa de
+abajo» y «plate fuera del plano de velo» (y la fórmula heredada −(maxDepth+2) ya
+no pasa).
+
+**UI del KCM (mismo 2026-11-27, sustituye el punto 6)**: `WindowLayerGap` y
+`WindowLayerPlateOpacity` **no** van en Avanzado — son configuración normal de la
+feature y viven en la pestaña **Ventanas** junto al toggle (deshabilitados hasta
+que `WindowLayering` está activo, patrón dim-amount). **Avanzado** conserva SOLO
+`WindowLayerLodFaces`, que sí es ajuste fino: presupuesto de coste GPU por frame,
+no de aspecto. Las claves de main.xml y sus rangos/default no cambian; solo se
+reubica la UI (gate: check-ui/check-schema validan widget, tipo, rango y
+conexión por nombre, sin depender del tab).

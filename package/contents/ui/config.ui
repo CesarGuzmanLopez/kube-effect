@@ -403,8 +403,11 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                         </layout>
                     </widget>
 
-                    <!-- 3. Windows 3D (ADR-028): the layering switch lives here,
-                         its fine-tuning (gap, LOD, plate) in Advanced (ADR-014). -->
+                    <!-- 3. Windows 3D (ADR-028 as amended 2026-11-27): the
+                         switch and its LOOK controls (gap, plate) live here;
+                         only the cost budget (LOD faces) stays in Advanced —
+                         user decision: gap/plate are normal feature settings,
+                         not expert knobs (ADR-014 split kept for the LOD). -->
                     <widget class="QWidget" name="tabWindows">
                         <attribute name="title">
                             <string>Windows</string>
@@ -420,11 +423,79 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                             <item>
                                 <widget class="QLabel" name="tabWindowsHint">
                                     <property name="text">
-                                        <string>Cada ventana de una cara se convierte en un quad empujado hacia dentro según su orden de apilado, y la cara deja un hueco transparente exacto donde estaba la ventana: las ventanas solapadas se separan en profundidad y la de detrás se ve por los bordes del hueco. Apagado (por defecto) el cubo se ve idéntico al de antes. El paso entre capas, cuántas caras se capean y el velo de fondo se ajustan en Avanzado.</string>
+                                        <string>Cada ventana de una cara se convierte en un quad empujado hacia fuera (sobre su cara) según su orden de apilado, y la cara deja un hueco transparente exacto donde estaba la ventana: la ventana por encima del z-index queda más cerca de ti y las solapadas se separan en profundidad. Apagado (por defecto) el cubo se ve idéntico al de antes. Cuántas caras se capean (coste) se ajusta en Avanzado.</string>
                                     </property>
                                     <property name="wordWrap">
                                         <bool>true</bool>
                                     </property>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QGroupBox" name="windowsLayersGroup">
+                                    <property name="title">
+                                        <string>Capas de ventana</string>
+                                    </property>
+                                    <layout class="QVBoxLayout" name="windowsLayersLayout">
+                                        <item>
+                                            <layout class="QFormLayout" name="windowsLayersForm">
+                                                <item row="0" column="0">
+                                                    <widget class="QLabel" name="layerGapLabel">
+                                                        <property name="text">
+                                                            <string>Paso entre capas (hacia fuera):</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="0" column="1">
+                                                    <widget class="QSpinBox" name="kcfg_WindowLayerGap">
+                                                        <property name="enabled">
+                                                            <bool>false</bool>
+                                                        </property>
+                                                        <property name="toolTip">
+                                                            <string>Separación en profundidad entre capas consecutivas, hacia fuera de la cara. Si el stack entero no cabe en el tope duro de 150 px el paso se reparte (la capa más exterior cae exacta en el tope); 0 = todas las capas en +ε, paridad con el cubo plano.</string>
+                                                        </property>
+                                                        <property name="minimum">
+                                                            <number>0</number>
+                                                        </property>
+                                                        <property name="maximum">
+                                                            <number>600</number>
+                                                        </property>
+                                                        <property name="suffix">
+                                                            <string> px</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="1" column="0">
+                                                    <widget class="QLabel" name="layerPlateLabel">
+                                                        <property name="text">
+                                                            <string>Opacidad del velo de huecos:</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="1" column="1">
+                                                    <widget class="QDoubleSpinBox" name="kcfg_WindowLayerPlateOpacity">
+                                                        <property name="enabled">
+                                                            <bool>false</bool>
+                                                        </property>
+                                                        <property name="toolTip">
+                                                            <string>Velo oscuro justo detrás del plano de la cara (z = -2): tapa los huecos para que no se vea el interior del sólido y queda siempre detrás de todas las capas. 0 = sin velo (los huecos dejarían asomar dentro del cubo).</string>
+                                                        </property>
+                                                        <property name="minimum">
+                                                            <double>0</double>
+                                                        </property>
+                                                        <property name="maximum">
+                                                            <double>1</double>
+                                                        </property>
+                                                        <property name="singleStep">
+                                                            <double>0.05</double>
+                                                        </property>
+                                                        <property name="decimals">
+                                                            <number>2</number>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                            </layout>
+                                        </item>
+                                    </layout>
                                 </widget>
                             </item>
                         </layout>
@@ -1142,21 +1213,24 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                 </widget>
                             </item>
                             <item>
-                                <!-- Window layers fine-tuning (ADR-028): the switch itself is
-                                     in the Windows tab; the three numbers are settings for
-                                     experts and belong to Advanced (ADR-014). They only
-                                     mean something with WindowLayering on, so they start
-                                     disabled and follow the checkbox (the dim-amount
-                                     pattern below). -->
+                                <!-- Window layers cost budget (ADR-028 rule 3): only
+                                     the LOD lives here. It is a per-frame capture
+                                     budget (GPU cost), NOT a look knob, so it stays
+                                     Advanced (ADR-014); the look controls (gap, plate
+                                     opacity) moved to the Windows tab with the
+                                     2026-11-27 user decision. It only means something
+                                     with WindowLayering on, so it starts disabled and
+                                     follows the checkbox (the dim-amount pattern
+                                     below). -->
                                 <widget class="QGroupBox" name="advancedLayersGroup">
                                     <property name="title">
-                                        <string>Capas de ventana: ajuste fino</string>
+                                        <string>Capas de ventana: coste (LOD)</string>
                                     </property>
                                     <layout class="QVBoxLayout" name="advancedLayersLayout">
                                         <item>
                                             <widget class="QLabel" name="advancedLayersHint">
                                                 <property name="text">
-                                                    <string>El paso se reparte automáticamente si el stack entero no cabe en el presupuesto de profundidad (tope duro 150 px; 0 = todas las capas en el mismo plano, paridad con el cubo plano). Las capas se instancian solo en las N caras más cercanas al escritorio actual (0 = todas; cada capa cuesta una captura por frame). El velo oscuro va detrás de la capa más profunda y solo se ve a través de los huecos.</string>
+                                                    <string>Cuántas caras alrededor del escritorio actual instancian capas (0 = todas): cada capa instanciada cuesta una captura por frame aunque no se vea. Es un presupuesto de coste, no de aspecto — el look (paso entre capas y velo de huecos) se ajusta en la pestaña Windows.</string>
                                                 </property>
                                                 <property name="wordWrap">
                                                     <bool>true</bool>
@@ -1166,71 +1240,25 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                         <item>
                                             <layout class="QFormLayout" name="advancedLayersForm">
                                                 <item row="0" column="0">
-                                                    <widget class="QLabel" name="layerGapLabel">
-                                                        <property name="text">
-                                                            <string>Paso entre capas:</string>
-                                                        </property>
-                                                    </widget>
-                                                </item>
-                                                <item row="0" column="1">
-                                                    <widget class="QSpinBox" name="kcfg_WindowLayerGap">
-                                                        <property name="enabled">
-                                                            <bool>false</bool>
-                                                        </property>
-                                                        <property name="minimum">
-                                                            <number>0</number>
-                                                        </property>
-                                                        <property name="maximum">
-                                                            <number>600</number>
-                                                        </property>
-                                                        <property name="suffix">
-                                                            <string> px</string>
-                                                        </property>
-                                                    </widget>
-                                                </item>
-                                                <item row="1" column="0">
                                                     <widget class="QLabel" name="layerLodLabel">
                                                         <property name="text">
                                                             <string>Caras con capas (0 = todas):</string>
                                                         </property>
                                                     </widget>
                                                 </item>
-                                                <item row="1" column="1">
+                                                <item row="0" column="1">
                                                     <widget class="QSpinBox" name="kcfg_WindowLayerLodFaces">
                                                         <property name="enabled">
                                                             <bool>false</bool>
+                                                        </property>
+                                                        <property name="toolTip">
+                                                            <string>Presupuesto de coste: las capas se instancian solo en las N caras más cercanas al escritorio actual (distancia por índice; 0 = todas). No cambia el aspecto, solo cuántas capturas por frame se pagan.</string>
                                                         </property>
                                                         <property name="minimum">
                                                             <number>0</number>
                                                         </property>
                                                         <property name="maximum">
                                                             <number>8</number>
-                                                        </property>
-                                                    </widget>
-                                                </item>
-                                                <item row="2" column="0">
-                                                    <widget class="QLabel" name="layerPlateLabel">
-                                                        <property name="text">
-                                                            <string>Opacidad del velo de fondo:</string>
-                                                        </property>
-                                                    </widget>
-                                                </item>
-                                                <item row="2" column="1">
-                                                    <widget class="QDoubleSpinBox" name="kcfg_WindowLayerPlateOpacity">
-                                                        <property name="enabled">
-                                                            <bool>false</bool>
-                                                        </property>
-                                                        <property name="minimum">
-                                                            <double>0</double>
-                                                        </property>
-                                                        <property name="maximum">
-                                                            <double>1</double>
-                                                        </property>
-                                                        <property name="singleStep">
-                                                            <double>0.05</double>
-                                                        </property>
-                                                        <property name="decimals">
-                                                            <number>2</number>
                                                         </property>
                                                     </widget>
                                                 </item>
@@ -1367,10 +1395,12 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
             <receiver>capContentStack</receiver>
             <slot>setCurrentIndex(int)</slot>
         </connection>
-        <!-- Window layers (ADR-028): the three fine-tuning numbers only mean
-             something with the switch on, so they start disabled and follow
-             the checkbox (the dim-amount pattern; KConfigDialogManager's
-             setChecked fires toggled() on load too). Three separate
+        <!-- Window layers (ADR-028 as amended): the layering numbers only
+             mean something with the switch on, so they start disabled and
+             follow the checkbox (the dim-amount pattern; KConfigDialogManager's
+             setChecked fires toggled() on load too). Gap and plate live in the
+             Windows tab, the LOD in Advanced — designer connections are by
+             name, the tab split is irrelevant here. Three separate
              connections because designer has no OR of signals. -->
         <connection>
             <sender>kcfg_WindowLayering</sender>

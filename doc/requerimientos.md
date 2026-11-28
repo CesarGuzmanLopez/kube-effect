@@ -273,38 +273,49 @@ Reglas:
 ## 2.1 Capas de ventana (z-index / separación de ventanas)
 
 Con `WindowLayering` activo, cada ventana de una cara es su propio quad 3D,
-empujado hacia DENTRO del sólido según su orden de apilado real (z-index del
-escritorio). La cara NO se mueve: sigue siendo la superficie del shell, pero su
-grab pone `wId = ""` en cada ventana que gana capa — el compuesto queda con un
-**hueco transparente** exacto donde estaba la ventana, y el quad flota **detrás de
-su propio hueco**. Las ventanas solapadas se separan en profundidad y la de atrás
+empujado hacia **FUERA** del sólido (+z, la normal de la cara) según su orden de
+apilado real (z-index del escritorio) — **enmienda medida 2026-11-27**: hacia
+dentro los huecos dejaban ver el interior del cubo (cuña blanca de quads/caras
+lejanas, «ABA» espejado) y las ventanas se leían hundidas, y el quad casi
+coplanar con su cara parpadeaba al girar (sort de centroides inestable). La cara
+NO se mueve: sigue siendo la superficie del shell, pero su grab pone `wId = ""`
+en cada ventana que gana capa — el compuesto queda con un **hueco transparente**
+exacto donde estaba la ventana (el hueco se queda: sin él, la ventana plana y su
+quad se dibujarían doble) y el quad flota **delante de su propio hueco**, siendo
+la ventana de mayor z-index la **más cercana al observador**. El **plate vela los
+huecos** (z = −2, justo detrás del plano de la cara) para que no asome el
+interior. Las ventanas solapadas se separan en profundidad y la de atrás
 se ve por los bordes del hueco (parallax). Con el flag apagado (default) una cara
 = un compuesto plano, píxel a píxel como hoy (ADR-028).
 
 | Clave                     | Tipo   | Rango    | Default   | Requerimiento                                                                                     |
 | ------------------------- | ------ | -------- | --------- | ------------------------------------------------------------------------------------------------- |
 | `WindowLayering`          | Bool   | —        | **false** | Cada ventana como capa 3D (si false, una cara = un compuesto plano; paridad píxel con el virgen)   |
-| `WindowLayerGap`          | Int    | 0–600 px | 120       | Paso de profundidad entre capas (hacia dentro); 0 = todas a −ε, paridad con el plano                 |
+| `WindowLayerGap`          | Int    | 0–600 px | 120       | Paso de profundidad entre capas (hacia fuera, +z); 0 = todas a +ε, paridad con el plano                 |
 | `WindowLayerLodFaces`     | Int    | 0–8      | 1         | Caras alrededor del escritorio actual con capas (distancia por índice; 0 = todas)                  |
-| `WindowLayerPlateOpacity` | Double | 0–1      | 0.25      | Velo oscuro detrás de la capa más profunda (0 = sin velo); solo se ve a través de los huecos      |
+| `WindowLayerPlateOpacity` | Double | 0–1      | 0.25      | Velo oscuro justo detrás del plano de la cara (z = −2): vela los huecos para que no asome el interior del sólido (0 = sin velo)      |
 
 Reglas:
 
 - Tope global del stack: **150 px**. Si no cabe, se **reparte** el paso (mismo paso
-  menor para cada rango, orden preservado, sin aplanar dos capas en un plano).
-- Presupuesto de profundidad por representación: sólidos (polígono ≥3, tambor)
-  `min(faceDistance · 0.5, cap)`; **hoja 2D** (1-2 escritorios), el cap directo —
-  detrás de la hoja no hay paredes que cruzar y el hueco ya recorta cada quad. (En
-  la hoja `faceDistance = sheetGap`, unos pocos px: con la fórmula del sólido el
-  stack quedaría aplastado a ~1 px. Medido en `Cube.qml`.)
-- La ventana de arriba (mayor z-index) es la más cercana; las de abajo se hunden un
-  paso por rango.
+  menor para cada rango, orden preservado, sin aplanar dos capas en un plano) y la
+  capa **más exterior** cae EXACTA en el tope (+`cap`, con el ε fuera).
+- Presupuesto: **cap directo en TODAS las formas** (polígono, hoja y tambor). El
+  presupuesto por representación `min(faceDistance · 0.5, cap)` quedó **sin
+  efecto** con la enmienda: hacia fuera no hay paredes interiores que proteger
+  (el `maxLayerDepth` por forma desapareció del código).
+- Dirección: la ventana de **mayor z-index es la más cercana al observador** (la
+  más exterior); la de abajo (rank 0) queda casi pegada a la cara, en +ε; cada
+  rango sube un paso hacia fuera.
+- **Trade-off medido y aceptado**: al orbitar, los quads pueden asomar fuera de la
+  silueta de su cara (ventanas flotando sobre el escritorio). Es el look pedido
+  (metáfora del escritorio), no un defecto.
 - Profundidad **fija** mientras gira (no se anima): el stack se lee como un sólido;
   animar el hueco produce un «pop» al parar.
 - Solo cuentan las ventanas de esa cara/escritorio/pantalla. Descartes: las
   minimizadas no existen (igual que en el plano); **docks y ventana-wallpaper
-  quedan planos en el grab, nunca se huecan** (un hueco sin quad detrás abriría el
-  shell). La capa de una ventana se libera con `wId = ""` (QUuid nulo,
+  quedan planos en el grab, nunca se huecan** (un hueco sin su quad delante solo
+  mostraría el velo: ventana fantasma). La capa de una ventana se libera con `wId = ""` (QUuid nulo,
   trucos-aprendidos §N), no con `visible: false`.
 - **LOD = presupuesto de coste, no de orden**: el culling de `Model` no se propaga
   al `Texture.sourceItem`, así que una capa instanciada cuesta una captura por
@@ -313,8 +324,9 @@ Reglas:
   compuesto plano. El orden de pintado NO depende del LOD: lo dan los centroides de
   la pasada transparente (ADR-026) y el `Mask` con escritura de profundidad en
   reposo.
-- Semántica ángulo/transparencia: en reposo (opacidad 1) cada cara es opaca y cada
-  hueco lo tapa su propia ventana — el escritorio se lee plano; al girar
+- Semántica ángulo/transparencia: en reposo (opacidad 1) cada cara es opaca, cada
+  hueco lo cubre su propio quad flotando delante (y el velo a z = −2 detrás) — el
+  escritorio se lee plano salvo por las capas; al girar
   (`FaceRotationOpacity`, ADR-021) las caras funden y se ven las pilas de las otras
   caras a través; en ángulo de dos caras simultáneas ambas pilas se ven y ordenan
   por centroide; en vistas muy picadas de arriba/abajo, con muchas ventanas, los
@@ -336,9 +348,13 @@ Reglas:
   tambor se apagan por código y esa fase se pospone sin cambiar de versión.
 - Futuro con clave propia: curvar/deformar las capas con el cilindro (esta feature:
   quads **planos** sobre la normal de la cara) y colisiones con otros efectos.
-- UI del KCM: `WindowLayering` en la pestaña Ventanas (llena el placeholder
-  existente); `WindowLayerGap`, `WindowLayerLodFaces` y `WindowLayerPlateOpacity` en
-  Avanzado (patrón ADR-014: los ajustes finos van a Advanced).
+- UI del KCM (**enmienda 2026-11-27**, sustituye el reparto ADR-014 original):
+  la pestaña **Ventanas** lleva `WindowLayering` + `WindowLayerGap` +
+  `WindowLayerPlateOpacity` — son configuración normal de la feature (gap y plate
+  arrancan deshabilitados y siguen al checkbox). **Avanzado** conserva SOLO
+  `WindowLayerLodFaces`: es un presupuesto de coste GPU por frame, no un ajuste de
+  aspecto, y ahí sí aplica el patrón ADR-014. Las claves del esquema (main.xml) no
+  se mueven: solo cambia dónde se pintan los controles.
 
 ## 2.2 Tapas (superior e inferior)
 

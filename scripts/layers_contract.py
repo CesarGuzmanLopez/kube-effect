@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
-"""Pure oracle for the window layers (ADR-028, model H), stdlib only.
+"""Pure oracle for the window layers (ADR-028, model H as amended 2026-11-27),
+stdlib only.
 
 check-layers.py instantiates the REAL Cube.qml (and through it CubeFace,
 WindowLayers, DesktopView and the extended stub WindowFilterModel) in an
 offscreen engine, dumps the live quads/grab/plate as JSON and validates
-everything here against an INDEPENDENT re-derivation of the ADR-028
-formulas — the cap_contract.py pattern for the caps. The oracle never
-trusts the engine for the math: expected depths, ranks, fitted steps,
-holes and plate positions are recomputed from the dump's own geometry
-(faceDistance / isSheet) plus the mirrored kwinrc clamps.
+everything here against an INDEPENDENT re-derivation of the amended ADR-028
+formulas — the cap_contract.py pattern for the caps. The oracle never trusts
+the engine for the math: expected depths, ranks, fitted steps, holes and the
+plate position are recomputed from the mirrored kwinrc clamps plus the FIXED
+cap (the amendment pushes the stack outwards, so there is no per-shape
+budget left to mirror).
 
-Clause families (the five innegociable asserts of the ADR-028 "Puertas"):
-  (a) strict monotony: no two layers of a face coplanar, exact order by rank;
-  (b) budget: every depth <= maxLayerDepth and a stack that does not fit
-      lands EXACTLY on maxLayerDepth (one fitted step for all, no per-layer
-      clamp, no stretch when the configured gap already fits);
+Clause families (the five innegociable asserts of the ADR-028 "Puertas",
+updated by the amendment):
+  (a) strict monotony: z STRICTLY INCREASING with rank and POSITIVE (the
+      top window is the outermost; no two layers of a face coplanar);
+  (b) budget: every rank*fitted <= cap and a stack that does not fit lands
+      the OUTERMOST layer EXACTLY on cap (one fitted step for all, no
+      per-layer clamp, no stretch when the configured gap already fits) —
+      the same fixed cap for every shape, sheet included;
   (c) LOD off and flag off: zero quads instantiated and the grab keeps
       every internalId (pixel parity with the cube of before);
   (d) every id in layeredIds has wId == "" in its face grab, and every id
       NOT layered (minimized/dock/desktopWindow) keeps its internalId;
-  (e) gap 0: every layer of a face shares z == -epsilon.
+  (e) gap 0: every layer of a face shares z == +epsilon;
+  (f) plate: z == -2 (the veil just behind the face plane), strictly behind
+      EVERY quad (-2 < +epsilon) so it veils the holes without covering
+      the windows.
 
 Stub window layout (mirrored from qml_check_harness.STUB_MODULE; keep the
 two in sync when the stub changes): desktop n has rows i = 0..5 with
@@ -31,7 +39,9 @@ desktopWindow. The ordinary rows 0..2 must win quads; 3..5 must never.
 import sys
 
 # The layerGeometry.js constants (a drift fails the gate, the point of
-# mirroring them here).
+# mirroring them here). CAP is the budget for EVERY shape since the
+# amendment (outward stack, no inner walls to protect); PLATE_EXTRA is the
+# magnitude of the veil's offset BEHIND the face plane (plate z = -2).
 CAP = 150.0
 EPSILON = 0.01
 PLATE_EXTRA = 2
@@ -81,19 +91,9 @@ def resolved_plate(raw):
   return min(PLATE_MAX, max(PLATE_MIN, value))
 
 
-def expected_max_depth(is_sheet, face_distance):
-  if is_sheet:
-    return CAP
-  try:
-    distance = float(face_distance)
-  except (TypeError, ValueError):
-    return CAP
-  return max(0.0, min(distance * 0.5, CAP))
-
-
-def expected_fitted_gap(gap, max_depth, max_rank):
+def expected_fitted_gap(gap, max_rank):
   steps = max(1, int(max_rank))
-  return min(gap, max_depth / steps)
+  return min(gap, CAP / steps)
 
 
 def lod_distance(index, current, face_count):
@@ -107,7 +107,6 @@ def _face_context(face, dump):
   lod = resolved_lod(dump["lodRaw"])
   gap = resolved_gap(dump["gapRaw"])
   plate = resolved_plate(dump["plateRaw"])
-  max_depth = expected_max_depth(dump["isSheet"], dump["faceDistance"])
   current = int(dump["currentFaceIndex"])
   return {
     "label": f"face {face['index']} (desktop {face['desktopNumber']})",
@@ -115,7 +114,6 @@ def _face_context(face, dump):
     "lod": lod,
     "gap": gap,
     "plate": plate,
-    "max_depth": max_depth,
     "current": current,
     "expect_active": layering
     and (
@@ -131,18 +129,14 @@ def _face_context(face, dump):
   }
 
 
-def _budget_and_active_problems(ctx, face, problems):
-  """Cube mirrors (the budget formula AND the LOD decision): the gate does
-  not only check depths, a diverging Cube/WindowLayers budget or flag would
-  pass math computed against the mirror while the scene used another one."""
-  label = ctx["label"]
-  if not close(face["maxDepthFromCube"], ctx["max_depth"]):
-    problems.append(
-      f"{label}: Cube.layerMaxDepth {face['maxDepthFromCube']} != mirrored {ctx['max_depth']}"
-    )
+def _active_problems(ctx, face, problems):
+  """Cube mirror of the LOD decision: the gate does not only check depths,
+  a diverging Cube/WindowLayers flag would pass math computed against the
+  mirror while the scene used another one. (The budget mirror died with the
+  amendment: the cap is a module constant now, pinned above.)"""
   if bool(face["active"]) is not ctx["expect_active"]:
     problems.append(
-      f"{label}: active {face['active']}, expected {ctx['expect_active']} (flag {ctx['layering']}, lod {ctx['lod']}, current {ctx['current']})"
+      f"{ctx['label']}: active {face['active']}, expected {ctx['expect_active']} (flag {ctx['layering']}, lod {ctx['lod']}, current {ctx['current']})"
     )
 
 
@@ -240,9 +234,9 @@ def _shown_quad_problems(label, quad, problems):
 
 
 def _depths_problems(ctx, face, dump, shown, problems):
-  """maxRank/fittedGap mirrors plus every quad's z on the fitted ladder,
-  its budget bound and its window-centre coincidence. Returns the depth
-  map the stack-shape clause needs."""
+  """maxRank/fittedGap mirrors plus every quad's z on the fitted outward
+  ladder, its cap bound and its window-centre coincidence. Returns the
+  depth map the stack-shape clause needs."""
   label = ctx["label"]
   orders = sorted(q["order"] for q in shown)
   if orders != list(STUB_SHOWN):
@@ -255,39 +249,35 @@ def _depths_problems(ctx, face, dump, shown, problems):
       f"{label}: maxRank {face['maxRank']} != {max_rank} (dropped rows must not enter the rank map)"
     )
   gap = ctx["gap"]
-  max_depth = ctx["max_depth"]
-  fitted = expected_fitted_gap(gap, max_depth, max_rank)
+  fitted = expected_fitted_gap(gap, max_rank)
   if not close(face["fittedGap"], fitted):
     problems.append(f"{label}: fittedGap {face['fittedGap']} != mirrored {fitted}")
 
   depths = {}
   for quad in shown:
     rank = sum(1 for other in orders if other < quad["order"])
-    depths[quad["id"]] = (max_rank - rank) * fitted
-    _quad_depth_problems(label, quad, rank, fitted, max_rank, max_depth, dump, problems)
+    depths[quad["id"]] = rank * fitted
+    _quad_depth_problems(label, quad, rank, fitted, dump, problems)
   return {"depths": depths, "fitted": fitted, "max_rank": max_rank, "orders": orders}
 
 
-def _quad_depth_problems(
-  label, quad, rank, fitted, max_rank, max_depth, dump, problems
-):
-  """One quad on the ladder: exact z, never past the budget, strictly
-  behind the face plane, centred over its own window (the hole and the
-  quad coincide; local px, Y flips)."""
-  depth = (max_rank - rank) * fitted
-  expected_z = -(depth + EPSILON)
+def _quad_depth_problems(label, quad, rank, fitted, dump, problems):
+  """One quad on the ladder: exact outward z (rank * fitted + epsilon — the
+  bottom of the pile almost on the face, the top the outermost), never past
+  the cap, strictly IN FRONT of the face plane, centred over its own window
+  (the hole and the quad coincide; local px, Y flips)."""
+  depth = rank * fitted
+  expected_z = depth + EPSILON
   if not close(quad["z"], expected_z, POSITION_TOL):
     problems.append(
       f"{label}: quad {quad['id']} z {quad['z']} != {expected_z} (rank {rank}, fitted {fitted})"
     )
   # (b) every layer within the budget (never past the cap).
-  if depth > max_depth + 1e-9:
+  if depth > CAP + 1e-9:
+    problems.append(f"{label}: quad {quad['id']} depth {depth} exceeds the cap {CAP}")
+  if quad["z"] < EPSILON - 1e-9:
     problems.append(
-      f"{label}: quad {quad['id']} depth {depth} exceeds the budget {max_depth}"
-    )
-  if quad["z"] > -EPSILON + 1e-9:
-    problems.append(
-      f"{label}: quad {quad['id']} is not strictly behind the face plane (z {quad['z']})"
+      f"{label}: quad {quad['id']} is not strictly in front of the face plane (z {quad['z']})"
     )
   i = int(quad["id"].rsplit("-", 1)[1])
   center_x = 100 + 150 * i + (320 - 40 * i) / 2 - dump["faceWidth"] / 2
@@ -303,51 +293,56 @@ def _quad_depth_problems(
 
 
 def _stack_shape_problems(ctx, shown, ladder, problems):
-  """(a) strict rank monotony + (b) the exact-budget landing of a
-  non-fitting stack (and no stretch for a fitting one) + (e) the gap-0
-  epsilon parity."""
+  """(a) strict rank monotony, z growing OUTWARDS with rank + (b) the
+  exact-cap landing of a non-fitting stack (and no stretch for a fitting
+  one) + (e) the gap-0 +epsilon parity."""
   label = ctx["label"]
   gap = ctx["gap"]
-  max_depth = ctx["max_depth"]
   fitted = ladder["fitted"]
   max_rank = ladder["max_rank"]
   if fitted <= 0:
-    # (e) gap 0: every layer shares the epsilon plane (flat parity).
+    # (e) gap 0: every layer shares the +epsilon plane (flat parity).
     for quad in shown:
-      if not close(quad["z"], -EPSILON):
+      if not close(quad["z"], EPSILON):
         problems.append(
-          f"{label}: zero gap put {quad['id']} at z {quad['z']}, expected {-EPSILON}"
+          f"{label}: zero gap put {quad['id']} at z {quad['z']}, expected {EPSILON}"
         )
     return
-  # (a) strict monotony by rank: the front-most window (max order) is the
-  # shallowest quad and no two layers ever share a plane.
+  # (a) strict monotony by rank: the top window (max order) is the
+  # OUTERMOST quad (largest z) and no two layers ever share a plane.
   zs = sorted((q["order"], q["z"]) for q in shown)
   for k in range(1, len(zs)):
     if zs[k][1] <= zs[k - 1][1] + 1e-9:
-      problems.append(f"{label}: layers not strictly ordered by rank: {zs}")
-  # A stack that does not fit MUST land exactly on the budget (repartido,
-  # no per-layer clamp): the deepest quad (largest depth) reaches max_depth.
-  if gap * max_rank > max_depth + 1e-9:
-    deepest = max(ladder["depths"].values())
-    if not close(deepest, max_depth, POSITION_TOL):
+      problems.append(f"{label}: layers not strictly ordered outwards by rank: {zs}")
+  # A stack that does not fit MUST land exactly on the cap (repartido, no
+  # per-layer clamp): the outermost quad (max rank) reaches CAP.
+  if gap * max_rank > CAP + 1e-9:
+    outermost = max(ladder["depths"].values())
+    if not close(outermost, CAP, POSITION_TOL):
       problems.append(
-        f"{label}: non-fitting stack deepest depth {deepest} != budget {max_depth}"
+        f"{label}: non-fitting stack outermost depth {outermost} != cap {CAP}"
       )
-  # A gap that fits is never stretched to fill the budget.
-  if gap * max_rank <= max_depth and not close(fitted, gap):
+  # A gap that fits is never stretched to fill the cap.
+  if gap * max_rank <= CAP and not close(fitted, gap):
     problems.append(f"{label}: fitting gap {gap} was stretched to {fitted}")
 
 
-def _plate_problems(ctx, face, problems):
-  """The plate sits behind the DEEPEST layer, never in front of it, and
+def _plate_problems(ctx, face, shown, problems):
+  """(f) The veil sits at z = -PLATE_EXTRA, just behind the face plane: it
+  must stay STRICTLY BEHIND EVERY quad (they start at +epsilon — a plate in
+  front of the bottom layer would cover the windows it should veil), and it
   only shows while its alpha is on (multiplied by the face opacity
   downstream)."""
   label = ctx["label"]
-  max_depth = ctx["max_depth"]
-  if not close(face["plateZ"], -(max_depth + PLATE_EXTRA), POSITION_TOL):
+  if not close(face["plateZ"], -PLATE_EXTRA, POSITION_TOL):
     problems.append(
-      f"{label}: plate z {face['plateZ']} != -(maxLayerDepth + {PLATE_EXTRA}) = {-(max_depth + PLATE_EXTRA)}"
+      f"{label}: plate z {face['plateZ']} != -{PLATE_EXTRA} (the veil plane just behind the face)"
     )
+  for quad in shown:
+    if face["plateZ"] >= quad["z"]:
+      problems.append(
+        f"{label}: plate z {face['plateZ']} is in front of quad {quad['id']} (z {quad['z']}) — it must veil the holes, not cover the windows"
+      )
   if bool(face["plateVisible"]) is not (ctx["plate"] > 0.001):
     problems.append(
       f"{label}: plate visible {face['plateVisible']} with plateOpacity {ctx['plate']}"
@@ -359,7 +354,7 @@ def _face_problems(face, dump, problems):
   lives in its own helper, same order and short-circuits as the original
   monolith)."""
   ctx = _face_context(face, dump)
-  _budget_and_active_problems(ctx, face, problems)
+  _active_problems(ctx, face, problems)
   _grab_rows_problems(ctx, problems)
   if not ctx["expect_active"]:
     _inactive_face_problems(ctx, face, problems)
@@ -370,7 +365,7 @@ def _face_problems(face, dump, problems):
     return problems
   ladder = _depths_problems(ctx, face, dump, shown, problems)
   _stack_shape_problems(ctx, shown, ladder, problems)
-  _plate_problems(ctx, face, problems)
+  _plate_problems(ctx, face, shown, problems)
   return problems
 
 
@@ -403,8 +398,6 @@ def _good_dump():
     "faceCount": 3,
     "currentFaceIndex": 0,
     "currentStubNumber": 1,
-    "isSheet": False,
-    "faceDistance": 966.0,  # budget clamps to the cap either way
     "faceWidth": 1000.0,
     "faceHeight": 700.0,
     "gapRaw": 20,
@@ -424,7 +417,9 @@ def _good_dump():
             "order": i,
             "x": 100 + 150 * i + (320 - 40 * i) / 2 - 500,
             "y": 350 - (80 + 120 * i + (200 + 30 * i) / 2),
-            "z": -((2 - i) * 20 + EPSILON),
+            # Outward ladder (amendment): rank == order for the stub, so
+            # z = order * gap + epsilon — the top window the outermost.
+            "z": i * 20 + EPSILON,
             "visible": True,
             "showLayer": True,
             "pickable": True,
@@ -441,7 +436,7 @@ def _good_dump():
             "order": i,
             "x": 0,
             "y": 0,
-            "z": -EPSILON,
+            "z": EPSILON,
             "visible": False,
             "showLayer": False,
             "pickable": True,
@@ -454,14 +449,13 @@ def _good_dump():
         "index": n - 1,
         "desktopNumber": n,
         "active": True,
-        "maxDepthFromCube": CAP,
         "maxRank": 2,
         "fittedGap": 20,
         "layeredIds": [f"stub-{n}-{i}" for i in STUB_SHOWN],
         "quads": quads,
         "grabs": grabs,
         "plateVisible": True,
-        "plateZ": -(CAP + PLATE_EXTRA),
+        "plateZ": -PLATE_EXTRA,
       }
     )
   return dump
@@ -492,8 +486,8 @@ def selftest():
     lambda d: d["faces"][0]["quads"][0].__setitem__("visible", False),
   )
   expects_rejection(
-    "over-budget depth",
-    lambda d: d["faces"][0]["quads"][0].__setitem__("z", -(CAP + 60 + EPSILON)),
+    "over-cap depth",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("z", CAP + 60 + EPSILON),
   )
   expects_rejection("hole without a quad", lambda d: d["faces"][0]["quads"].pop(1))
   expects_rejection(
@@ -513,7 +507,16 @@ def selftest():
     lambda d: (d.__setitem__("layering", False), d["faces"][0]["quads"].pop()),
   )
   expects_rejection(
-    "plate in front", lambda d: d["faces"][0].__setitem__("plateZ", -(CAP - 10))
+    # The plate in front of the bottom layer (z > +epsilon): it would cover
+    # the windows instead of veiling the holes.
+    "plate in front of the bottom layer",
+    lambda d: d["faces"][0].__setitem__("plateZ", EPSILON + 1),
+  )
+  expects_rejection(
+    # The plate deep behind the face, at the retired inwards position: no
+    # longer the veil plane, the interior would show through the holes.
+    "plate off the veil plane",
+    lambda d: d["faces"][0].__setitem__("plateZ", -(CAP + PLATE_EXTRA)),
   )
   expects_rejection(
     "fitted gap stretched", lambda d: d["faces"][0].__setitem__("fittedGap", CAP / 2)
@@ -529,30 +532,30 @@ def selftest():
     failures.append(f"the good synthetic dump did not pass: {validate(_good_dump())}")
 
   # The exact-fit and zero-gap clauses must fire on their own scenarios:
-  # deepest exactly on the budget (fitted) and everyone on -epsilon (gap 0).
+  # outermost exactly on the cap (fitted) and everyone on +epsilon (gap 0).
   tight = _good_dump()
   tight["gapRaw"] = 600
   for face in tight["faces"]:
     face["fittedGap"] = CAP / 2
     for quad in face["quads"]:
-      quad["z"] = -((2 - quad["order"]) * (CAP / 2) + EPSILON)
+      quad["z"] = quad["order"] * (CAP / 2) + EPSILON
   if validate(tight):
     failures.append(f"the non-fitting stack (gap 600) was rejected: {validate(tight)}")
-  tight["faces"][0]["quads"][0]["z"] = -(140 + EPSILON)  # per-layer clamp regression
+  tight["faces"][0]["quads"][2]["z"] = CAP - 10 + EPSILON  # per-layer clamp regression
   if not validate(tight):
-    failures.append("per-layer clamp to a plane below the budget passed the (b) clause")
+    failures.append("per-layer clamp to a plane short of the cap passed the (b) clause")
 
   zero = _good_dump()
   zero["gapRaw"] = 0
   for face in zero["faces"]:
     face["fittedGap"] = 0
     for quad in face["quads"]:
-      quad["z"] = -EPSILON
+      quad["z"] = EPSILON
   if validate(zero):
     failures.append(f"the gap-0 parity dump was rejected: {validate(zero)}")
-  zero["faces"][0]["quads"][1]["z"] = -EPSILON - 5
+  zero["faces"][0]["quads"][1]["z"] = EPSILON + 5
   if not validate(zero):
-    failures.append("a gap-0 layer off the epsilon plane passed the (e) clause")
+    failures.append("a gap-0 layer off the +epsilon plane passed the (e) clause")
   return failures
 
 
