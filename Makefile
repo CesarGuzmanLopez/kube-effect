@@ -117,7 +117,11 @@ lint-ci: check
 # canto fino, no bisel); BackFaceCulling en ambos materiales (NoCulling =
 # el bisel negro medido por los márgenes transparentes del thumbnail); el
 # canto comparte umbral y opacidad del frente (baseColor, que diffuseColor
-# no existe en PrincipledMaterial). Su --selftest comprueba
+# no existe en PrincipledMaterial). Y la corrección de claves sin guardar
+# (medido 2026-11-28): el raw de las seis claves viaja en propiedades VAR
+# (undefined de effect.configuration no se coacciona a 0 antes del
+# resolvedor); el escenario defaultsunset lo exige end-to-end y
+# check-constants pincha undefined→default de cada clave. Su --selftest comprueba
 # el oráculo sin motor. Se salta (exit 0) si falta PySide6.
 # check-cylinder-wiring.py instancia el Cube.qml REAL (no la malla suelta) contra
 # el stub org.kde.kwin del harness comun (qml_check_harness.STUB_MODULE)

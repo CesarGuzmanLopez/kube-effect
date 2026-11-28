@@ -361,6 +361,18 @@ tambor).
   model 1 **solo con `WindowLayering` activo**: flag off = cero nodos nuevos
   (paridad del árbol virgen). Frente texturizado, caras y plate conservan
   `NoLighting` (contrato ADR-026: el grab nunca se reilumina).
+- **Claves ausentes = undefined, NUNCA 0** (medido 2026-11-28: el kwinrc del
+  anidado solo tenía `WindowLayering=true`; en un scripted effect
+  `effect.configuration.<clave ausente>` devuelve **undefined**, y
+  `Number(undefined)=NaN→0 al atravesar una propiedad tipada): el raw VIAJA
+  en propiedades **var** (ScreenView→Cube→CubeFace→WindowLayers) y el
+  resolvedor de layerGeometry.js es SIEMPRE el primer código que lo toca —
+  undefined/null/garbage → default de esquema (gap 120, lod 1, plate 0.25,
+  thickness 24, rotationOpacity 0.7, edgeColor #141719). Un `property int`
+  intermedio coerce undefined→0 ANTES del resolvedor y el default se pierde
+  en silencio (fue el bug que ocultaba el canto y el velo). Gate: escenario
+  `defaultsunset` (todos los crudos como undefined real) + unidades
+  undefined→default en check-constants.
 - **Centroide ≠ rank**: el centroide de un quad = centro de cara + offset
   lateral de la ventana + profundidad exterior; la pasada transparente ordena por
   él y NO respeta el rank (medido: en reposo oblicuo una capa inferior pintaba

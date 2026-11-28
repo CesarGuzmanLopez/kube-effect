@@ -1449,6 +1449,23 @@ no de aspecto. Las claves de main.xml y sus rangos/default no cambian; solo se
 reubica la UI (gate: check-ui/check-schema validan widget, tipo, rango y
 conexión por nombre, sin depender del tab).
 
+**Claves ausentes = undefined (bug medido 2026-11-28, quinta corrección del
+hilo capas)**: el kwinrc del anidado guardaba SOLO `WindowLayering=true`; en
+un scripted effect `effect.configuration.<clave ausente>` responde
+**undefined**, y `Number(undefined)` es NaN → 0 al atravesar una propiedad
+tipada del cable ScreenView→Cube→CubeFace→WindowLayers. Resultado silencioso:
+gap/plate/thickness efectivos 0 pese a los defaults de esquema — la ladder
+colapsada a +ε, el velo invisible y **el slab plano sin canto ni luz** (nada
+de lo que el usuario debía ver aparecía). Fix: las propiedades del raw pasan a
+**var** (conservan undefined intacto) y el resolvedor de layerGeometry.js es
+el primer contacto con el valor en toda la cadena (undefined/null/garbage →
+default de esquema, la regla ADR-022 ya escrita en constants.js). Gates:
+escenario `defaultsunset` en check-layers (todos los crudos como undefined
+real leídos del motor: exige gap 120/fitted 50, eff 24 con caja iluminada,
+plate 0.25, lod 1, rotation 0.7) + unidades `undefined→default` de las seis
+claves en check-constants + familia `_unset_cases` en el selftest
+(incluida la regresión "las claves sin definir colapsan a 0").
+
 **Tercera corrección (medida 2026-11-27) — el stack flota ENTERO**: con la fórmula
 de arriba rank 0 quedaba en el +ε puro y la ventana de abajo (la maximizada del
 arnés) se leía «pegada al escritorio todo el tiempo». Nuevo ladder:

@@ -349,6 +349,20 @@ Item {
     check("edge keeps hex", LayerGeo.edgeColor("#ff0000"), "#ff0000");
     check("edge keeps short hex", LayerGeo.edgeColor("#0f0"), "#0f0");
 
+    // UNSET kwinrc keys (measured 2026-11-28: a scripted effect returns
+    // REAL undefined for them, and typed properties in the chain used to
+    // coerce it to 0 before any resolver ran - silent 0-defaults). Every
+    // raw must meet its resolver FIRST: undefined lands on the SCHEMA
+    // default, never on the range floor.
+    check("gap units undefined", LayerGeo.gapUnits(undefined), 120);
+    check("lod undefined", LayerGeo.lodFaces(undefined), 1);
+    check("plate undefined", LayerGeo.plateOpacity(undefined), 0.25);
+    check("thickness undefined", LayerGeo.thicknessUnits(undefined), 24);
+    check("thickness eff undefined", LayerGeo.thicknessEffective(undefined, 50), 24);
+    check("rotation undefined", LayerGeo.rotationOpacity(undefined), 0.7);
+    check("edge undefined", LayerGeo.edgeColor(undefined), "#141719");
+    check("gap units null", LayerGeo.gapUnits(null), 120);
+
     // The slab box generator (fourth amendment, final design): 24 vertices
     // (4 per face, true outward normals), 36 indexes, the FIRST 6 being the
     // front (material/subset 0 - the order SlabMesh.qml builds and the

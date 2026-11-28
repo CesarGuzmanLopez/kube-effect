@@ -78,6 +78,11 @@ the ADR-028 "Puertas" (amended):
                                  eff min(24, 50/2=25) = 24.
   thickcolour custom #ff0000    -> the edge rgba read live from the
                                    engine matches the resolver.
+  defaultsunset EVERY raw knob -> the unset-key regression: real undefined
+           undefined (as a    everywhere (a kwinrc with only the flag);
+           kwinrc that never  schema defaults must survive the whole
+           saved the others)   chain - ladder 120/50, box eff 24, plate
+                               0.25, lod 1, rotation 0.7 - never 0.
   (lighting, all thick* + rest): the edge material is Fragment-lit
   (roughness 0.7, metalness 0) while the textured front, the faces and
   the plate stay NoLighting; the camera-anchored headlight Repeater3D is
@@ -372,6 +377,28 @@ _SCENARIOS = [
       "edge": "#ff0000",
     },
   ),
+  # THE SCENARIO THAT CATCHES THE UNSET-KEY BUG (measured 2026-11-28: a
+  # kwinrc holding ONLY WindowLayering=true made every other raw arrive
+  # as real undefined; int/real properties coerced it to 0 before any
+  # resolver ran - flat slabs, invisible veil, collapsed ladder):
+  # defaults_unset makes the harness inject undefined for every knob,
+  # exactly like effect.configuration does, and the oracle demands the
+  # SCHEMA DEFAULTS end to end - ladder of gap 120 (fitted 50 over the 3
+  # steps), eff 24 BOX with the lit edge, plate 0.25 visible, lod 1,
+  # rotation 0.7.
+  (
+    "defaultsunset",
+    {
+      "desktops": 3,
+      "layering": True,
+      "gap": None,
+      "lod": None,
+      "plate": None,
+      "current": 1,
+      "thickness": None,
+      "defaults_unset": True,
+    },
+  ),
 ]
 
 
@@ -408,6 +435,12 @@ def _instantiate(application, import_root, scenario):
   engine.rootContext().setContextProperty("stubThickness", scenario.get("thickness", 0))
   engine.rootContext().setContextProperty(
     "stubEdgeColor", scenario.get("edge", "#141719")
+  )
+  # defaultsunset: the harness injects real UNDEFINED for every raw knob
+  # (what KWin's effect.configuration returns for keys never saved in
+  # kwinrc) - the chain must land on the schema defaults, never on 0.
+  engine.rootContext().setContextProperty(
+    "stubDefaultsUnset", scenario.get("defaults_unset", False)
   )
   engine.rootContext().setContextProperty("stubCurrentNumber", scenario["current"])
   component = QQmlComponent(engine)

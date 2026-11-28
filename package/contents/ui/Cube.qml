@@ -403,15 +403,24 @@ Node {
   // the animated value as layerOpacity below — inert while the flag is off
   // (WindowLayers reads it only for quads and plate).
   property bool windowLayering: false
-  property int windowLayerGap: LayerGeometry.GAP_DEFAULT
-  property int windowLayerLodFaces: LayerGeometry.LOD_FACES_DEFAULT
-  property real windowLayerPlateOpacity: LayerGeometry.PLATE_OPACITY_DEFAULT
+  // Raw KConfig reads arrive as VAR, never int/real: a scripted effect
+  // returns UNDEFINED for a kwinrc key that was never saved, and binding
+  // undefined to an int/real property coerces it to 0 BEFORE any resolver
+  // sees it (measured 2026-11-28: gap/thickness/plate all silently became
+  // 0 with a kwinrc that only held WindowLayering - the slab never built,
+  // the veil never veiled). var keeps the undefined and the resolved
+  // properties below are the first code that ever touches the value -
+  // layerGeometry's resolvers already treat undefined/null/garbage as
+  // "never configured" (finiteOr), which is exactly the schema default.
+  property var windowLayerGap: LayerGeometry.GAP_DEFAULT
+  property var windowLayerLodFaces: LayerGeometry.LOD_FACES_DEFAULT
+  property var windowLayerPlateOpacity: LayerGeometry.PLATE_OPACITY_DEFAULT
   // Slab body (fourth amendment): the thickness REQUEST travels down
   // unchanged - layerGeometry.thicknessEffective clips it to half the
   // fitted step inside WindowLayers, where the step is known per face.
   // The edge colour is resolved here (raw KConfig strings can mean
   // garbage; the resolver answers the schema default for those).
-  property int windowLayerThickness: LayerGeometry.THICKNESS_DEFAULT
+  property var windowLayerThickness: LayerGeometry.THICKNESS_DEFAULT
   property string windowLayerEdgeColor: LayerGeometry.EDGE_COLOR_DEFAULT
   // The effective opacity of the pile, animated in ScreenView exactly like
   // faceOpacity (rest 1, rotation WindowLayerRotationOpacity).

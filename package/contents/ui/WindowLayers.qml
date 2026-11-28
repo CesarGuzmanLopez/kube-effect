@@ -137,7 +137,11 @@ Node {
   // then clipped to half the fitted STEP inside thicknessEffective, the
   // step being per face) and the resolved edge colour. raw 0 = flat quads
   // exactly as before (pixel parity).
-  property real layerThickness: LayerGeometry.THICKNESS_DEFAULT
+  // var, not real: undefined (kwinrc key never saved, ScreenView passes
+  // it raw through Cube and CubeFace) must survive to
+  // thicknessEffective below - a typed property would coerce it to 0 and
+  // silently flatten the slab (the measured unset-key bug 2026-11-28).
+  property var layerThickness: LayerGeometry.THICKNESS_DEFAULT
   property color edgeColor: LayerGeometry.EDGE_COLOR_DEFAULT
   readonly property real layerSlabEff: LayerGeometry.thicknessEffective(root.layerThickness, root.fittedGap)
   // The shared unit box mesh via a runtime Loader (the arc/cap isolation

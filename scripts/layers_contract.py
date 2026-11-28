@@ -254,11 +254,13 @@ def lod_distance(index, current, face_count):
 def _face_context(face, dump):
   """The mirrored per-face values every clause group needs (no checks here)."""
   layering = bool(dump["layering"])
-  lod = resolved_lod(dump["lodRaw"])
-  gap = resolved_gap(dump["gapRaw"])
-  plate = resolved_plate(dump["plateRaw"])
+  lod = resolved_lod(dump.get("lodRaw"))
+  gap = resolved_gap(dump.get("gapRaw"))
+  plate = resolved_plate(dump.get("plateRaw"))
   current = int(dump["currentFaceIndex"])
-  layer = expected_layer_opacity(bool(dump["rotating"]), dump["layerRotationRaw"])
+  layer = expected_layer_opacity(
+    bool(dump.get("rotating")), dump.get("layerRotationRaw")
+  )
   face_opacity = float(dump["faceOpacityLive"])
   return {
     "label": f"face {face['index']} (desktop {face['desktopNumber']})",
@@ -268,8 +270,8 @@ def _face_context(face, dump):
     "plate": plate,
     "layer": layer,
     "face_opacity": face_opacity,
-    "thickness_raw": dump["thicknessRaw"],
-    "edge_raw": dump["edgeRaw"],
+    "thickness_raw": dump.get("thicknessRaw"),
+    "edge_raw": dump.get("edgeRaw", "#141719"),
     "helpers": bool(dump.get("helpers", True))
     if isinstance(dump.get("helpers"), bool)
     else True,
@@ -422,7 +424,7 @@ def _depths_problems(ctx, face, dump, shown, problems):
     "fitted": fitted,
     "max_rank": max_rank,
     "orders": orders,
-    "eff": expected_effective(dump["thicknessRaw"], fitted),
+    "eff": expected_effective(dump.get("thicknessRaw"), fitted),
   }
 
 
@@ -754,11 +756,11 @@ def validate(dump):
   # _inactive_face_problems (zero quads/layeredIds, intact grabs) plus
   # _face_material_problems (the face follows ONLY faceOpacity).
   expected_layer = expected_layer_opacity(
-    bool(dump["rotating"]), dump["layerRotationRaw"]
+    bool(dump.get("rotating")), dump.get("layerRotationRaw")
   )
   if not close(dump["layerOpacityLive"], expected_layer):
     problems.append(
-      f"dump: Cube.layerOpacity {dump['layerOpacityLive']} != mirrored {expected_layer} (rotating {dump['rotating']}, raw {dump['layerRotationRaw']})"
+      f"dump: Cube.layerOpacity {dump['layerOpacityLive']} != mirrored {expected_layer} (rotating {dump.get('rotating')}, raw {dump.get('layerRotationRaw')})"
     )
   # Virgin-tree parity of the headlight (the ScreenView gate, mirrored by
   # the harness probe): one DirectionalLight with the flag ON, ZERO light
@@ -1150,6 +1152,41 @@ def _lighting_cases(expects_rejection):
   )
 
 
+def _unset_cases(expects_rejection, failures):
+  """Unset-key family (measured 2026-11-28: a kwinrc holding only
+  WindowLayering=true made every other raw arrive as undefined; typed
+  properties in the chain coerced it to 0 BEFORE the resolvers, so the
+  slab never built, the veil vanished and the ladder collapsed). Every
+  resolver must answer the SCHEMA DEFAULT for undefined/None, never the
+  range floor; and a full synthetic dump built from nothing but Nones
+  must validate as defaults-gap-120."""
+  for name, got, want in (
+    ("gap", resolved_gap(None), 120),
+    ("lod", resolved_lod(None), 1),
+    ("plate", resolved_plate(None), 0.25),
+    ("thickness", resolved_thickness(None), 24),
+    ("rotation", resolved_rotation(None), 0.7),
+    ("edge", edge_rgba(None), edge_rgba("#141719")),
+  ):
+    if got != want:
+      failures.append(f"unset {name} resolved to {got}, expected schema default {want}")
+
+  unset = _thick_dump(None, None)
+  if validate(unset):
+    failures.append(f"the all-undefined dump was rejected: {validate(unset)}")
+  # The collapse this exists to catch: raw undefined silently becoming 0
+  # (flat slab, epsilon ladder). The engine dump would show it as a
+  # boxed-off scene; synthetically, a box-less scene with eff demanded.
+  expects_rejection(
+    "unset keys collapsed to zero (flat slab, no box)",
+    lambda d: (
+      d["faces"][0]["quads"][0].__setitem__("boxMode", "flat"),
+      d["faces"][0]["quads"][0].__setitem__("scaleZ", 0.0),
+    ),
+    lambda: _thick_dump(None, None),
+  )
+
+
 def _ladder_cases(failures):
   """The exact-fit (non-fitting), single-window and zero-gap ladders,
   each with their own regression mutation. Lives apart from selftest()
@@ -1277,6 +1314,7 @@ def selftest():
   _material_cases(expects_rejection, failures)
   _slab_cases(expects_rejection, failures)
   _lighting_cases(expects_rejection)
+  _unset_cases(expects_rejection, failures)
 
   _ladder_cases(failures)
   return failures

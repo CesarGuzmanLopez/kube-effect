@@ -46,6 +46,13 @@ Item {
   readonly property var rawPlate: typeof stubPlate === "number" ? stubPlate : null
   readonly property var rawLayerRotation: typeof stubLayerRotation === "number" ? stubLayerRotation : null
   readonly property bool knobRotating: typeof stubRotating === "boolean" && stubRotating
+  // Every knob unset from the context arrives as a real undefined when
+  // this flag is on - the exact value KWin's scripted effect.configuration
+  // returns for a kwinrc key that was never saved (the measured bug that
+  // made int/real properties coerce undefined to 0 before the resolvers;
+  // see ADR-028 fourth amendment note). The python side mirrors the
+  // schema defaults from these undefined raws.
+  readonly property bool knobDefaultsUnset: typeof stubDefaultsUnset === "boolean" && stubDefaultsUnset
   readonly property real knobFaceOpacity: typeof stubFaceOpacity === "number" ? stubFaceOpacity : 1
   readonly property int rawCurrent: typeof stubCurrentNumber === "number" ? stubCurrentNumber : 0
   readonly property var rawThickness: typeof stubThickness === "number" ? stubThickness : null
@@ -108,16 +115,13 @@ Item {
     screenName: ""
     screenGeometry: Qt.rect(0, 0, 1000, 700)
     windowLayering: harness.knobLayering
-    windowLayerGap: harness.rawGap
-    windowLayerLodFaces: harness.rawLod
-    windowLayerPlateOpacity: harness.rawPlate
-    // Schema-default simulation for the raw knob: KConfigXT answers the
-    // entry default (24) when the key was never saved, the harness passes
-    // null for that case, and layerGeometry.thicknessUnits is the same
-    // resolver the runtime hits through thicknessEffective - unset raw
-    // lands on 24 here exactly like a fresh kwinrc.
-    windowLayerThickness: LayerGeo.thicknessUnits(harness.rawThickness)
-    windowLayerEdgeColor: harness.rawEdgeColor
+    windowLayerGap: harness.knobDefaultsUnset ? undefined : harness.rawGap
+    windowLayerLodFaces: harness.knobDefaultsUnset ? undefined : harness.rawLod
+    windowLayerPlateOpacity: harness.knobDefaultsUnset ? undefined : harness.rawPlate
+    // var chain end to end: the raw (possibly undefined) reaches
+    // layerGeometry.thicknessEffective untouched, exactly as in runtime.
+    windowLayerThickness: harness.knobDefaultsUnset ? undefined : harness.rawThickness
+    windowLayerEdgeColor: harness.knobDefaultsUnset ? "" : harness.rawEdgeColor
     currentDesktop: harness.currentStub
     faceOpacity: harness.knobFaceOpacity
     // The runtime ScreenView chain, mirrored (see the knob comment): the
@@ -126,7 +130,7 @@ Item {
     // binding still runs but reaches NOTHING visible (no quads, plate
     // hidden, face materials never read layerOpacity) — the parity clause
     // pins exactly that.
-    layerOpacity: Constants.faceOpacity(1, LayerGeo.rotationOpacity(harness.rawLayerRotation), harness.knobRotating)
+    layerOpacity: Constants.faceOpacity(1, LayerGeo.rotationOpacity(harness.knobDefaultsUnset ? undefined : harness.rawLayerRotation), harness.knobRotating)
   }
 
   // The live tree, serialised for the Python oracle. The reads below also
@@ -270,14 +274,14 @@ Item {
       currentStubNumber: harness.rawCurrent,
       faceWidth: 1000,
       faceHeight: 700,
-      gapRaw: harness.rawGap,
-      lodRaw: harness.rawLod,
-      plateRaw: harness.rawPlate,
-      thicknessRaw: harness.rawThickness,
-      edgeRaw: harness.rawEdgeColor,
+      gapRaw: harness.knobDefaultsUnset ? undefined : harness.rawGap,
+      lodRaw: harness.knobDefaultsUnset ? undefined : harness.rawLod,
+      plateRaw: harness.knobDefaultsUnset ? undefined : harness.rawPlate,
+      thicknessRaw: harness.knobDefaultsUnset ? undefined : harness.rawThickness,
+      edgeRaw: harness.knobDefaultsUnset ? "" : harness.rawEdgeColor,
       helpers: harness.helpersOk,
       headlightCount: harness.headlightCount,
-      layerRotationRaw: harness.rawLayerRotation,
+      layerRotationRaw: harness.knobDefaultsUnset ? undefined : harness.rawLayerRotation,
       rotating: harness.knobRotating,
       faceOpacityLive: cube.faceOpacity,
       layerOpacityLive: cube.layerOpacity,

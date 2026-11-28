@@ -97,7 +97,14 @@ Node {
   // face, where the fitted step is known) and the already-resolved edge
   // colour. Both are read ONLY by WindowLayers - the face Model above
   // never touches them.
-  property real layerThickness: 0
+  // var on purpose: Cube forwards the RAW thickness (the clipping to
+  // half the fitted step happens downstream, where the step is known),
+  // and the raw may be undefined - a kwinrc key never saved reads as
+  // undefined off effect.configuration, a typed property would coerce it
+  // to 0 and silently flatten the slab (the measured unset-key bug
+  // 2026-11-28, ADR-028 fourth amendment note). var keeps the signal
+  // until layerGeometry.thicknessEffective applies the schema default.
+  property var layerThickness: 24
   property color edgeColor: "#141719"
 
   // The face surface: the grab of the whole desktop EXCEPT the windows that
