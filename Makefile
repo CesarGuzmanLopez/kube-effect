@@ -116,7 +116,9 @@ lint-ci: check
 # por-posición = imagen en espejo, como el quad plano NoCulling de hoy)
 # centrada eff/2 detrás de la ladder (el frente cae EXACTO en ella; el tope
 # y el no-cruce se miden en el frente); scale (frameW/100, frameH/100,
-# eff/100) = el rectángulo VISIBLE (frameGeometry, no el grab con sombra) =
+# eff/100) = el rectángulo VISIBLE (`geometry` del efecto - ojo: NO
+# "frameGeometry", que es de scripting y dio undefined -; no el grab con
+# sombra) =
 # canto pegado al contenido; BackFaceCulling en los tres materiales
 # (NoCulling =
 # el bisel negro medido por los márgenes transparentes del thumbnail); el

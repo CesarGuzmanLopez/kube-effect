@@ -55,6 +55,7 @@ Item {
   readonly property bool knobDefaultsUnset: typeof stubDefaultsUnset === "boolean" && stubDefaultsUnset
   readonly property real knobFaceOpacity: typeof stubFaceOpacity === "number" ? stubFaceOpacity : 1
   readonly property int rawCurrent: typeof stubCurrentNumber === "number" ? stubCurrentNumber : 0
+  readonly property bool knobNoGeometry: typeof stubNoGeometry === "boolean" && stubNoGeometry
   readonly property var rawThickness: typeof stubThickness === "number" ? stubThickness : null
   readonly property string rawEdgeColor: typeof stubEdgeColor === "string" ? stubEdgeColor : "#141719"
   // Whether the runtime module set (QtQuick3D.Helpers behind SlabMesh.qml)
@@ -221,6 +222,7 @@ Item {
           // per layer; flat = built-in #Rectangle, boxed = the shared
           // unit ProceduralMesh (two subsets) scaled to the window.
           boxMode: quad.geometry !== null && quad.geometry !== undefined ? "box" : "flat",
+          hasFrameNow: quad.hasFrame,
           boxSubsets: quad.geometry !== null && quad.geometry !== undefined ? quad.geometry.subsets.length : 0,
           boxSubsetCounts: quad.geometry !== null && quad.geometry !== undefined ? [quad.geometry.subsets[0].count, quad.geometry.subsets[1].count, quad.geometry.subsets[2].count] : [],
           backHasMap: quad.materials[2].baseColorMap !== null && quad.materials[2].baseColorMap !== undefined,
@@ -295,6 +297,7 @@ Item {
       thicknessRaw: harness.knobDefaultsUnset ? undefined : harness.rawThickness,
       edgeRaw: harness.knobDefaultsUnset ? "" : harness.rawEdgeColor,
       helpers: harness.helpersOk,
+      stubNoGeometry: harness.knobNoGeometry,
       helpersInstalled: harness.helpersInstalled,
       headlightCount: harness.headlightCount,
       layerRotationRaw: harness.knobDefaultsUnset ? undefined : harness.rawLayerRotation,

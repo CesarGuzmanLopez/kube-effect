@@ -90,15 +90,21 @@ the ADR-028 "Puertas" (amended):
            saved the others)   chain - ladder 120/50, box eff 24, plate
                                0.25, lod 1, rotation 0.7 - never 0.
 
-NEVER-RELAX (measured 2026-11-28): with the flag on and an effective
-thickness above 0 the SlabMesh Loader must report Ready; a Loader ERROR
-with QtQuick3D.Helpers installed is a HARD FAIL (an invented subset
-property once made SlabMesh.qml an eternal Loader.Error while the gate
-"relaxed" on a false missing-module and the box silently never existed).
-The relaxation applies only when the module is genuinely absent, and is
-then announced by a visible NOTE SKIP line - never a silent OK. The dump
-carries slabLoaderStatus/slabLoaderError per face and helpersInstalled
-at root for exactly that.
+NEVER-RELAX (measured 2026-11-28, twice the same class of bug): with
+the flag on and an effective thickness above 0 the SlabMesh Loader must
+report Ready AND every boxed layer must report hasFrameNow - the
+delegate must be reading a property that EffectWindow ACTUALLY exposes
+("geometry"; "frameGeometry" is scripting-only and reading it produced
+the silent grab-fallback of the day, as did the invented subset
+boundsMin/boundsMax before). A Loader ERROR with QtQuick3D.Helpers
+installed is a HARD FAIL (an invented API once made SlabMesh.qml an
+eternal Loader.Error while the gate "relaxed" on a false
+missing-module and the box silently never existed). Relaxations apply
+ONLY to the two explicit scenes - module absent (visible NOTE SKIP) and
+the noframe scenario (stub without geometry, visible NOTE, box sized to
+the grab) - never a silent OK. The dump carries
+slabLoaderStatus/slabLoaderError/hasFrameNow per face/quad and
+helpersInstalled/stubNoGeometry at root for exactly that.
   (lighting, all thick* + rest): the edge material is Fragment-lit
   (roughness 0.7, metalness 0) while the textured front, the faces and
   the plate stay NoLighting; the camera-anchored headlight Repeater3D is
@@ -415,6 +421,24 @@ _SCENARIOS = [
       "defaults_unset": True,
     },
   ),
+  # noframe: the stub windows carry NO geometry property (the EffectWindow
+  # accessor simulated as absent). The box stays a box - three subsets,
+  # loader Ready - but sized and centred on the GRAB rect: the documented
+  # fallback, exercised with a visible NOTE line (never silently, and the
+  # thick* scenarios hard-require hasFrameNow true instead).
+  (
+    "noframe",
+    {
+      "desktops": 3,
+      "layering": True,
+      "gap": 40,
+      "lod": 0,
+      "plate": 0.25,
+      "current": 1,
+      "thickness": 300,
+      "no_geometry": True,
+    },
+  ),
 ]
 
 
@@ -458,6 +482,16 @@ def _instantiate(application, import_root, scenario):
   engine.rootContext().setContextProperty(
     "stubDefaultsUnset", scenario.get("defaults_unset", False)
   )
+  # noframe: the stub leaves the geometry property UNSET (undefined) so
+  # the delegate's documented fallback to the grab rect is exercised -
+  # the oracle accepts it only here, with a visible NOTE, never as a
+  # silent relaxation of the thick scenarios (an invented property name
+  # once again passed the gate in vacuum: win.frameGeometry exists in
+  # the SCRIPTING API, not in EffectWindow - effectwindow.h names the
+  # frame rect "geometry").
+  engine.rootContext().setContextProperty(
+    "stubNoGeometry", scenario.get("no_geometry", False)
+  )
   engine.rootContext().setContextProperty("stubCurrentNumber", scenario["current"])
   component = QQmlComponent(engine)
   component.loadUrl(QUrl.fromLocalFile(str(ROOT / "scripts/check-layers.qml")))
@@ -491,6 +525,12 @@ def main():
         continue
       kept.append(keep)
       problems.extend(f"{name}: {problem}" for problem in validate(dump))
+      # Visible NOTE for the exercised fallback (never a silent relax).
+      if bool(dump.get("stubNoGeometry")):
+        print(
+          name + ": NOTE the windows expose no geometry - the box "
+          "fell back to the grab rect (documented degradation)"
+        )
       # A visible SKIP, never a silent OK: the box clauses only relax
       # when QtQuick3D.Helpers is genuinely not installed (a Loader
       # compile error with the module present is a hard failure).

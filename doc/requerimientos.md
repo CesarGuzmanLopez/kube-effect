@@ -353,9 +353,11 @@ Reglas:
   — "como la misma pantalla pero al revés", igual que el quad plano hoy; el
   posterior en color de canto era una losa negra (medido 2026-11-28); los tres
   materiales con `BackFaceCulling`. La caja mide el rectángulo VISIBLE
-  (`frameGeometry`, dentro del grab que incluye la sombra) — dimensionada al
+  (`geometry` — en el efecto; `frameGeometry` es el nombre de la API de
+  scripting y NO existe en EffectWindow, medido 2026-11-28), dentro del grab
+  que incluye la sombra) — dimensionada al
   grab, el canto quedaba separado del contenido por una franja de wallpaper
-  (medido 2026-11-28); wrapper sin frameGeometry → fallback al rect del grab
+  (medido 2026-11-28); wrapper sin geometry → fallback al rect del grab
   (degradado, nunca roto). La vía "un
   cubo con seis materiales" no existe (`Model.customMaterials` no está en Qt
   6.12, medido en el motor vivo; el built-in **#Cube** es un solo subset), y el

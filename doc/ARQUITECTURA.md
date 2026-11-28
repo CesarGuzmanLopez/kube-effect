@@ -339,7 +339,7 @@ tambor).
   repite la MISMA captura del frente con UVs por-posición (desde atrás la
   ventana se lee EN ESPEJO, "como la misma pantalla pero al revés" - el
   posterior en color de canto dejaba una losa negra, medido 2026-11-28).
-  La caja se dimensiona al `frameGeometry` (rectángulo VISIBLE, dentro del
+  La caja se dimensiona a `geometry` (rectángulo VISIBLE, dentro del
   grab que incluye la sombra), no a `win.width/height`: con la caja al grab
   el canto caía fuera del contenido con una franja de wallpaper en medio.
   (El intento
@@ -383,16 +383,22 @@ tambor).
   `console.warn` único con el errorString para que nested.log (truco §D) lo
   capture. El DebugOverlay lo pinta en pantalla: `slab=<boxes>/<quads>
   eff=<n>` — si la caja no vive, se ve (slab=0/N) sin abrir logs.
-- **El grab incluye la sombra: la caja se dimensiona al `frameGeometry`**
+- **El grab incluye la sombra: la caja se dimensiona a `geometry`**
   (medido 2026-11-28: con grosor alto se veía contenido → franja de wallpaper
   → banda negra: la caja usaba `win.width/height`, que es el rect del GRAB y
   llega hasta el borde exterior de la sombra; el canto quedaba fuera del
-  contenido visible). El rect visible es `frameGeometry` (RectF expuesto por
-  el scripting de KWin junto a clientGeometry/bufferGeometry/
-  decorationHasAlpha): la caja escala a (frameW/100, frameH/100, eff/100) y se
-  CENTRA en el centro del frame (coords de cara, Y flipped; ejemplo numérico en
-  el comentario del delegate). Si el wrapper no expone frameGeometry, fallback
-  al rect del grab (degradado, no roto).
+  contenido visible). Cuidado con el NOMBRE: en el efecto el rect visible es
+  `geometry` — effectwindow.h declara Q_PROPERTY(KWin::RectF geometry READ
+  frameGeometry) ("excluding drop-shadows"), gadget con x/y/width/height.
+  `frameGeometry` COMO PROPIEDAD QML es de la API de scripting (window.h) y
+  NO existe en EffectWindow: leer `win.frameGeometry` daba undefined, el
+  hasFrame caía a false y la caja volvía al grab — el segundo bug de propiedad
+  inventada del día (tras boundsMax), cazado ahora a fuego por el gate
+  (hasFrameNow duro). La caja escala a (geometry.width/100,
+  geometry.height/100, eff/100) y se CENTRA en el centro del frame (coords de
+  cara, Y flipped; ejemplo numérico en el comentario del delegate). Si el
+  wrapper no expone geometry (solo scenes de prueba), fallback al rect del
+  grab con NOTE visible — nunca OK silencioso.
 - **El posterior repite el frente en espejo (cristal)** (medido 2026-11-28: la
   caja de dos subsets mostraba por detrás una losa negra — "debería verse,
   como la misma pantalla pero al revés", igual que el quad plano NoCulling de

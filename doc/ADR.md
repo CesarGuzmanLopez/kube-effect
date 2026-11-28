@@ -1566,9 +1566,13 @@ palabras del usuario); la coherencia flat↔caja es la regla. (2) la caja se
 dimensionaba al rect del GRAB (`win.width/height`, que incluye la sombra del
 compositor) → "el grosor está separado de la imagen": franja de wallpaper entre
 contenido y canto; la caja pasa a dimensionarse y centrarse en el
-`frameGeometry` (rect visible, verificado en los headers instalados: RectF
-expuesto junto a client/buffer/decorationHasAlpha), con fallback al grab si el
-wrapper no lo expone. Gates: subsetCounts [6,24,6] leídos del motor, back
+`geometry` (rect visible; effectwindow.h: Q_PROPERTY(KWin::RectF geometry
+READ frameGeometry) - el nombre `frameGeometry` en QML es de la API de
+scripting y NO existe en EffectWindow: la primera lectura por ese nombre
+daba undefined y la caja caía al fallback del grab - segunda propiedad
+inventada del día, cazada ya con assert duro `hasFrameNow` + escenario
+`noframe` con NOTE), con fallback al grab solo si el wrapper no expone
+geometry. Gates: subsetCounts [6,24,6] leídos del motor, back
 texturado/espejo/textura compartida, caja == frame (size AND centre) con
 rechazos «posterior losa negra», «espejo ausente», «doble captura», «caja al
 grab (wallpaper band)» y «centro del grab».

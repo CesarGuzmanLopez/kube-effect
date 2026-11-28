@@ -83,9 +83,9 @@ updated by the amendment):
 Stub window layout (mirrored from qml_check_harness.STUB_MODULE; keep the
 two in sync when the stub changes): desktop n has rows i = 0..5 with
 internalId "stub-<n>-<i>", stackingOrder i, x = 100+150i, y = 80+120i,
-width = 320-40i, height = 200+30i; frameGeometry = (x+6, y+2, w-12,
-h-12) (the visible frame inside the shadow-bearing grab - the box must
-span THIS rect); i=3 minimized, i=4 dock, i=5 desktopWindow. The ordinary
+width = 320-40i, height = 200+30i; geometry (the EFFECT's frame rect) =
+(x+6, y+2, w-12, h-12) - the visible frame inside the shadow-bearing grab,
+the box spans THIS rect; i=3 minimized, i=4 dock, i=5 desktopWindow. The ordinary
 rows 0..2 must win quads; 3..5 must never.
 """
 
@@ -295,6 +295,7 @@ def _face_context(face, dump):
     "face_opacity": face_opacity,
     "thickness_raw": dump.get("thicknessRaw"),
     "edge_raw": dump.get("edgeRaw", "#141719"),
+    "no_geometry": bool(dump.get("stubNoGeometry")),
     "helpers": bool(dump.get("helpersInstalled", True)),
     "current": current,
     "expect_active": layering
@@ -478,9 +479,10 @@ def _quad_depth_problems(label, quad, rank, fitted, dump, problems):
       f"{label}: quad {quad['id']} is not strictly in front of the face plane (z {quad['z']})"
     )
   i = int(quad["id"].rsplit("-", 1)[1])
-  if quad.get("boxMode") == "box":
-    # Boxed layer: centred on the FRAME rect (the visible window), not on
-    # the grab (shadow margin) - the wallpaper-band regression.
+  if quad.get("boxMode") == "box" and quad.get("hasFrameNow", True):
+    # Boxed layer reading the REAL EffectWindow geometry (frameGeometry in
+    # C++): centred on the FRAME rect, not on the grab (shadow margin) -
+    # the wallpaper-band regression.
     fx, fy, fw, fh = stub_frame(i)
     center_x = fx + fw / 2 - dump["faceWidth"] / 2
     center_y = dump["faceHeight"] / 2 - (fy + fh / 2)
@@ -682,7 +684,7 @@ def _slab_rect_problems(label, quad, problems):
   pushed the edge past the content, with the wallpaper band between - the
   measured bug), the grab rect when flat (pixel parity)."""
   i = int(quad["id"].rsplit("-", 1)[1])
-  if quad.get("boxMode") == "box":
+  if quad.get("boxMode") == "box" and quad.get("hasFrameNow", True):
     _, _, expect_w, expect_h = stub_frame(i)
     expect_w = expect_w / 100
     expect_h = expect_h / 100
@@ -808,6 +810,32 @@ def _slab_loader_problems(ctx, face, ladder, problems):
     problems.append(
       f"{label}: eff thickness {eff} with the flag on but the SlabMesh Loader status is {status}, not Ready (Error=3 means the box never loaded; loader errorString: {face.get('slabLoaderError', '')!r})"
     )
+  _frame_presence_problems(label, face, ctx, problems)
+
+
+def _frame_presence_problems(label, face, ctx, problems):
+  """Anti-vacuum frame assertion (the second invented-property incident,
+  2026-11-28), split out of _slab_loader_problems for S3776: with the
+  Loader Ready and eff > 0, every shown layer must report hasFrameNow -
+  the delegate reading the REAL EffectWindow property "geometry" (the
+  frameGeometry READFn's QML name). hasFrameNow false while geometry
+  exists means it reads a scripting-only or invented name (the old
+  win.frameGeometry) and falls back to the grab in silence: a FAIL. In
+  the explicit stubNoGeometry scene it must be FALSE (the documented
+  fallback; _slab_rect_problems and the centre formula switch to the grab
+  rect via the same flag)."""
+  if not ctx["no_geometry"]:
+    for quad in face["quads"]:
+      if quad["showLayer"] and not quad.get("hasFrameNow", False):
+        problems.append(
+          f"{label}: boxed layer {quad['id']} has hasFrameNow false with geometry available - the delegate reads a property that does not exist on EffectWindow (the frame rect is 'geometry'; 'frameGeometry' is scripting-only)"
+        )
+  else:
+    for quad in face["quads"]:
+      if quad["showLayer"] and quad.get("hasFrameNow", False):
+        problems.append(
+          f"{label}: {quad['id']} claims frame sizing in the stubNoGeometry scene"
+        )
 
 
 def _face_problems(face, dump, problems):
@@ -986,6 +1014,7 @@ def _with_layer_fields(dump, layer=1.0):
       i = int(quad["id"].rsplit("-", 1)[1])
       quad["boxMode"] = "flat"
       quad["boxSubsets"] = 0
+      quad["hasFrameNow"] = True
       quad["boxSubsetCounts"] = []
       quad["backHasMap"] = True
       quad["texShared"] = True
@@ -1039,6 +1068,7 @@ def _thick_dump(raw, gap):
         quad["scaleY"] = fh / 100
         quad["boxMode"] = "box"
         quad["boxSubsets"] = 3
+        quad["hasFrameNow"] = True
         quad["boxSubsetCounts"] = [6, 24, 6]
         quad["backHasMap"] = True
         quad["texShared"] = True
@@ -1083,6 +1113,25 @@ def _degraded_dump(raw=300, gap=40):
         quad["boxSubsets"] = 0
         quad["scaleZ"] = 1.0
         quad["frontCull"] = "none"
+  return dump
+
+
+def _noframe_dump(raw=300, gap=40):
+  """Same thick knobs but the stub windows expose NO geometry property:
+  the delegate falls back to the grab rect (size AND centre) while the box
+  itself stays a three-subset loaded box. The only scene where
+  hasFrameNow-false is legitimate, and check-layers prints a NOTE for it."""
+  dump = _thick_dump(raw, gap)
+  dump["stubNoGeometry"] = True
+  for face in dump["faces"]:
+    for quad in face["quads"]:
+      quad["hasFrameNow"] = False
+      if quad["showLayer"]:
+        i = quad["order"]
+        quad["x"] = 100 + 150 * i + (320 - 40 * i) / 2 - dump["faceWidth"] / 2
+        quad["y"] = dump["faceHeight"] / 2 - (80 + 120 * i + (200 + 30 * i) / 2)
+        quad["scaleX"] = (320 - 40 * i) / 100
+        quad["scaleY"] = (200 + 30 * i) / 100
   return dump
 
 
@@ -1264,6 +1313,21 @@ def _slab_cases(expects_rejection, failures):
     ),
     thick300,
   )
+  # The delegate read the SCRIPTING name (win.frameGeometry) instead of
+  # the EFFECT's geometry: hasFrame silently false, box sized to the grab -
+  # the second vacuum bug of 2026-11-28. Hard-failed while geometry exists.
+  expects_rejection(
+    "delegate reads a property that does not exist (hasFrameNow false)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("hasFrameNow", False),
+    thick300,
+  )
+  # The legitimate grab fallback: stub windows with NO geometry at all -
+  # validated as an OK scene (check-layers prints a visible NOTE for it).
+  noframe = _noframe_dump()
+  if validate(noframe):
+    failures.append(
+      f"the stubNoGeometry fallback scene was rejected: {validate(noframe)}"
+    )
   # The legitimate degradation: QtQuick3D.Helpers genuinely not installed
   # -> flat layers, validated as an OK scene (check-layers.py must PRINT a
   # visible SKIP for it).

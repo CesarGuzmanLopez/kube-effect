@@ -248,6 +248,13 @@ ListModel {
 }
 """,
   # Six fake windows per desktop (the layering gate needs a real stack):
+  # EVERY property the stub windows expose must have a matching Q_PROPERTY
+  # in /usr/include/kwin/effect/effectwindow.h - frameGeometry and
+  # boundsMax were real bugs of exactly this class (properties invented
+  # from the scripting API or from imagination; both passed the gates in
+  # vacuum and were caught late, in the nested session, 2026-11-28). The
+  # frame rect here is "geometry" (READ frameGeometry in effectwindow.h),
+  # NOT "frameGeometry" (scripting-only, does not exist on EffectWindow).
   # three ordinary ones with DISTINCT stackingOrder values (i = 0, 1, 2,
   # varied x/y/w/h) that must win quads, and one each flagged minimized,
   # dock and desktopWindow (i = 3, 4, 5) that must NEVER be layered nor
@@ -275,24 +282,34 @@ ListModel {
         const number = desktop.x11DesktopNumber;
         for (let i = 0; i < 6; ++i) {
             // createQmlObject: a ListModel parses any nested element as a ListElement.
-            const win = Qt.createQmlObject("import QtQuick; QtObject { property string internalId; property real x; property real y; property real width; property real height; property var frameGeometry; property int stackingOrder; property bool minimized; property bool dock; property bool desktopWindow }", wfm);
+            const win = Qt.createQmlObject("import QtQuick; QtObject { property string internalId; property real x; property real y; property real width; property real height; property var geometry; property int stackingOrder; property bool minimized; property bool dock; property bool desktopWindow }", wfm);
             win.internalId = "stub-" + number + "-" + i;
             win.x = 100 + 150 * i;
             win.y = 80 + 120 * i;
             win.width = 320 - 40 * i;
             win.height = 200 + 30 * i;
-            // frameGeometry (measured API: KWin Scripting Window exposes it
-            // as a RectF alongside clientGeometry/bufferGeometry/
-            // decorationHasAlpha): the VISIBLE rect. The grab
-            // (x/y/width/height) extends past it by the SHADOW margin, so
-            // in reality the frame sits INSIDE the grab - the stub mirrors
-            // that with an asymmetric inset (shadow heavier at the
-            // bottom/left): frame = (x+6, y+2, w-12, h-12). Deliberately
-            // different from the grab in size AND center so the slab gate
-            // moves real geometry: the box must span the frame, and the
+            // geometry - the EFFECT's name for the frame rect:
+            // /usr/include/kwin/effect/effectwindow.h declares
+            // Q_PROPERTY(KWin::RectF geometry READ frameGeometry) ("the
+            // geometry of the window excluding server-side and client-side
+            // drop-shadows"), a Q_GADGET with x/y/width/height. It is NOT
+            // called frameGeometry there - that name belongs to the
+            // SCRIPTING Window; reading win.frameGeometry here produced the
+            // second invented-property bug of 2026-11-28 (boundsMax was the
+            // first): the stub now mirrors ONLY properties that exist in
+            // effectwindow.h. The grab (x/y/width/height) extends past the
+            // frame by the shadow margin, so geometry sits INSIDE the grab
+            // with an asymmetric inset: geometry = (x+6, y+2, w-12, h-12),
+            // deliberately different in size AND centre so the slab gate
+            // moves real geometry: the box must span THIS rect, and the
             // front's whole-grab texture gets compressed into it (no
             // wallpaper band between content and edge).
-            win.frameGeometry = Qt.rect(win.x + 6, win.y + 2, win.width - 12, win.height - 12);
+            // The stubNoGeometry context property (the noframe scenario)
+            // leaves it undefined to exercise the documented grab fallback
+            // - with a visible NOTE, never a silent relaxation.
+            if (typeof stubNoGeometry !== "boolean" || !stubNoGeometry) {
+                win.geometry = Qt.rect(win.x + 6, win.y + 2, win.width - 12, win.height - 12);
+            }
             win.stackingOrder = i;
             win.minimized = i === 3;
             win.dock = i === 4;
