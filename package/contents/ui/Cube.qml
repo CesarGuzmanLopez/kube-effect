@@ -466,6 +466,25 @@ Node {
   function faceNodeAt(index) {
     return faceRepeater.objectAt(index);
   }
+  // DebugOverlay line 2 summary of the live slab ("slab=<box>/<quad>
+  // eff=<n>", the ADR-028 fourth amendment): the box count proves on
+  // screen that SlabMesh.qml actually LOADED (a Loader error keeps every
+  // layer flat - slab=0/N - and the gate/console say the same). Built
+  // only from accessors that already exist on WindowLayers.
+  function layerBoxSummary() {
+    let boxes = 0;
+    let quadsTotal = 0;
+    for (let i = 0; i < faceRepeater.count; ++i) {
+      const node = faceRepeater.objectAt(i);
+      if (node !== null && node !== undefined && node.windowLayers !== null && node.windowLayers !== undefined) {
+        boxes += node.windowLayers.boxLiveCount;
+        quadsTotal += node.windowLayers.quadCount;
+      }
+    }
+    const first = faceRepeater.count > 0 ? faceRepeater.objectAt(0) : null;
+    const eff = first !== null && first !== undefined && first.windowLayers !== null && first.windowLayers !== undefined ? Math.round(first.windowLayers.layerSlabEff) : 0;
+    return boxes + "/" + quadsTotal + " eff=" + eff;
+  }
 
   Repeater3D {
     id: faceRepeater

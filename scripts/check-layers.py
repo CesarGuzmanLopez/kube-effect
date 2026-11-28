@@ -83,6 +83,16 @@ the ADR-028 "Puertas" (amended):
            kwinrc that never  schema defaults must survive the whole
            saved the others)   chain - ladder 120/50, box eff 24, plate
                                0.25, lod 1, rotation 0.7 - never 0.
+
+NEVER-RELAX (measured 2026-11-28): with the flag on and an effective
+thickness above 0 the SlabMesh Loader must report Ready; a Loader ERROR
+with QtQuick3D.Helpers installed is a HARD FAIL (an invented subset
+property once made SlabMesh.qml an eternal Loader.Error while the gate
+"relaxed" on a false missing-module and the box silently never existed).
+The relaxation applies only when the module is genuinely absent, and is
+then announced by a visible NOTE SKIP line - never a silent OK. The dump
+carries slabLoaderStatus/slabLoaderError per face and helpersInstalled
+at root for exactly that.
   (lighting, all thick* + rest): the edge material is Fragment-lit
   (roughness 0.7, metalness 0) while the textured front, the faces and
   the plate stay NoLighting; the camera-anchored headlight Repeater3D is
@@ -464,6 +474,7 @@ def main():
 
   problems: list[str] = []
   kept: list = []
+  helpers_absent = False
   with tempfile.TemporaryDirectory(prefix="kube-stub-") as temporary:
     import_root = write_stub_module(temporary)
     for name, scenario in _SCENARIOS:
@@ -474,6 +485,12 @@ def main():
         continue
       kept.append(keep)
       problems.extend(f"{name}: {problem}" for problem in validate(dump))
+      # A visible SKIP, never a silent OK: the box clauses only relax
+      # when QtQuick3D.Helpers is genuinely not installed (a Loader
+      # compile error with the module present is a hard failure).
+      if not dump.get("helpersInstalled", True):
+        helpers_absent = True
+        print(name + ": NOTE SKIP of box clauses - QtQuick3D.Helpers is not installed")
       for message in messages:
         problems.append(f"{name} qml: {message.strip()}")
       counts = [len(face["quads"]) for face in dump["faces"]]
@@ -483,6 +500,12 @@ def main():
     for problem in problems:
       print(f" - {problem}")
     return 1
+  # Visible SKIP (never a silent OK): the box clauses relaxed somewhere.
+  if helpers_absent:
+    print(
+      "check-layers: PARTIAL - QtQuick3D.Helpers is NOT installed, the box "
+      "clauses were SKIPPED (the layers legitimately degrade to flat)"
+    )
   print(
     "check-layers: OK (real Cube/WindowLayers: z strictly increasing with "
     "rank and positive with the WHOLE stack floating (outward, bottom one "

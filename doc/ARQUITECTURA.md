@@ -361,6 +361,21 @@ tambor).
   model 1 **solo con `WindowLayering` activo**: flag off = cero nodos nuevos
   (paridad del árbol virgen). Frente texturizado, caras y plate conservan
   `NoLighting` (contrato ADR-026: el grab nunca se reilumina).
+- **El Loader de la caja puede fallar en silencio** (medido 2026-11-28):
+  `SlabMesh.qml` usó `boundsMin/boundsMax` en `ProceduralMeshSubset` — no
+  existen (el tipo solo tiene `offset`, `count`, `name`; el API real es
+  `ProceduralMesh { positions; normals; uv0s; indexes; subsets: [offset/count]
+  }`, los subsets parten la MISMA lista de índices y su orden es el orden de
+  `Model.materials`). El Loader daba Error PERMANENTE → slabBox null →
+  #Rectangle plano, y el gate se «relajaba» creyendo que faltaba Helpers.
+  Reglas: CADA nombre de API se verifica con un probe QQmlComponent (load +
+  create limpios, subsetCount==2) ANTES de commitear; el gate exige el
+  `slabLoaderStatus` leído del motor (Ready duro con eff>0 y módulo
+  instalado; Error con módulo presente = FAIL; relax SOLO si el errorString
+  dice "not installed", con NOTE SKIP visible); y WindowLayers lanza
+  `console.warn` único con el errorString para que nested.log (truco §D) lo
+  capture. El DebugOverlay lo pinta en pantalla: `slab=<boxes>/<quads>
+  eff=<n>` — si la caja no vive, se ve (slab=0/N) sin abrir logs.
 - **Claves ausentes = undefined, NUNCA 0** (medido 2026-11-28: el kwinrc del
   anidado solo tenía `WindowLayering=true`; en un scripted effect
   `effect.configuration.<clave ausente>` devuelve **undefined**, y

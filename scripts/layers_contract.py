@@ -272,9 +272,7 @@ def _face_context(face, dump):
     "face_opacity": face_opacity,
     "thickness_raw": dump.get("thicknessRaw"),
     "edge_raw": dump.get("edgeRaw", "#141719"),
-    "helpers": bool(dump.get("helpers", True))
-    if isinstance(dump.get("helpers"), bool)
-    else True,
+    "helpers": bool(dump.get("helpersInstalled", True)),
     "current": current,
     "expect_active": layering
     and (
@@ -440,7 +438,7 @@ def _quad_depth_problems(label, quad, rank, fitted, dump, problems):
   # dump's own mode so a scene that stays flat when the eff demands a box
   # is caught by the (h) clause, not hidden here.
   box_shift = (
-    expected_effective(dump.get("thicknessRaw", 0), fitted) / 2
+    expected_effective(dump.get("thicknessRaw"), fitted) / 2
     if quad.get("boxMode") == "box"
     else 0.0
   )
@@ -719,6 +717,32 @@ def _slab_box_case(label, quad, eff, ctx, previous_front, problems):
   return front
 
 
+def _slab_loader_problems(ctx, face, ladder, problems):
+  """Never-relax (measured incident 2026-11-28): with the flag active and
+  an effective thickness above 0 the SlabMesh Loader MUST report Ready(1).
+  Error(3) with the module installed - an API bug inside SlabMesh.qml,
+  exactly how the invented subset bounds made the box silently never
+  exist - is a HARD gate failure; Null(0)/Loading(2) mean the activation
+  binding broke. The relaxation is legitimate ONLY when QtQuick3D.Helpers
+  is genuinely not installed, and check-layers.py prints a visible SKIP
+  line for that case, never a silent OK."""
+  label = ctx["label"]
+  eff = ladder["eff"]
+  if eff <= 1e-12:
+    return
+  status = int(face.get("slabLoaderStatus", 1))
+  if not ctx["helpers"]:
+    if status != 0:
+      problems.append(
+        f"{label}: QtQuick3D.Helpers missing but the slab Loader reports status {status} (it should never have activated)"
+      )
+    return
+  if status != 1:
+    problems.append(
+      f"{label}: eff thickness {eff} with the flag on but the SlabMesh Loader status is {status}, not Ready (Error=3 means the box never loaded; loader errorString: {face.get('slabLoaderError', '')!r})"
+    )
+
+
 def _face_problems(face, dump, problems):
   """Every clause of one face: context, then the assert groups (each group
   lives in its own helper, same order and short-circuits as the original
@@ -740,6 +764,7 @@ def _face_problems(face, dump, problems):
   _plate_problems(ctx, face, shown, problems)
   _quad_material_problems(ctx, shown, problems)
   _slab_problems(ctx, shown, ladder, problems)
+  _slab_loader_problems(ctx, face, ladder, problems)
   return problems
 
 
@@ -804,6 +829,7 @@ def _good_dump():
     # Material contract defaults: rest (not rotating) -> the fade chain
     # answers 1, quads Mask, plate Blend; the face follows its own 1.0.
     "rotating": False,
+    "helpersInstalled": True,
     "layerRotationRaw": 0.7,
     "faceOpacityLive": 1.0,
     "layerOpacityLive": 1.0,
@@ -883,6 +909,9 @@ def _with_layer_fields(dump, layer=1.0):
     face["faceCutoffLive"] = FACE_CUTOFF
     face["plateAlphaMode"] = "blend"
     face["plateOpacityLive"] = dump["plateRaw"] * layer
+    # Flat stamp: no thickness -> the Loader never activates (Null = 0).
+    face["slabLoaderStatus"] = 0
+    face["slabLoaderError"] = ""
     for quad in face["quads"]:
       quad["alphaMode"] = "mask" if layer >= MASK_THRESHOLD else "blend"
       quad["alphaCutoff"] = FACE_CUTOFF
@@ -922,6 +951,9 @@ def _thick_dump(raw, gap):
   eff = expected_effective(raw, fitted)
   for face in dump["faces"]:
     face["fittedGap"] = fitted
+    # A healthy engine with eff > 0 reports the SlabMesh Loader Ready.
+    face["slabLoaderStatus"] = 1 if eff > 0 else 0
+    face["slabLoaderError"] = ""
     for quad in face["quads"]:
       if quad["showLayer"]:
         quad["z"] = (quad["order"] + 1) * fitted + EPSILON - eff / 2
@@ -941,6 +973,25 @@ def _turning_dump(raw=0.7):
   dump["layerRotationRaw"] = raw
   dump["layerOpacityLive"] = layer
   return _with_layer_fields(dump, layer)
+
+
+def _degraded_dump(raw=300, gap=40):
+  """Same knobs as _thick_dump but WITHOUT QtQuick3D.Helpers installed:
+  the Loader never activates (status Null), every layer stays flat with
+  the plain ladder - the only relaxation the clauses accept."""
+  dump = _thick_dump(raw, gap)
+  dump["helpersInstalled"] = False
+  for face in dump["faces"]:
+    face["slabLoaderStatus"] = 0
+    face["boxLiveCount"] = 0
+    for quad in face["quads"]:
+      if quad["showLayer"]:
+        quad["z"] = layer_depth_out(quad["order"], face["fittedGap"])
+        quad["boxMode"] = "flat"
+        quad["boxSubsets"] = 0
+        quad["scaleZ"] = 1.0
+        quad["frontCull"] = "none"
+  return dump
 
 
 def _flag_off_dump():
@@ -1111,6 +1162,28 @@ def _slab_cases(expects_rejection, failures):
     ),
     thick300,
   )
+  # The bug this whole clause exists for: the SlabMesh Loader fails to
+  # COMPILE (an invented API) while the gate wrongly relaxes as if the
+  # module were missing - with the module installed, status 3 is fatal.
+  expects_rejection(
+    "loader compile error relaxed as missing module (the silent flat bug)",
+    lambda d: (
+      d["faces"][0].__setitem__("slabLoaderStatus", 3),
+      d["faces"][0].__setitem__(
+        "slabLoaderError",
+        'file:///.../SlabMesh.qml: Cannot assign to non-existent property "boundsMax"',
+      ),
+    ),
+    thick300,
+  )
+  # The legitimate degradation: QtQuick3D.Helpers genuinely not installed
+  # -> flat layers with the plain ladder and status Null, validated as an
+  # OK scene (check-layers.py must PRINT a visible SKIP for it).
+  degraded = _degraded_dump()
+  if validate(degraded):
+    failures.append(
+      f"the helpers-missing degradation was rejected: {validate(degraded)}"
+    )
   # Edge colour off the resolved value:
   expects_rejection(
     "edge colour drift",

@@ -61,21 +61,25 @@ Item {
     uv0s: slabHolder.box.uvs
     indexes: slabHolder.box.indexes
     subsets: [
-      // Subset 0: the front quad (two triangles), bounds the +z plane of
-      // the unit box.
+      // Subset 0: the FRONT (two triangles = the first 6 indexes). A
+      // ProceduralMeshSubset has ONLY offset/count/name - the boundsMin/
+      // boundsMax once written here do not exist and made this file a
+      // permanent Loader.Error ("Cannot assign to non-existent property
+      // boundsMax", measured 2026-11-28): the slab silently never loaded.
+      // The subsets split the ONE indexes list, so the front-first order
+      // of layerGeometry.slabVertices IS the material order (subset 0 ->
+      // Model.materials[0] = the textured front, subset 1 -> materials[1]
+      // = the lit edge colour).
       ProceduralMeshSubset {
         offset: 0
         count: slabHolder.box.frontCount
-        boundsMin: Qt.vector3d(-50, -50, 50)
-        boundsMax: Qt.vector3d(50, 50, 50)
+        name: "front"
       },
-      // Subset 1: the four sides and the back (five quads), bounds the
-      // whole box (it encloses them, as ProceduralMesh requires).
+      // Subset 1: the four sides and the back (30 indexes).
       ProceduralMeshSubset {
         offset: slabHolder.box.frontCount
         count: slabHolder.box.sideCount
-        boundsMin: Qt.vector3d(-50, -50, -50)
-        boundsMax: Qt.vector3d(50, 50, 50)
+        name: "edges"
       }
     ]
   }

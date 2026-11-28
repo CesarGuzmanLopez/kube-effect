@@ -1537,6 +1537,23 @@ pero el canto no se leía en el anidado («sigue sin grosor»): el default pasa 
 **24 px** (visible como sólido en oblicuo; sigue recortado a fittedGap/2 y el
 KCM admite 0–300).
 
+**Corrección de la cuarta ampliación (probe directo 2026-11-28): la caja
+nunca corrió hasta este fix.** `SlabMesh.qml` usaba `boundsMin/boundsMax` en
+`ProceduralMeshSubset` — propiedades INVENTADAS (el tipo real solo tiene
+`offset`/`count`/`name`; los subsets parten la lista de índices y su orden es
+el de `Model.materials`). El Loader fallaba SIEMPRE (compile error),
+slabBox quedaba null y todas las capas seguían `#Rectangle`: ni canto ni luz
+de canto, cinco rondas. El gate pasó vacío porque la cláusula (h) se relajaba
+ante Helpers ausente… y confundía el error de compilación con módulo no
+instalado (el harness también fallaba, y su relax lo enmascaraba). Fix: API
+real verificada con probe QQmlComponent (load+create limpios,
+subsets=[0..5 frente][6..35 cantos+posterior], subsetCount 2); assert duro de
+`slabLoaderStatus` (Ready con eff>0 y módulo instalado; Error = FAIL, relax
+solo si "not installed" con NOTE SKIP visible); `console.warn` único del
+errorString (nested.log, truco §D); DebugOverlay muestra `slab=boxes/quads
+eff=N` en pantalla. La lema de la ampliación (caja, subsets, culling, luz)
+permanece; solo ahora EXISTE.
+
 **Canto con luz (medido el mismo 2026-11-28, segunda corrección visual)**: con
 grosor alto la caja dibujaba canto, pero «sin canto sólido, solo un cuadro como
 sombreado» — el material del canto con `NoLighting` es un color plano

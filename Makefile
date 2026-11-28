@@ -117,7 +117,13 @@ lint-ci: check
 # canto fino, no bisel); BackFaceCulling en ambos materiales (NoCulling =
 # el bisel negro medido por los márgenes transparentes del thumbnail); el
 # canto comparte umbral y opacidad del frente (baseColor, que diffuseColor
-# no existe en PrincipledMaterial). Y la corrección de claves sin guardar
+# no existe en PrincipledMaterial) - y desde 2026-11-28 con el status del
+# Loader DURO: eff>0 con Helpers instalado exige slabLoaderStatus Ready;
+# Error (el caso real: boundsMin/boundsMax inventados en
+# ProceduralMeshSubset hacían fallar el compile SIEMPRE y la caja nunca
+# existió) es FAIL del gate, jamás relax; el relax solo vale si el módulo
+# no está instalado, con NOTE SKIP visible. El DebugOverlay pinta
+# slab=boxes/quads eff=N en pantalla. Y la correccion de claves sin guardar
 # (medido 2026-11-28): el raw de las seis claves viaja en propiedades VAR
 # (undefined de effect.configuration no se coacciona a 0 antes del
 # resolvedor); el escenario defaultsunset lo exige end-to-end y

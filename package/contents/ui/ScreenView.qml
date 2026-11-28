@@ -189,7 +189,7 @@ Item {
     // sheet=1/0 and the azimuth limit (ADR-024): the sheet rules are live
     // state (isSheet flips mid-sync) and a stuck clamp is invisible
     // without them.
-    let line2 = "yaw=" + cube.cameraYaw.toFixed(1) + " pitch=" + root.debugEuler.x.toFixed(1) + " r=" + cameraController.radius.toFixed(0) + " op=" + root.faceOpacity.toFixed(2) + " tick=" + cube.angleTick.toFixed(1) + " n=" + cube.faceCount + "/" + cube.geometryCount + " d=" + cube.faceDistance.toFixed(0) + " v=" + cube.viewRadius.toFixed(0) + " sheet=" + (cube.isSheet ? 1 : 0) + " lim=" + (root.azimuthRange[0] === null ? "none" : root.azimuthRange[0] + ".." + root.azimuthRange[1]);
+    let line2 = "yaw=" + cube.cameraYaw.toFixed(1) + " pitch=" + root.debugEuler.x.toFixed(1) + " r=" + cameraController.radius.toFixed(0) + " op=" + root.faceOpacity.toFixed(2) + " tick=" + cube.angleTick.toFixed(1) + " n=" + cube.faceCount + "/" + cube.geometryCount + " d=" + cube.faceDistance.toFixed(0) + " v=" + cube.viewRadius.toFixed(0) + " sheet=" + (cube.isSheet ? 1 : 0) + " lim=" + (root.azimuthRange[0] === null ? "none" : root.azimuthRange[0] + ".." + root.azimuthRange[1]) + " slab=" + cube.layerBoxSummary();
     // Shape state (ADR-025/ADR-026): the resolved form, and — while the
     // drum is in effect — its radius R plus the EFFECTIVE gap g_eff
     // (what the mesh really used after the negative clamp; a mismatch

@@ -469,5 +469,32 @@ Node {
   // plate must stay Blend always and fade as plateOpacity x layerOpacity.
   readonly property string plateAlphaModeNow: plate.materials[0].alphaMode === PrincipledMaterial.Mask ? "mask" : plate.materials[0].alphaMode === PrincipledMaterial.Opaque ? "opaque" : plate.materials[0].alphaMode === PrincipledMaterial.Blend ? "blend" : "unknown"
   readonly property string plateLightingNow: plate.materials[0].lighting === PrincipledMaterial.NoLighting ? "none" : plate.materials[0].lighting === PrincipledMaterial.Fragment ? "fragment" : "other"
+  // Slab loader visibility (the never-relax gate + the debug overlay):
+  // the raw Loader.Status int (Null 0 / Ready 1 / Loading 2 / Error 3) and
+  // its errorString, so the check-layers oracle can tell "the box loaded"
+  // from "the Loader failed because the file is broken" (a measured
+  // incident: invented subset bounds made this Loader an ERROR forever
+  // while the gate relaxed on a false "Helpers missing") and the
+  // DebugOverlay can show slab=N/N with the layers alive on screen.
+  readonly property int slabLoaderStatus: slabMeshLoader.status
+  readonly property string slabLoaderError: slabMeshLoader.errorString
+  // Layers currently rendered as a real box (all delegates of an active
+  // face with the mesh loaded and an effective thickness above 0).
+  readonly property int boxLiveCount: root.active && root.slabBox !== null && root.slabBox !== undefined && root.layerSlabEff > 0 ? quads.count : 0
+
+  Connections {
+    target: slabMeshLoader
+
+    function onStatusChanged() {
+      // ONE warning per component (nested.log captures the console - the
+      // diagnostic channel of the learned-tricks section D): a failed
+      // SlabMesh load must NEVER look like a silent flat fallback.
+      if (slabMeshLoader.status === Loader.Error && !root.slabLoadWarned) {
+        root.slabLoadWarned = true;
+        console.warn("kube-effect WindowLayers: SlabMesh.qml Loader failed - layers stay FLAT:", slabMeshLoader.errorString);
+      }
+    }
+  }
+  property bool slabLoadWarned: false
   readonly property real plateOpacityNow: plate.materials[0].opacity
 }

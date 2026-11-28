@@ -63,6 +63,12 @@ Item {
   // Loader, not a Component: Component elements take no properties
   // besides id, the loader is the URL-based compile path.)
   readonly property bool helpersOk: slabProbe.status === Loader.Ready
+  // Distinguishes the two Loader.Error causes (measured incident: an
+  // invented subset property gave Error FOREVER while the gate wrongly
+  // relaxed as if the module were absent). The module is genuinely absent
+  // only when its error says "not installed"; a compile error keeps every
+  // box clause HARD.
+  readonly property bool helpersInstalled: slabProbe.status === Loader.Ready || !/not installed/i.test(slabProbe.errorString)
   Loader {
     id: slabProbe
     source: "../package/contents/ui/SlabMesh.qml"
@@ -260,6 +266,9 @@ Item {
         plateZ: wl.plateZNow,
         plateAlphaMode: wl.plateAlphaModeNow,
         plateLighting: wl.plateLightingNow,
+        slabLoaderStatus: wl.slabLoaderStatus,
+        slabLoaderError: wl.slabLoaderError,
+        boxLiveCount: wl.boxLiveCount,
         faceLighting: face.faceMatLightingNow,
         plateOpacityLive: wl.plateOpacityNow,
         faceAlphaMode: face.faceMatModeNow,
@@ -280,6 +289,7 @@ Item {
       thicknessRaw: harness.knobDefaultsUnset ? undefined : harness.rawThickness,
       edgeRaw: harness.knobDefaultsUnset ? "" : harness.rawEdgeColor,
       helpers: harness.helpersOk,
+      helpersInstalled: harness.helpersInstalled,
       headlightCount: harness.headlightCount,
       layerRotationRaw: harness.knobDefaultsUnset ? undefined : harness.rawLayerRotation,
       rotating: harness.knobRotating,
