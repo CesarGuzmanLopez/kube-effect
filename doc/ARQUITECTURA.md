@@ -224,7 +224,7 @@ cap           = 150 px                                             (tope duro de
 fittedGap     = min(WindowLayerGap, cap / (maxRank + 1))            (cap directo en todas las formas;
                                                                   el stack ocupa maxRank+1 pasos)
 layerDepthOut = (rank + 1) * fittedGap + epsilon        (pila flotante: abajo = +paso, arriba = +cap)
-eff           = min(WindowLayerThickness, fittedGap / 2) (grosor simulado EFECTIVO; default 2; 0 = plano)
+eff           = min(WindowLayerThickness, fittedGap / 2) (grosor simulado EFECTIVO; default 24; 0 = plano)
 position.z    = +layerDepthOut  (flat)  |  = layerDepthOut - eff/2 (box: el FRENTE cae en la ladder)
 plate z       = -2                                                  (velo de huecos, detrás de todos los quads)
 caja          = ProceduralMesh unit box (subsets: 0 = frente, 1 = cantos + posterior)
@@ -349,6 +349,18 @@ tambor).
   asomar, y por los márgenes transparentes se ve el plate/interior del sólido
   igual que con el quad plano. El quad plano (eff 0) conserva NoCulling (la
   regla de dos lados de ADR-025).
+- **Canto plano sin luz se lee como sombra** (medido 2026-11-28, «solo un
+  cuadro como sombreado», no volumen): el material de canto usa
+  `lighting: Fragment` (roughness 0.7, metalness 0) y la escena gana un
+  **headlight suave anclado a la cámara** — DirectionalLight hijo de la
+  PerspectiveCamera con offset euler (25, −35) para que las cuatro
+  orientaciones de canto reciban sombreado distinto, `brightness 0.8` (en
+  este Qt el nombre es `brightness`/`diffuseStrength`, no `intensity`; y la
+  propiedad del material es `metalness`, no `metallic`: ambos rechazados por
+  el cargador vivo, medidos). El headlight vive en un `Repeater3D` con
+  model 1 **solo con `WindowLayering` activo**: flag off = cero nodos nuevos
+  (paridad del árbol virgen). Frente texturizado, caras y plate conservan
+  `NoLighting` (contrato ADR-026: el grab nunca se reilumina).
 - **Centroide ≠ rank**: el centroide de un quad = centro de cara + offset
   lateral de la ventana + profundidad exterior; la pasada transparente ordena por
   él y NO respeta el rank (medido: en reposo oblicuo una capa inferior pintaba

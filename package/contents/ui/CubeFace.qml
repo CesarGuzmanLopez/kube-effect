@@ -161,6 +161,7 @@ Node {
   // faceOpacity (and the mesh/cull rules) and are never touched by the layer
   // machinery — with the flag off or the rotation key at any value.
   readonly property string faceMatModeNow: face.materials[0].alphaMode === PrincipledMaterial.Mask ? "mask" : face.materials[0].alphaMode === PrincipledMaterial.Opaque ? "opaque" : face.materials[0].alphaMode === PrincipledMaterial.Blend ? "blend" : "unknown"
+  readonly property string faceMatLightingNow: face.materials[0].lighting === PrincipledMaterial.NoLighting ? "none" : face.materials[0].lighting === PrincipledMaterial.Fragment ? "fragment" : "other"
   readonly property real faceMatOpacityNow: face.materials[0].opacity
   readonly property real faceMatCutoffNow: face.materials[0].alphaCutoff
 }

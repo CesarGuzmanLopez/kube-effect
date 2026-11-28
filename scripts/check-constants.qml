@@ -333,11 +333,12 @@ Item {
     check("layer fade equals face fade at 0.7", Constants.faceOpacity(1, LayerGeo.rotationOpacity(0.7), true), Constants.faceOpacity(1, 0.7, true));
 
     // Slab thickness (ADR-028 fourth amendment): the request clamps 0-300
-    // (default 0 = flat) and the EFFECTIVE value is clipped to half the
-    // fitted step, so two layers can never intersect. The edge colour
+    // with the SCHEMA DEFAULT 24 (measured 2026-11-28: 2 px did not read)
+    // and the EFFECTIVE value is clipped to half the fitted step (two
+    // layers can never intersect). The edge colour
     // resolver keeps valid #hex strings and maps anything else to the
     // schema default (the never-to-the-floor rule again).
-    check("thickness default null", LayerGeo.thicknessEffective(null, 100), 2);
+    check("thickness default null", LayerGeo.thicknessEffective(null, 100), 24);
     check("thickness clamp high request", LayerGeo.thicknessEffective(300, 20), 10);
     check("thickness fitting request", LayerGeo.thicknessEffective(10, 100), 10);
     check("thickness half of repartitioned step", LayerGeo.thicknessEffective(300, 0), 0);

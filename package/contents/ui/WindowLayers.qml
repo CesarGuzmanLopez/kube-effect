@@ -133,10 +133,10 @@ Node {
   property real layerGap: LayerGeometry.GAP_DEFAULT
   property real plateOpacity: LayerGeometry.PLATE_OPACITY_DEFAULT
   // Slab box (fourth amendment): the thickness REQUEST (clamped 0-300 with
-  // the schema default 2 - a thin real edge out of the box, see
-  // layerGeometry - and then clipped to half the fitted STEP inside
-  // thicknessEffective, the step being per face) and the resolved edge
-  // colour. raw 0 = flat quads exactly as before (pixel parity).
+  // the schema default 24 - measured, the first default 2 never read - and
+  // then clipped to half the fitted STEP inside thicknessEffective, the
+  // step being per face) and the resolved edge colour. raw 0 = flat quads
+  // exactly as before (pixel parity).
   property real layerThickness: LayerGeometry.THICKNESS_DEFAULT
   property color edgeColor: LayerGeometry.EDGE_COLOR_DEFAULT
   readonly property real layerSlabEff: LayerGeometry.thicknessEffective(root.layerThickness, root.fittedGap)
@@ -418,7 +418,19 @@ Node {
         // subset (the #Rectangle has one) - harmless, and it keeps the
         // materials list shape constant for the gate.
         PrincipledMaterial {
-          lighting: PrincipledMaterial.NoLighting
+          // FRAGMENT lighting on the edge only (measured 2026-11-28: the
+          // unlit flat colour "reads as a shadow, not a solid" - there was
+          // a band but no volume). The camera-anchored headlight of
+          // ScreenView (present iff WindowLayering) shades the four edge
+          // orientations differently; roughness keeps it a matte plastic,
+          // never a mirror. The TEXTURED front and every face of the cube
+          // stay NoLighting - the ADR-026 grab contract never gets
+          // re-illuminated.
+          lighting: PrincipledMaterial.Fragment
+          roughness: 0.7
+          // (metalness, not "metallic": the Qt6 PrincipledMaterial spelling
+          // - the live loader rejects "metallic", measured.)
+          metalness: 0.0
           cullMode: Material.BackFaceCulling
           alphaMode: root.layerOpacity < 0.99 ? PrincipledMaterial.Blend : PrincipledMaterial.Mask
           alphaCutoff: 0.5
@@ -452,5 +464,6 @@ Node {
   // Material contract reads (live engine values, not the bindings): the
   // plate must stay Blend always and fade as plateOpacity x layerOpacity.
   readonly property string plateAlphaModeNow: plate.materials[0].alphaMode === PrincipledMaterial.Mask ? "mask" : plate.materials[0].alphaMode === PrincipledMaterial.Opaque ? "opaque" : plate.materials[0].alphaMode === PrincipledMaterial.Blend ? "blend" : "unknown"
+  readonly property string plateLightingNow: plate.materials[0].lighting === PrincipledMaterial.NoLighting ? "none" : plate.materials[0].lighting === PrincipledMaterial.Fragment ? "fragment" : "other"
   readonly property real plateOpacityNow: plate.materials[0].opacity
 }

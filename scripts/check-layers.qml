@@ -48,7 +48,7 @@ Item {
   readonly property bool knobRotating: typeof stubRotating === "boolean" && stubRotating
   readonly property real knobFaceOpacity: typeof stubFaceOpacity === "number" ? stubFaceOpacity : 1
   readonly property int rawCurrent: typeof stubCurrentNumber === "number" ? stubCurrentNumber : 0
-  readonly property var rawThickness: typeof stubThickness === "number" ? stubThickness : 0
+  readonly property var rawThickness: typeof stubThickness === "number" ? stubThickness : null
   readonly property string rawEdgeColor: typeof stubEdgeColor === "string" ? stubEdgeColor : "#141719"
   // Whether the runtime module set (QtQuick3D.Helpers behind SlabMesh.qml)
   // loaded: without it the box degrades to the flat quad and the oracle
@@ -74,6 +74,29 @@ Item {
     }
   }
 
+  // The headlight gate, MIRRORED exactly as ScreenView.qml declares it
+  // (a Repeater3D riding on the camera, model 1 iff WindowLayering, the
+  // same euler (25, -35) and brightness 0.8): ScreenView itself cannot be
+  // instantiated here
+  // (it needs the live effect context), so this is the same trade-off the
+  // scene-environment gate documents - the MECHANISM is exercised (a
+  // Repeater3D under a camera node instantiates zero delegates with
+  // model 0), the constants are pinned by the python mirror.
+  PerspectiveCamera {
+    id: headlightCamera
+    Repeater3D {
+      id: headlightRepeater
+      model: harness.knobLayering ? 1 : 0
+      DirectionalLight {
+        eulerRotation: Qt.vector3d(25, -35, 0)
+        color: "#ffffff"
+        brightness: 0.8
+        castsShadow: false
+      }
+    }
+  }
+  readonly property int headlightCount: headlightRepeater.count
+
   UI.Cube {
     id: cube
     // A small synthetic screen (1000x700): since the amendment the budget is
@@ -88,7 +111,12 @@ Item {
     windowLayerGap: harness.rawGap
     windowLayerLodFaces: harness.rawLod
     windowLayerPlateOpacity: harness.rawPlate
-    windowLayerThickness: harness.rawThickness
+    // Schema-default simulation for the raw knob: KConfigXT answers the
+    // entry default (24) when the key was never saved, the harness passes
+    // null for that case, and layerGeometry.thicknessUnits is the same
+    // resolver the runtime hits through thicknessEffective - unset raw
+    // lands on 24 here exactly like a fresh kwinrc.
+    windowLayerThickness: LayerGeo.thicknessUnits(harness.rawThickness)
     windowLayerEdgeColor: harness.rawEdgeColor
     currentDesktop: harness.currentStub
     faceOpacity: harness.knobFaceOpacity
@@ -138,6 +166,19 @@ Item {
       }
       return "unknown";
     }
+    // PrincipledMaterial.Lighting by VALUE: NoLighting=0 is reachable by
+    // name, but this Qt build leaves the name PrincipledMaterial.Fragment
+    // undefined in value position (the ASSIGNMENT still works - verified:
+    // the material reads back 1). Pin the numbers with the comment.
+    function lightingName(l) {
+      if (l === PrincipledMaterial.NoLighting || l === 0) {
+        return "none";
+      }
+      if (l === 1) {
+        return "fragment";
+      }
+      return "other";
+    }
     const faces = [];
     for (let i = 0; i < count; ++i) {
       const face = cube.faceNodeAt(i);
@@ -177,6 +218,10 @@ Item {
           frontCull: cullName(quad.materials[0].cullMode),
           edgeCull: cullName(quad.materials[1].cullMode),
           frontHasMap: quad.materials[0].baseColorMap !== null && quad.materials[0].baseColorMap !== undefined,
+          frontLighting: lightingName(quad.materials[0].lighting),
+          edgeLighting: lightingName(quad.materials[1].lighting),
+          edgeRoughness: quad.materials[1].roughness,
+          edgeMetallic: quad.materials[1].metalness,
           edgeAlphaMode: modeName(quad.materials[1].alphaMode),
           edgeOpacity: quad.materials[1].opacity,
           edgeR: quad.materials[1].baseColor.r,
@@ -210,6 +255,8 @@ Item {
         plateVisible: wl.plateVisibleNow,
         plateZ: wl.plateZNow,
         plateAlphaMode: wl.plateAlphaModeNow,
+        plateLighting: wl.plateLightingNow,
+        faceLighting: face.faceMatLightingNow,
         plateOpacityLive: wl.plateOpacityNow,
         faceAlphaMode: face.faceMatModeNow,
         faceOpacityLive: face.faceMatOpacityNow,
@@ -229,6 +276,7 @@ Item {
       thicknessRaw: harness.rawThickness,
       edgeRaw: harness.rawEdgeColor,
       helpers: harness.helpersOk,
+      headlightCount: harness.headlightCount,
       layerRotationRaw: harness.rawLayerRotation,
       rotating: harness.knobRotating,
       faceOpacityLive: cube.faceOpacity,

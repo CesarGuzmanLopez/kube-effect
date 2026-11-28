@@ -536,7 +536,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                                             <bool>false</bool>
                                                         </property>
                                                         <property name="toolTip">
-                                                            <string>Grosor simulado de cada ventana-capa (por defecto 2 px): la capa es una caja cerrada — frente texturizado + cantos del color de canto — visible en oblicuo. La caja mide el rectángulo exacto de la ventana, no el grab con sombras. Se recorta a la mitad del paso entre capas, así que dos capas jamás se atraviesan; pedir más que gap/2 no separa nada. 0 = plano (paridad píxel con el modelo sin grosor).</string>
+                                                            <string>Grosor simulado de cada ventana-capa (por defecto 24 px; con 2 px no se leía): la capa es una caja cerrada — frente texturizado + cantos del color de canto — visible en oblicuo. La caja mide el rectángulo exacto de la ventana, no el grab con sombras. Se recorta a la mitad del paso entre capas, así que dos capas jamás se atraviesan; pedir más que gap/2 no separa nada. 0 = plano (paridad píxel con el modelo sin grosor).</string>
                                                         </property>
                                                         <property name="minimum">
                                                             <number>0</number>

@@ -79,16 +79,19 @@ const PLATE_DEPTH_EXTRA = 2;
 // The dark veil colour behind the whole stack (WindowLayerPlateOpacity only
 // scales it); it is visible through the face holes and nothing else.
 const PLATE_COLOR = "#141719";
-// Simulated slab thickness (WindowLayerThickness, Int 0-300 px): default 2
-// gives a REAL thin edge out of the box - the box spans exactly the window
-// rect (win.width x win.height), NOT the grab with its shadow margins, so 2
-// px are a visible bezel-free rim (measured first attempt: a 0-default flat
-// box behind a Mask front showed a giant black bevel through the thumbnail
-// shadow margins - see SlabMesh.qml). 0 stays a real value: flat quad,
-// pixel parity with the quad-only model. 300 is the maximum REQUEST; the
-// effective value is always clipped to half the fitted step
+// Simulated slab thickness (WindowLayerThickness, Int 0-300 px): default
+// 24 - measured with 2: the box was built but the rim did not read at all
+// in the nested session ("sigue sin grosor"); at 24 the layers finally read
+// as a solid at oblique angles while the clip to half the fitted step keeps
+// them far from touching each other. The box spans exactly the window rect
+// (win.width x win.height), NOT the grab with its shadow margins, so the
+// rim never becomes a bezel (measured first attempt: a flat quad in front
+// of an uncullled solid box showed a giant black bevel through the
+// thumbnail shadow margins - see SlabMesh.qml). 0 stays a real value:
+// flat quad, pixel parity with the quad-only model. 300 is the maximum
+// REQUEST; the effective value is always clipped to half the fitted step
 // (thicknessEffective).
-const THICKNESS_DEFAULT = 2;
+const THICKNESS_DEFAULT = 24;
 const THICKNESS_MAX = 300;
 // WindowLayerEdgeColor default: the slab sides take the same dark tone as
 // the plate veil out of the box (a coherent shadow between layers).

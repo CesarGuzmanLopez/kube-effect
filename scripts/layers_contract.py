@@ -24,7 +24,7 @@ updated by the amendment):
       no per-layer clamp, no stretch when the configured gap already fits)
       — the same fixed cap for every shape, sheet included;
   (h) slab box (fourth amendment, final single-box design): eff =
-      min(request clamped 0-300 with default 2, fitted/2) decides the
+      min(request clamped 0-300 with default 24, fitted/2) decides the
       shape. eff 0 (or no QtQuick3D.Helpers) -> flat built-in #Rectangle,
       NoCulling front, unit z scale: pixel parity with the quad-only
       model. eff > 0 -> ONE closed ProceduralMesh box per layer: TWO
@@ -45,6 +45,13 @@ updated by the amendment):
       every internalId (pixel parity with the cube of before);
   (d) every id in layeredIds has wId == "" in its face grab, and every id
       NOT layered (minimized/dock/desktopWindow) keeps its internalId;
+  (i) lighting (measured 2026-11-28: an unlit edge band reads as a shadow,
+      not a solid): the edge material is Fragment-lit with the pinned
+      roughness/metalness while the front, the faces and the plate keep
+      the ADR-026 NoLighting; and the camera headlight exists iff
+      WindowLayering does (a Repeater3D with model 0 instantiates zero
+      nodes - the virgin tree of the flag-off cube is byte-for-byte the
+      old one, lights included);
   (e) gap 0: every layer of a face shares z == +epsilon;
   (f) plate: z == -2 (the veil just behind the face plane), strictly behind
       EVERY quad (-2 < +epsilon) so it veils the holes without covering
@@ -99,16 +106,26 @@ ROT_MIN, ROT_MAX, ROT_DEFAULT = 0.0, 1.0, 0.7
 FADE_FLOOR = 0.1
 MASK_THRESHOLD = 0.99
 FACE_CUTOFF = 0.5
-# Slab body (fourth amendment): the thickness request clamps 0-300 with a
-# default of 0 (= flat quad, pixel parity); the EFFECTIVE value is then
-# clipped to half the fitted step, so two layers can never intersect. The
-# edge colour defaults to the plate tone; anything the QML resolver maps
-# to the default must map to the same rgba here.
-THICK_MIN, THICK_MAX, THICK_DEFAULT = 0, 300, 0
+# Edge lighting (measured 2026-11-28): the unlit flat colour "reads as a
+# shadow, not a solid" - the edge material is Fragment-lit (rough matte
+# plastic) and the camera headlight exists iff the layers do; everything
+# else in the effect keeps the ADR-026 NoLighting contract.
+EDGE_LIGHTING = "fragment"
+EDGE_ROUGHNESS = 0.7
+EDGE_METALLIC = 0.0
+UNLIT = "none"
+# Slab (fourth amendment, final single-box design): the thickness request
+# clamps 0-300 with a default of 24 (measured 2026-11-28: with the previous
+# default 2 the box was built but the rim never read; 24 finally looks like
+# a solid at oblique angles; 0 stays a real value: flat quad, pixel parity);
+# the EFFECTIVE value is then clipped to half the fitted step, so two
+# layers can never intersect. The edge colour defaults to the plate tone;
+# anything the QML resolver maps to the default must map to the same rgba
+# here.
+THICK_MIN, THICK_MAX, THICK_DEFAULT = 0, 300, 24
 EDGE_DEFAULT_HEX = "#141719"
-# The slab body sits HALF its effective depth plus the epsilon behind the
-# front plane (its own front face rests epsilon behind the textured quad -
-# the anti-Z-fight offset; see WindowLayers.qml).
+# Tolerance for the edge colour components (float32 round-trip of a hex
+# colour through the live material).
 EDGE_TOL = 1e-5
 
 STUB_ROWS = 6
@@ -531,6 +548,33 @@ def _face_material_problems(ctx, face, problems):
     problems.append(
       f"{label}: face alphaCutoff {face['faceCutoffLive']} != pinned {FACE_CUTOFF}"
     )
+  if face.get("faceLighting", "none") != UNLIT:
+    problems.append(
+      f"{label}: face material lighting {face.get('faceLighting')!r} != none (the ADR-026 grab contract: faces are never re-illuminated by the headlight)"
+    )
+
+
+def _quad_lighting_problems(label, quad, problems):
+  """Clause (i): the front never receives light (the textured grab
+  contract, ADR-026) while the edge MUST be Fragment-lit with the pinned
+  matte roughness (measured 2026-11-28: an unlit edge is a shadow-like
+  contour, no volume)."""
+  if quad.get("frontLighting") != UNLIT:
+    problems.append(
+      f"{label}: quad {quad['id']} front lighting {quad.get('frontLighting')!r} != none (the textured front stays NoLighting)"
+    )
+  if quad.get("edgeLighting") != EDGE_LIGHTING:
+    problems.append(
+      f"{label}: quad {quad['id']} edge lighting {quad.get('edgeLighting')!r} != {EDGE_LIGHTING!r} (an unlit edge reads as a flat shadow, not a solid)"
+    )
+  if not close(quad.get("edgeRoughness", 0.0), EDGE_ROUGHNESS):
+    problems.append(
+      f"{label}: quad {quad['id']} edge roughness {quad.get('edgeRoughness')} != {EDGE_ROUGHNESS} (matte plastic, never a mirror)"
+    )
+  if not close(quad.get("edgeMetallic", 1.0), EDGE_METALLIC):
+    problems.append(
+      f"{label}: quad {quad['id']} edge metallic {quad.get('edgeMetallic')} != {EDGE_METALLIC}"
+    )
 
 
 def _plate_material_problems(ctx, face, problems):
@@ -541,6 +585,10 @@ def _plate_material_problems(ctx, face, problems):
   if face["plateAlphaMode"] != "blend":
     problems.append(
       f"{label}: plate alphaMode {face['plateAlphaMode']!r} - the veil must stay Blend always"
+    )
+  if face.get("plateLighting", "none") != UNLIT:
+    problems.append(
+      f"{label}: plate lighting {face.get('plateLighting')!r} != none (the veil is a flat colour by design)"
     )
   expected = ctx["plate"] * ctx["layer"]
   if not close(face["plateOpacityLive"], expected):
@@ -566,6 +614,7 @@ def _quad_material_problems(ctx, shown, problems):
       problems.append(
         f"{label}: quad {quad['id']} alphaMode {quad['alphaMode']!r} != {expected!r} for layerOpacity {layer} (>= {MASK_THRESHOLD} means the depth-ordered Mask)"
       )
+    _quad_lighting_problems(label, quad, problems)
     if not close(quad["materialOpacity"], layer):
       problems.append(
         f"{label}: quad {quad['id']} material opacity {quad['materialOpacity']} != layerOpacity {layer}"
@@ -711,6 +760,14 @@ def validate(dump):
     problems.append(
       f"dump: Cube.layerOpacity {dump['layerOpacityLive']} != mirrored {expected_layer} (rotating {dump['rotating']}, raw {dump['layerRotationRaw']})"
     )
+  # Virgin-tree parity of the headlight (the ScreenView gate, mirrored by
+  # the harness probe): one DirectionalLight with the flag ON, ZERO light
+  # nodes with it OFF - the untouched cube keeps its exact scene tree.
+  expected_lights = 1 if bool(dump["layering"]) else 0
+  if int(dump.get("headlightCount", 0)) != expected_lights:
+    problems.append(
+      f"dump: headlight count {dump.get('headlightCount')} != {expected_lights} (layering {dump['layering']}: the headlight must exist iff the layers can)"
+    )
   if (
     int(dump["currentStubNumber"]) >= 1
     and int(dump["currentFaceIndex"]) != int(dump["currentStubNumber"]) - 1
@@ -748,6 +805,8 @@ def _good_dump():
     "layerRotationRaw": 0.7,
     "faceOpacityLive": 1.0,
     "layerOpacityLive": 1.0,
+    # Headlight parity: the good dump has the flag on -> exactly one.
+    "headlightCount": 1,
     "faces": [],
   }
   for n in range(1, 4):
@@ -838,6 +897,12 @@ def _with_layer_fields(dump, layer=1.0):
       quad["edgeAlphaMode"] = "mask" if layer >= MASK_THRESHOLD else "blend"
       quad["edgeOpacity"] = layer
       quad["edgeR"], quad["edgeG"], quad["edgeB"], quad["edgeA"] = edge
+      quad["frontLighting"] = UNLIT
+      quad["edgeLighting"] = EDGE_LIGHTING
+      quad["edgeRoughness"] = EDGE_ROUGHNESS
+      quad["edgeMetallic"] = EDGE_METALLIC
+    face["faceLighting"] = UNLIT
+    face["plateLighting"] = UNLIT
   return dump
 
 
@@ -882,6 +947,8 @@ def _flag_off_dump():
   its own (the parity contract with any rotation value in the key)."""
   dump = _good_dump()
   dump["layering"] = False
+  # Virgin tree: the headlight Repeater3D has model 0, zero lights.
+  dump["headlightCount"] = 0
   for face in dump["faces"]:
     face["active"] = False
     face["quads"] = []
@@ -1050,6 +1117,39 @@ def _slab_cases(expects_rejection, failures):
   )
 
 
+def _lighting_cases(expects_rejection):
+  """The lighting family (measured 2026-11-28: an unlit edge band reads as
+  a shadow, not a solid). Edge Fragment + rough matte; front, faces and
+  plate keep NoLighting (ADR-026); the camera headlight exists iff the
+  flag does (virgin-tree parity)."""
+  expects_rejection(
+    "edge unlit again (reads as a shadow, not a solid)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("edgeLighting", "none"),
+  )
+  expects_rejection(
+    "textured front re-illuminated (ADR-026 contract broken)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("frontLighting", "fragment"),
+  )
+  expects_rejection(
+    "edge roughness drift (mirror instead of matte)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("edgeRoughness", 0.1),
+  )
+  expects_rejection(
+    "face material touched by the headlight lighting",
+    lambda d: d["faces"][0].__setitem__("faceLighting", "fragment"),
+  )
+  # The headlight gate, both directions.
+  expects_rejection(
+    "headlight present with the flag off (virgin tree broken)",
+    lambda d: d.__setitem__("headlightCount", 1),
+    _flag_off_dump,
+  )
+  expects_rejection(
+    "headlight missing with the flag on (edges stay unlit)",
+    lambda d: d.__setitem__("headlightCount", 0),
+  )
+
+
 def _ladder_cases(failures):
   """The exact-fit (non-fitting), single-window and zero-gap ladders,
   each with their own regression mutation. Lives apart from selftest()
@@ -1176,6 +1276,7 @@ def selftest():
 
   _material_cases(expects_rejection, failures)
   _slab_cases(expects_rejection, failures)
+  _lighting_cases(expects_rejection)
 
   _ladder_cases(failures)
   return failures

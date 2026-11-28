@@ -73,9 +73,16 @@ the ADR-028 "Puertas" (amended):
                                    was the measured black bezel).
   thickfit request 10 (< half  -> eff 10: the request survives when it
            the step)               already fits.
-  thickdefault raw 2 (schema    -> the thin real rim out of the box.
+  thickdefault raw UNSET        -> a fresh kwinrc: the resolver answers 24
+                                 (measured 2026-11-28: 2 px did not read),
+                                 eff min(24, 50/2=25) = 24.
   thickcolour custom #ff0000    -> the edge rgba read live from the
                                    engine matches the resolver.
+  (lighting, all thick* + rest): the edge material is Fragment-lit
+  (roughness 0.7, metalness 0) while the textured front, the faces and
+  the plate stay NoLighting; the camera-anchored headlight Repeater3D is
+  mirrored by the harness probe and counted 1 iff WindowLayering - flag
+  off = zero light nodes (virgin tree).
 
 For EVERY active face the oracle additionally pins the (d) hole contract
 (each layeredIds entry has wId == "" in ITS OWN face grab — the hole
@@ -335,8 +342,10 @@ _SCENARIOS = [
       "thickness": 10,
     },
   ),
-  # the SCHEMA DEFAULT 2 px against the default step: a thin real box
-  # (eff 2) out of the box - the rim the user sees immediately.
+  # the SCHEMA DEFAULT against the default step: raw UNSET resolves to
+  # 24 px (measured 2026-11-28: 2 did not read), and against the fitted
+  # step of 50 (gap 120) it survives as eff 24 - a solid-looking box out
+  # of a fresh kwinrc.
   (
     "thickdefault",
     {
@@ -346,7 +355,7 @@ _SCENARIOS = [
       "lod": 0,
       "plate": 0.25,
       "current": 1,
-      "thickness": 2,
+      "thickness": None,
     },
   ),
   # custom edge colour through the raw-string resolver:
@@ -455,7 +464,10 @@ def main():
     "the single closed slab box (flat #Rectangle at effective thickness 0 "
     "= parity; two-subset ProceduralMesh with BackFaceCulling when "
     "requested, z scale clipped to half the fitted step; the textured "
-    "front exactly on the ladder; consecutive boxes never crossing)"
+    "front exactly on the ladder; consecutive boxes never crossing; "
+    "edge Fragment-lit with the rough matte pin while front/faces/plate "
+    "stay NoLighting; camera headlight present iff the flag (zero light "
+    "nodes for the virgin cube))"
   )
   return 0
 

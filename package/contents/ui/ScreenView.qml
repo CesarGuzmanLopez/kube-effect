@@ -536,6 +536,35 @@ Item {
       id: camera
       clipNear: 10.0
       clipFar: 100000.0
+      // Headlight for the slab edges (ADR-028 fourth amendment, the
+      // "read as a solid" fix measured 2026-11-28): an unlit edge material
+      // is a flat colour that reads as a shadow ("solo un cuadro como
+      // sombreado"), not as volume. A soft directional light rides on the
+      // camera (its own +Z is the view direction; a child of the camera
+      // inherits it) with a fixed euler offset so the four edge
+      // orientations of the box catch visibly DIFFERENT shading instead of
+      // one flat silhouette. The light is built ONLY while the layers can
+      // exist: a Repeater3D with model 0 instantiates ZERO nodes, so a
+      // virgin cube (WindowLayering false) keeps byte-for-byte the scene
+      // tree of before - the strict parity the ADR demands, this time on
+      // the light side. It illuminates nothing else: every other material
+      // of the effect (faces, fronts, plate, caps, hull) is NoLighting by
+      // the ADR-026 contract, so Fragment materials feel it and the rest
+      // never does.
+      Repeater3D {
+        id: headlightRepeater
+        model: effect.configuration.WindowLayering === true ? 1 : 0
+        DirectionalLight {
+          eulerRotation: Qt.vector3d(25, -35, 0)
+          color: "#ffffff"
+          // Soft headlight: brightness (Qt 6.12 spelling; "intensity" is
+          // Qt3D's, and the live loader here rejects it - measured), kept
+          // under 1 so the rim reads volume without bleaching the dark
+          // edge tone.
+          brightness: 0.8
+          castsShadow: false
+        }
+      }
     }
 
     // Video 360 (Background == Video, Equirect + rotate): a sphere seen from

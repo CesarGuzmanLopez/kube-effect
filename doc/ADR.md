@@ -1464,8 +1464,8 @@ single-window a +cap.
 simulado de las capas**: decide el usuario dar a cada ventana-capa un
 **grosor real** (slab) con el canto de un color propio, sin que dos capas
 puedan atravesarse nunca. Nuevas claves (ambas en Ventanas, sin enums):
-`WindowLayerThickness` (Int 0–300 px, default **2** — un canto fino visible
-de entrada; 0 = plano, paridad píxel exacta con el modelo sin grosor) y
+`WindowLayerThickness` (Int 0–300 px, default **24** — ver nota de
+redefault abajo; 0 = plano, paridad píxel exacta con el modelo sin grosor) y
 `WindowLayerEdgeColor` (Color, default `#141719`, el tono del velo). Grosor
 EFECTIVO = `min(solicitado, fittedGap/2)` (layerGeometry.thicknessEffective):
 como el paso entre ranks es fittedGap, con eff ≤ half-step la cara posterior
@@ -1501,9 +1501,9 @@ plate/interior exactamente como con el quad plano (la regla que el cubo detrás
 violaba). El nodo se centra en `layerDepthOut − eff/2`: el **frente** cae
 exacto en la ladder — el tope 150 y el no-cruce se miden en la cara frontal,
 nunca en el centro — y la caja escala a (win.w/100, win.h/100, eff/100): el
-rectángulo EXACTO de la ventana, sin el margen de sombra (con default 2 px eso
-es un canto fino, no un bisel). Con eff 0 (o sin Helpers) el Model conserva el
-built-in `#Rectangle` con NoCulling: píxel a píxel el modelo plano. Gate:
+rectángulo EXACTO de la ventana, sin el margen de sombra. Con `eff 0`
+(o sin Helpers) el Model conserva el built-in `#Rectangle` con NoCulling:
+píxel a píxel el modelo plano. Gate:
 cláusula (h) leída en vivo del motor (modo plano vs caja, **dos subsets**,
 scale (w/100, h/100, eff/100), culling back/back del frente y del canto,
 frente exacto en la ladder, alphaMode/opacidad/color resuelto del canto,
@@ -1514,6 +1514,25 @@ medido**, caja mayor que la ventana, alphaMode fijo, cajas que se atraviesan,
 deriva de color) + escenarios `thick`/`thickfit`/`thickdefault`/
 `thickcolour` sobre el Cube real. Trampas documentadas en ARQUITECTURA 2.4:
 el tope lo marca la cara frontal; caja sin culling = bisel negro.
+
+**Re-default medido (2026-11-28)**: el default inicial 2 px construcía la caja
+pero el canto no se leía en el anidado («sigue sin grosor»): el default pasa a
+**24 px** (visible como sólido en oblicuo; sigue recortado a fittedGap/2 y el
+KCM admite 0–300).
+
+**Canto con luz (medido el mismo 2026-11-28, segunda corrección visual)**: con
+grosor alto la caja dibujaba canto, pero «sin canto sólido, solo un cuadro como
+sombreado» — el material del canto con `NoLighting` es un color plano
+indistinguible de una sombra. El canto pasa a `lighting: Fragment`
+(roughness 0.7, metallic 0) y la escena añade un **DirectionalLight suave tipo
+headlight anclado a la cámara** (offset euler para que las cuatro orientaciones
+de canto reciban luz distinta). El frente texturizado y las caras del cubo
+conservan NoLighting (contrato ADR-026 intacto: el grab no se reilumina); la luz
+existe **solo con `WindowLayering` activo** (flag off = cero nodos nuevos,
+paridad estricta del cubo virgen también en el árbol de escena). Gate: canto
+Fragment + roughness resueltos leídos en vivo, frente y plate siguen NoLighting;
+rechazo sintético del canto NoLighting («no lee sólido») y unidad de que la luz
+solo vive con el flag.
 
 **Orden por profundidad en reposo (medido 2026-11-27, segunda corrección del
 flip)**: con los quads en `Blend` fijo QtQuick3D ordena la pasada transparente
