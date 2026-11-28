@@ -97,7 +97,14 @@ lint-ci: check
 # solo donde layeredIds lo declara, las filas descartadas quedan planas,
 # pickable + desktop reexpuesto y el plate SIEMPRE en su plano de velo
 # (z = −2, detrás de todos los quads: tapa los huecos para que no asome el
-# interior). Su --selftest comprueba
+# interior). Desde la enmienda del orden añade el contrato de MATERIALES
+# leído en vivo (patrón check-cap): quads Mask + cutoff 0.5 clavado +
+# opacity 1 en reposo, Blend + opacity == WindowLayerRotationOpacity
+# resuelto al girar (1.0 = Mask sólido también girando, floor 0.1
+# compartido con las caras, raw sin grabar = default 0.7), plate Blend
+# siempre con opacity == plate × layer, y paridad con el flag apagado a
+# cualquier valor de la clave (cero quads, grab íntegro, la cara sigue
+# dependiendo SOLO de faceOpacity). Su --selftest comprueba
 # el oráculo sin motor. Se salta (exit 0) si falta PySide6.
 # check-cylinder-wiring.py instancia el Cube.qml REAL (no la malla suelta) contra
 # el stub org.kde.kwin del harness comun (qml_check_harness.STUB_MODULE)

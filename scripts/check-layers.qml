@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick3D
 
 // Directory of the real effect components: this harness instantiates the
 // SAME Cube.qml that ScreenView.qml builds at runtime — and through it
@@ -8,6 +9,8 @@ import QtQuick
 // (check-layers.py) validates the dumped object tree against an
 // independent oracle (layers_contract.py).
 import "../package/contents/ui" as UI
+import "../package/contents/ui/constants.js" as Constants
+import "../package/contents/ui/layerGeometry.js" as LayerGeo
 
 // Scenario knobs arrive as context properties from check-layers.py:
 //   stubDesktopCount   the stub VirtualDesktopModel size (shared harness)
@@ -17,6 +20,18 @@ import "../package/contents/ui" as UI
 //     layerGeometry.js, and the Python oracle mirrors that resolution.
 //   stubCurrentNumber  x11DesktopNumber of the fake current desktop
 //     (drives Cube.currentFaceIndex and the LOD decision per face).
+//   stubLayerRotation  the raw WindowLayerRotationOpacity Double (None =
+//     never saved; the schema default 0.7 must answer through the
+//     layerGeometry resolver).
+//   stubRotating       simulates ScreenView's root.cubeMoving: the harness
+//     then drives cube.layerOpacity through the EXACT runtime chain
+//     (LayerGeo.rotationOpacity + Constants.faceOpacity(1, v, true)), the
+//     same composition ScreenView.qml holds (ScreenView itself needs the
+//     whole effect context, so the chain is mirrored here line for line;
+//     the oracle re-derives it independently in Python).
+//   stubFaceOpacity    the cube's face material opacity (default 1): the
+//     parity clause reads the live FACE materials and expects them to
+//     follow ONLY this value, never layerOpacity.
 Item {
   id: harness
 
@@ -24,6 +39,9 @@ Item {
   readonly property var rawGap: typeof stubGap === "number" ? stubGap : null
   readonly property var rawLod: typeof stubLod === "number" ? stubLod : null
   readonly property var rawPlate: typeof stubPlate === "number" ? stubPlate : null
+  readonly property var rawLayerRotation: typeof stubLayerRotation === "number" ? stubLayerRotation : null
+  readonly property bool knobRotating: typeof stubRotating === "boolean" && stubRotating
+  readonly property real knobFaceOpacity: typeof stubFaceOpacity === "number" ? stubFaceOpacity : 1
   readonly property int rawCurrent: typeof stubCurrentNumber === "number" ? stubCurrentNumber : 0
 
   // The fake current desktop: a real QObject with the number Cube
@@ -54,6 +72,14 @@ Item {
     windowLayerLodFaces: harness.rawLod
     windowLayerPlateOpacity: harness.rawPlate
     currentDesktop: harness.currentStub
+    faceOpacity: harness.knobFaceOpacity
+    // The runtime ScreenView chain, mirrored (see the knob comment): the
+    // layerGeometry resolver clamps the raw key and Constants.faceOpacity
+    // picks rest=1 vs the key by the moving signal. With the flag off this
+    // binding still runs but reaches NOTHING visible (no quads, plate
+    // hidden, face materials never read layerOpacity) — the parity clause
+    // pins exactly that.
+    layerOpacity: Constants.faceOpacity(1, LayerGeo.rotationOpacity(harness.rawLayerRotation), harness.knobRotating)
   }
 
   // The live tree, serialised for the Python oracle. The reads below also
@@ -65,6 +91,20 @@ Item {
   function buildDump() {
     const count = cube.faceCount;
     const currentIdx = cube.currentFaceIndex;
+    // Enum -> name for the live quad materials (the face/plate enums are
+    // already stringified by the components' own gate accessors).
+    function modeName(m) {
+      if (m === PrincipledMaterial.Mask) {
+        return "mask";
+      }
+      if (m === PrincipledMaterial.Opaque) {
+        return "opaque";
+      }
+      if (m === PrincipledMaterial.Blend) {
+        return "blend";
+      }
+      return "unknown";
+    }
     const faces = [];
     for (let i = 0; i < count; ++i) {
       const face = cube.faceNodeAt(i);
@@ -89,7 +129,10 @@ Item {
           visible: quad.visible,
           showLayer: quad.showLayer,
           pickable: quad.pickable,
-          desktopOk: quad.desktop === face.desktop
+          desktopOk: quad.desktop === face.desktop,
+          alphaMode: modeName(quad.materials[0].alphaMode),
+          alphaCutoff: quad.materials[0].alphaCutoff,
+          materialOpacity: quad.materials[0].opacity
         });
       }
       const grabs = [];
@@ -115,7 +158,12 @@ Item {
         quads: quads,
         grabs: grabs,
         plateVisible: wl.plateVisibleNow,
-        plateZ: wl.plateZNow
+        plateZ: wl.plateZNow,
+        plateAlphaMode: wl.plateAlphaModeNow,
+        plateOpacityLive: wl.plateOpacityNow,
+        faceAlphaMode: face.faceMatModeNow,
+        faceOpacityLive: face.faceMatOpacityNow,
+        faceCutoffLive: face.faceMatCutoffNow
       });
     }
     return JSON.stringify({
@@ -128,6 +176,10 @@ Item {
       gapRaw: harness.rawGap,
       lodRaw: harness.rawLod,
       plateRaw: harness.rawPlate,
+      layerRotationRaw: harness.rawLayerRotation,
+      rotating: harness.knobRotating,
+      faceOpacityLive: cube.faceOpacity,
+      layerOpacityLive: cube.layerOpacity,
       faces: faces
     });
   }

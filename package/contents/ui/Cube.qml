@@ -396,11 +396,19 @@ Node {
   // sheetGap: the block only READS faceCount/currentFaceIndex for the LOD,
   // so it cannot recreate the ADR-026b binding-loop class. The depth budget
   // is the fixed cap in layerGeometry.js for every shape — the amended
-  // outward stack has no per-representation wiring left.
+  // outward stack has no per-representation wiring left. The FIFTH key
+  // (WindowLayerRotationOpacity) does not arrive raw: ScreenView resolves
+  // it through layerGeometry.rotationOpacity + the faceOpacity mechanism
+  // (Constants.faceOpacity(1, resolved, cubeMoving), FaceFadeMs) and feeds
+  // the animated value as layerOpacity below — inert while the flag is off
+  // (WindowLayers reads it only for quads and plate).
   property bool windowLayering: false
   property int windowLayerGap: LayerGeometry.GAP_DEFAULT
   property int windowLayerLodFaces: LayerGeometry.LOD_FACES_DEFAULT
   property real windowLayerPlateOpacity: LayerGeometry.PLATE_OPACITY_DEFAULT
+  // The effective opacity of the pile, animated in ScreenView exactly like
+  // faceOpacity (rest 1, rotation WindowLayerRotationOpacity).
+  property real layerOpacity: 1
   // The desktop the camera is aimed at (ScreenView's currentDesktop), for
   // the LOD distance. Compared by desktop NUMBER, not by wrapper identity:
   // the model rows and Workspace.currentDesktopForScreen may hand out
@@ -480,6 +488,7 @@ Node {
       layersActive: cube.layerFaceActive(index)
       layerGap: cube.layerGapResolved
       layerPlateOpacity: cube.layerPlateResolved
+      layerOpacity: cube.layerOpacity
       // Flat sheet (ADR-024): both quads at the centre, one facing each
       // way (0 deg / 180 deg), separated by +/-sheetGap in z
       // (proportional, >= 2 units total) so the near-coplanar triangles

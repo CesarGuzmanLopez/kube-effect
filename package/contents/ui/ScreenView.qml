@@ -9,6 +9,7 @@ import QtQuick3D
 import org.kde.kwin as KWinComponents
 
 import "constants.js" as Constants
+import "layerGeometry.js" as LayerGeometry
 
 Item {
   id: root
@@ -233,6 +234,24 @@ Item {
   // is independent of DimWhileRotating: that darkens the hull, this the faces.
   property real faceOpacity: Constants.faceOpacity(effect.configuration.FaceOpacity, effect.configuration.FaceRotationOpacity, root.cubeMoving)
   Behavior on faceOpacity {
+    NumberAnimation {
+      duration: Constants.faceFadeDuration(effect.configuration.FaceFadeMs)
+      easing.type: Easing.OutQuad
+    }
+  }
+  // Window layers (ADR-028 as amended): the pile fades with its OWN key,
+  // WindowLayerRotationOpacity, through the very same machinery (rest 1 ->
+  // the key while turning, FaceFadeMs). Rest is HARD-CODED 1, not the
+  // FaceOpacity key: at rest the layered windows are always solid opaque
+  // quads sitting in front of their holes (the Mask threshold in
+  // WindowLayers reads this value, and >= 0.99 keeps the depth-ordered
+  // opaque pass). The default 0.7 equals the face rotation default, so
+  // out of the box turning fades the pile exactly like the face; 1.0 keeps
+  // the windows solid AND depth-ordered while turning too. With the flag
+  // off the value flows nowhere visible: no quads exist, the plate is
+  // hidden and the face materials never read it (parity gate assert).
+  property real layerOpacity: Constants.faceOpacity(1, LayerGeometry.rotationOpacity(effect.configuration.WindowLayerRotationOpacity), root.cubeMoving)
+  Behavior on layerOpacity {
     NumberAnimation {
       duration: Constants.faceFadeDuration(effect.configuration.FaceFadeMs)
       easing.type: Easing.OutQuad
@@ -562,6 +581,9 @@ Item {
       id: cube
       faceDisplacement: effect.configuration.CubeFaceDisplacement
       faceOpacity: root.faceOpacity
+      // Window layers pile opacity (ADR-028 as amended): the resolved +
+      // animated value above, forwarded untouched down to WindowLayers.
+      layerOpacity: root.layerOpacity
       // Shape (ADR-025): resolved here through Constants.shape() so a
       // hand-edited kwinrc value can only ever mean Polygon; below 3
       // desktops it picks the representation (flat sheet vs the

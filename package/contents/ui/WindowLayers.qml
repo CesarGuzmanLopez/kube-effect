@@ -42,8 +42,12 @@ import "layerGeometry.js" as LayerGeometry
 // The plate is the optional dark veil (WindowLayerPlateOpacity) just BEHIND
 // the face plane (z = -2), in front of the interior: through the holes it is
 // what the windows read against, and it is what stops the inside of the cube
-// from showing through them. Quads and plate multiply the FACE opacity
-// (ADR-021): turning fades the whole pile, not only the base.
+// from showing through them. Quads and plate fade with the LAYER opacity
+// (WindowLayerRotationOpacity while rotating, 1 at rest) instead of the face
+// opacity: with the default 0.7 equal to the face rotation default the whole
+// pile fades exactly like the face while turning (the ADR-021 behaviour),
+// and with the flag off the key is inert — the windows are pixels of the
+// face grab and share the desktop's transparency exactly.
 //
 // Discards (ADR-028 rule 4): minimized windows do not exist (same as the
 // flat grab) and docks/panels plus the desktop (wallpaper) window stay
@@ -104,8 +108,15 @@ Node {
   // is the same fixed budget for every shape.
   property real layerGap: LayerGeometry.GAP_DEFAULT
   property real plateOpacity: LayerGeometry.PLATE_OPACITY_DEFAULT
-  // The face material opacity (ADR-021): the whole pile fades with it.
-  property real faceOpacity: 1
+  // The EFFECTIVE opacity of the pile, animated by ScreenView with the very
+  // faceOpacity mechanism (Constants.faceOpacity(1, resolved
+  // WindowLayerRotationOpacity, cubeMoving) + FaceFadeMs): 1 at rest, the
+  // key's value while turning (0.7 default == the face rotation default).
+  // The alphaMode threshold reads THIS value: at >= 0.99 (rest, or the key
+  // at 1.0 even while turning) the quads are Mask; below, Blend — the face
+  // opacity no longer fades the pile (the key owns that). Inert while the
+  // flag is off: no quads exist and the face materials never read it.
+  property real layerOpacity: 1
 
   // internalId -> stackingOrder over the layered windows of THIS face only.
   property var orderById: ({})
@@ -207,11 +218,14 @@ Node {
       PrincipledMaterial {
         lighting: PrincipledMaterial.NoLighting
         cullMode: Material.NoCulling
-        // Blend ALWAYS (ADR-028 rule 5): the plate is translucent by
-        // design; Mask would snap it opaque and cover the whole pile.
+        // Blend ALWAYS by design: a uniform veil colour with no content to
+        // order, so the opaque-pass trick the quads use (threshold + depth
+        // writes) buys nothing here and Mask would snap the veil opaque over
+        // its own alpha. Fades with the pile (layerOpacity), never with the
+        // face: plateOpacity x layerOpacity.
         alphaMode: PrincipledMaterial.Blend
         baseColor: LayerGeometry.PLATE_COLOR
-        opacity: root.plateOpacity * root.faceOpacity
+        opacity: root.plateOpacity * root.layerOpacity
       }
     ]
   }
@@ -287,13 +301,26 @@ Node {
         PrincipledMaterial {
           lighting: PrincipledMaterial.NoLighting
           cullMode: Material.NoCulling
-          // Blend ALWAYS (ADR-028 rule 5): the layers are translucent by
-          // design and the transparent-pass centroid rule (ADR-026) orders
-          // them; Mask would hard-discard below-cutoff pixels of rounded
-          // or semi-transparent windows (and write depth, occluding the
-          // layers behind from their own holes).
-          alphaMode: PrincipledMaterial.Blend
-          opacity: root.faceOpacity
+          // The ADR-026 threshold over the LAYER opacity (measured, the
+          // amendment to the amendment): a quad's sort centroid carries the
+          // window's lateral offset, so the transparent-pass centroid order
+          // does NOT follow the rank — at oblique angles at rest a lower
+          // rank painted over the top one. While the pile is effectively
+          // opaque (rest, or WindowLayerRotationOpacity 1.0 turning) the
+          // quad joins the OPAQUE pass with depth writes: real geometry
+          // settles the overlap (the outermost wins the pixel). Below
+          // 0.99 it is Blend again with the fade, and the residual centroid
+          // swaps last only WHILE turning (documented accepted behaviour).
+          // Unlike the face Mask (bounded to the cylinder, where the flat
+          // pile never overlapped), the quads always overlap each other at
+          // oblique angles, so the threshold applies on every shape.
+          alphaMode: layerOpacity < 0.99 ? PrincipledMaterial.Blend : PrincipledMaterial.Mask
+          // Pinned explicitly (the face argument: never rely on a Qt
+          // default moving the hard/soft edge). Trade-off measured: at rest
+          // the AA window edge/shadow cuts hard at the cutoff, same class
+          // as the cylinder face holes (ADR-026).
+          alphaCutoff: 0.5
+          opacity: root.layerOpacity
           baseColorMap: Texture {
             sourceItem: KWinComponents.WindowThumbnail {
               // A dropped window (hidden while the delegate still exists,
@@ -329,4 +356,8 @@ Node {
   }
   readonly property bool plateVisibleNow: plate.visible
   readonly property real plateZNow: plate.position.z
+  // Material contract reads (live engine values, not the bindings): the
+  // plate must stay Blend always and fade as plateOpacity x layerOpacity.
+  readonly property string plateAlphaModeNow: plate.materials[0].alphaMode === PrincipledMaterial.Mask ? "mask" : plate.materials[0].alphaMode === PrincipledMaterial.Opaque ? "opaque" : plate.materials[0].alphaMode === PrincipledMaterial.Blend ? "blend" : "unknown"
+  readonly property real plateOpacityNow: plate.materials[0].opacity
 }

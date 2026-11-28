@@ -5,7 +5,7 @@
 
 // Window-layer geometry (ADR-028 model H as amended 2026-11-27): the pure
 // depth formulas behind WindowLayers.qml and the Cube LOD gate, plus the
-// kwinrc clamps for the four WindowLayer* keys.
+// kwinrc clamps for the five WindowLayer* keys.
 //
 // This module lives apart from constants.js on purpose, exactly like
 // arcGeometry.js and capGeometry.js (the ADR-027 precedent): constants.js
@@ -83,6 +83,17 @@ const LOD_FACES_DEFAULT = 1;
 const LOD_FACES_MIN = 0;
 const LOD_FACES_MAX = 8;
 const PLATE_OPACITY_DEFAULT = 0.25;
+// WindowLayerRotationOpacity (Double 0-1): the ABSOLUTE opacity of the pile
+// while the cube moves. 0.7 is the schema default and equals the face
+// rotation default (FaceRotationOpacity), so the turn fade matches the
+// face out of the box; 1.0 keeps the windows solid WHILE TURNING too (the
+// depth-ordered Mask stays on). At rest the layers are ALWAYS 1 (opaque
+// windows) — ScreenView feeds this value as the rotation branch of
+// Constants.faceOpacity(1, resolved, cubeMoving), the very mechanism and
+// duration (FaceFadeMs) the faces already use, zero new machinery. The 0.1
+// fade floor of Constants.faceOpacity applies while rotating, same as the
+// faces; the flag off makes the whole key inert (no quads exist at all).
+const ROTATION_OPACITY_DEFAULT = 0.7;
 
 function clamped(raw, minimum, maximum, fallback) {
   const value = finiteOr(raw);
@@ -109,6 +120,14 @@ function lodFaces(rawLod) {
 // "no veil" value, exactly like the capOpacity contract.
 function plateOpacity(rawOpacity) {
   return clamped(rawOpacity, 0, 1, PLATE_OPACITY_DEFAULT);
+}
+
+// WindowLayerRotationOpacity (Double 0-1): the absolute layer opacity while
+// rotating; 0 clamps UP through Constants.faceOpacity's 0.1 fade floor at
+// the call site (the same face rule), so the raw 0..1 range is passed
+// through here and an unset/non-finite entry uses the schema default.
+function rotationOpacity(rawOpacity) {
+  return clamped(rawOpacity, 0, 1, ROTATION_OPACITY_DEFAULT);
 }
 
 // The step actually used between two consecutive ranks: the configured gap,

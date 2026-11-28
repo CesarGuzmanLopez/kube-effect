@@ -1448,3 +1448,110 @@ que `WindowLayering` está activo, patrón dim-amount). **Avanzado** conserva SO
 no de aspecto. Las claves de main.xml y sus rangos/default no cambian; solo se
 reubica la UI (gate: check-ui/check-schema validan widget, tipo, rango y
 conexión por nombre, sin depender del tab).
+
+**Orden por profundidad en reposo (medido 2026-11-27, segunda corrección del
+flip)**: con los quads en `Blend` fijo QtQuick3D ordena la pasada transparente
+por **centroide**, y el centroide de un quad = centro de cara + offset lateral
+de la ventana + profundidad exterior — no respeta el rank. Medido en el anidado
+con capas hacia fuera: en ángulos oblicuos EN REPOSOS había cambio de orden
+entre quads (la ventana de menor rank dibujada encima de la de mayor) y quads de
+caras vecinas intercalándose. Los quads adoptan el umbral ADR-026 de la cara
+sobre su opacidad efectiva: `≥ 0.99 → Mask` (con `alphaCutoff` clavado a 0.5,
+mismo argumento: no depender del default de Qt) y `< 0.99 → Blend`. En reposo el
+quad entra al pase opaco con **escritura de profundidad**: el orden se resuelve
+por geometría real (la capa más exterior gana el píxel); el grab de la cara
+(Blend en las formas planas, alfa 1 en los píxeles del wallpaper) tapa por
+depth-test los quads lejanos y los huecos siguen dejando ver el plate/interior
+como hasta ahora. A diferencia de la cara —cuyo Mask quedó acotado al cilindro
+porque la pila plana nunca se solapaba—, los quads se solapan entre sí a
+cualquier forma, así que el umbral corre en polígono, hoja y tambor por igual.
+Trade-off medido y aceptado: en reposo el borde AA/sombra de la ventana se corta
+duro en el cutoff (la misma clase de efecto ya documentada del hueco en
+cilindro). El plate conserva `Blend` siempre: color uniforme, sin contenido que
+ordenar.
+
+**Opacidad propia de las capas al girar (WindowLayerRotationOpacity, mismo
+2026-11-27)**: la clave nueva (Double 0–1, default **0.7**) fija la opacidad
+**absoluta** del quad durante el giro; **en reposo las capas valen SIEMPRE 1**
+(ventanas sólidas, umbral Mask incluido, sea cual sea el rest de las caras). El
+valor viaja por el mecanismo ya existente, cero machinery nueva:
+`ScreenView.layerOpacity = Constants.faceOpacity(1, LayerGeometry.rotationOpacity(raw),
+cubeMoving)` con el mismo `Behavior`/`FaceFadeMs` de las caras; el umbral de
+`alphaMode` de los quads mira ESTA opacidad efectiva — con la clave a 1.0 las
+ventanas quedan sólidas y ordenadas por profundidad **también al girar** (efecto
+buscado). **Paridad por default**: 0.7 es también el default de
+`FaceRotationOpacity` y `Constants.faceOpacity(1, v, true) == v` para todo v
+alcanzable (aserción numérica en check-constants), así que out-of-the-box la
+pila funda exactamente como el escritorio (comportamiento de ADR-021 conservado
+como default; el fundido residual por centroide solo dura mientras gira).
+**Paridad con el flag apagado (confirmación del usuario)**: sin capas las
+ventanas son píxeles del grab y comparten su transparencia — la clave es
+completamente inerte a cualquier valor (0.2/0.7/1.0 probados en el gate): cero
+quads, cero layeredIds, grab íntegro y los materiales VIVOS de la cara siguen
+dependiendo solo de faceOpacity (ningún binding de layerOpacity los toca). El
+plate funda con la pila: `plateOpacity × layerOpacity`. Gate: cláusula (g)
+del oráculo con los materiales leídos en vivo del motor (patrón
+check-cap/check-cylinder) + rechazos sintéticos nuevos (quad Blend en reposo,
+opacity ≠ 1 en reposo, cutoff movido, plate sin Blend, Mask al girar con 0.7,
+plate ignorando el fundido, cara tocada con flag off); en la UI la clave vive
+en Ventanas junto a gap y plate (4ª conexión `toggled→setEnabled`).
+
+
+## ADR-029 — El modelo interior lo trae el usuario: glTF local, cargado en runtime.
+
+**Decisión**: el interior (ADR-007, §4) arranca con **una sola feature de
+configuración**: el usuario elige un fichero de su disco (`ModelFile`, Url) y el efecto
+lo carga **sin compilar nada y sin conversión previa**, con `RuntimeLoader`
+(`QtQuick3D.AssetUtils`). El modelo es responsabilidad del usuario: él lo busca, él lo
+exporta, él ve cómo queda (`ModelScale`, Double, es un multiplicador del auto-ajuste).
+
+**Porqué**: era la única vía que cumple las reglas del proyecto a la vez — «solo QML»,
+«sin root», «el menú QML funciona sin compilar» (README/ADR-016). Pedir `.mesh` horneado
+hubiera obligado al usuario a correr `balsam`; y `balsam` ata el asset a la versión de Qt
+(la cabecera del `.mesh` lleva `fileVersion`, medido: 7 con Qt 6.12), así que un mesh
+empaquetado rompería en un KWin con Qt previo. Cargar el `.glb` tal cual no acopla a nada.
+
+**Formato aceptado y por qué exactamente ese** (medido en esta máquina, Qt 6.12.1,
+`QT_QPA_PLATFORM=minimal`, ficheros de Khronos glTF-Sample-Assets procesados con
+`gltf-transform` 4.5.1):
+
+| fichero | resultado RuntimeLoader | ms |
+| --- | --- | --- |
+| `Duck.glb` (120 KB, glTF 2.0 puro) | Ready, 1 model | 14 |
+| `DamagedHelmet.glb` (3.77 MB, puro) | Ready, 1 model | ~158 |
+| + `KHR_materials_unlit` | Ready | 162 |
+| + `KHR_draco_mesh_compression` | **Error**: «Draco mesh compression not supported» | 9 |
+| + `EXT_meshopt_compression` | **Error**: buffer sin atributo «uri» | 9 |
+| + `KHR_mesh_quantization` | **Error**: «No meshes remaining» | 15 |
+
+Es decir: las compresiones que hacen «más pequeño» el glTF para la web son justo las que
+Qt no lee — y `balsam` tampoco saca ninguna malla de ahí (0 `.mesh` generados, medido). De
+ahí que el spec (§4.1) acepte glTF **sin comprimir** y `.obj`, y descarte FBX/DAE/STL:
+el cargador de runtime solo conoce `.obj`/`.gltf`/`.glb` (doc de Qt).
+
+**Consecuencias aceptadas**:
+
+1. `RuntimeLoader` es menos eficiente que el formato interno (doc de Qt lo dice). A cambio,
+   cero pasos para el usuario. El coste medido (158 ms el casco de 3.7 MB) es carga, no
+   por-frame; el draw de una malla dentro del sólido es el de cualquier `Model`.
+2. El cargador de runtime **no valida ni aísla** el contenido (advertencia explícita en la
+   doc de Qt): se alimenta del disco del usuario, no de la red, y quien escribe
+   `[Effect-kube-effect]` ya controla su sesión (mismo argumento de `localSource`, §2.2).
+3. Sin `bounds` válidos el nodo no se pinta: el auto-ajuste necesita la caja del modelo y
+   Qt avisa de que puede no estar disponible hasta el primer render.
+
+**Degradación** (patrón ADR-022, el mismo de `CapMesh.qml`/`CylinderArcMesh.qml`): el
+import de `QtQuick3D.AssetUtils` queda **aislado** en `InteriorModel.qml`, cargado con
+`Loader`. Si el módulo falta, solo ese Loader falla y el cubo se pinta intacto. Si el
+fichero es ilegible, se avisa **una vez** con el `errorString` de Qt — el usuario ve
+escrito «Draco … not supported» en el log y entiende qué exportar distinto.
+
+**Vida útil de la escena**: el `Loader` solo está activo con fuente válida y volumen
+(3+ escritorios, regla de las tapas ADR-027: la hoja 2D no encierra nada). Cambiar de
+fichero reasigna `source` (RuntimeLoader descarga el anterior y carga el nuevo); al
+vaciar `ModelFile` el Loader se desactiva y libera el modelo.
+
+**No se hace**: catálogo de modelos, descarga desde el efecto, caché `.mesh`, miniatura 3D
+en `config.ui` (`QUiLoader` no pinta estado, ADR-016), posición/rotación por eje (un
+modelo, en el centro), «objeto estático que no gira». Salen en cuanto haya demanda;
+auto-ajuste + `ModelScale` cubren el 90 % del uso.

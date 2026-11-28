@@ -294,6 +294,7 @@ se ve por los bordes del hueco (parallax). Con el flag apagado (default) una car
 | `WindowLayerGap`          | Int    | 0–600 px | 120       | Paso de profundidad entre capas (hacia fuera, +z); 0 = todas a +ε, paridad con el plano                 |
 | `WindowLayerLodFaces`     | Int    | 0–8      | 1         | Caras alrededor del escritorio actual con capas (distancia por índice; 0 = todas)                  |
 | `WindowLayerPlateOpacity` | Double | 0–1      | 0.25      | Velo oscuro justo detrás del plano de la cara (z = −2): vela los huecos para que no asome el interior del sólido (0 = sin velo)      |
+| `WindowLayerRotationOpacity` | Double | 0–1   | 0.7       | Opacidad ABSOLUTA de las capas al girar (en reposo valen SIEMPRE 1); 1.0 = ventanas sólidas también al girar, ordenadas por profundidad; default = paridad con el fundido de la cara |
 
 Reglas:
 
@@ -307,6 +308,27 @@ Reglas:
 - Dirección: la ventana de **mayor z-index es la más cercana al observador** (la
   más exterior); la de abajo (rank 0) queda casi pegada a la cara, en +ε; cada
   rango sube un paso hacia fuera.
+- **Orden en reposo (medido 2026-11-27)**: el centroide del quad no respeta el
+  rank (lleva el offset lateral de su ventana), así que los quads usan el umbral
+  Mask/Blend de ADR-026 sobre su opacidad efectiva: `≥ 0.99 → Mask` con
+  `alphaCutoff 0.5` clavado (pase opaco, escribe profundidad — **en reposo gana
+  el mayor z-index por geometría**, el interior lejano no gana píxeles),
+  `< 0.99 → Blend` (al girar el orden vuelve a centroides: el intercambio
+  residual solo existe **mientras gira**).
+- **Opacidad de giro propia (`WindowLayerRotationOpacity`)**: en reposo las
+  capas valen SIEMPRE 1; al girar toman el valor de la clave (absoluto; default
+  0.7 =
+  paridad con el fundido de la cara porque
+  `Constants.faceOpacity(1, v, true) == v` y 0.7 es también el default de
+  `FaceRotationOpacity`). Con 1.0 las ventanas quedan sólidas **y
+  depth-ordered también al girar**; con valores bajos se vuelven velo. El plate
+  funda con la pila (`plateOpacity × layerOpacity`). **Con capas apagadas las
+  ventanas comparten la transparencia del escritorio (son píxeles del grab);
+  esta clave solo actúa con las capas activas** (gate (g1): flag off + la clave
+  a 0.2/0.7/1.0 → cero quads, grab íntegro, materiales de la cara siguen
+  dependiendo solo de faceOpacity). Trade-off conocido: en reposo el borde
+  AA/sombra de la ventana se corta duro en el cutoff (misma clase del hueco en
+  cilindro).
 - **Trade-off medido y aceptado**: al orbitar, los quads pueden asomar fuera de la
   silueta de su cara (ventanas flotando sobre el escritorio). Es el look pedido
   (metáfora del escritorio), no un defecto.
@@ -330,9 +352,10 @@ Reglas:
   (`FaceRotationOpacity`, ADR-021) las caras funden y se ven las pilas de las otras
   caras a través; en ángulo de dos caras simultáneas ambas pilas se ven y ordenan
   por centroide; en vistas muy picadas de arriba/abajo, con muchas ventanas, los
-  stacks asoman por huecos y caras translúcidas. **La pila completa (quads + plate)
-  multiplica la opacidad de su cara**: si solo fundiera la base, al girar quedarían
-  ventanas duras sobre cara derretida.
+  stacks asoman por huecos y caras translúcidas. **La pila (quads + plate) funda
+  con su propia opacidad de giro** (`WindowLayerRotationOpacity`, § arriba; el
+  default 0.7 la hace fundar igual que la cara out-of-the-box): si solo fundiera
+  la base, al girar quedarían ventanas duras sobre cara derretida.
 - Picking: el quad es `pickable` y hace lo de su cara (clic → ese escritorio).
   Activar la ventana clickeada **no** se implementa aquí: `Workspace::activateWindow`
   no es QML-expuesto para efectos (medido en `/usr/include/kwin`: `Window` solo
@@ -350,8 +373,9 @@ Reglas:
   quads **planos** sobre la normal de la cara) y colisiones con otros efectos.
 - UI del KCM (**enmienda 2026-11-27**, sustituye el reparto ADR-014 original):
   la pestaña **Ventanas** lleva `WindowLayering` + `WindowLayerGap` +
-  `WindowLayerPlateOpacity` — son configuración normal de la feature (gap y plate
-  arrancan deshabilitados y siguen al checkbox). **Avanzado** conserva SOLO
+  `WindowLayerPlateOpacity` + `WindowLayerRotationOpacity` — son configuración
+  normal de la feature (los tres controles arrancan deshabilitados y siguen al
+  checkbox). **Avanzado** conserva SOLO
   `WindowLayerLodFaces`: es un presupuesto de coste GPU por frame, no un ajuste de
   aspecto, y ahí sí aplica el patrón ADR-014. Las claves del esquema (main.xml) no
   se mueven: solo cambia dónde se pintan los controles.
@@ -531,6 +555,39 @@ panorámica 360.
   pero el sistema debe soportarlos todos.
 - Sólo existe con volumen (3+ escritorios). Con 2 (hoja 2D) queda deshabilitado.
 
+### 4.1 Modelo del usuario (ADR-029)
+
+Primer objeto interior implementado: **el propio usuario elige un modelo 3D desde su
+disco**. No hay catálogo, ni descarga, ni conversión, ni compilación: el KCM pone un
+selector de fichero y el efecto lo carga tal cual.
+
+- `ModelFile` (Url, default vacío = apagado): el usuario pulsa «Examinar…» y elige el
+  fichero. Vacío ⇒ no se carga nada ni se crea el nodo (cero coste para quien no lo use).
+- **Solo ficheros locales**, con el mismo filtro que la imagen de fondo y la imagen de
+  tapa (`localSource`): `file:` o ruta absoluta sin esquema. Un `http(s):`/`qrc:` se
+  descarta — el compositor no descarga contenido al activarse (§2.2, misma regla).
+- **Formatos aceptados**: `.glb`, `.gltf` y `.obj`, leídos **en runtime** por
+  `RuntimeLoader` (`QtQuick3D.AssetUtils`). Nada de `.fbx`/`.dae`/`.stl`: el cargador de
+  runtime de Qt no los soporta, y tampoco lo hace `balsam` sin pasos extra.
+- **El modelo es responsabilidad del usuario** (decisión explícita del ADR-029): que salga
+  de Sketchfab/Poly Haven/Fab y lo exporte él. Lo que Qt **no** puede leer, medido en
+  Qt 6.12 con ficheros generados por `gltf-transform`:
+  `KHR_draco_mesh_compression`, `EXT_meshopt_compression` y `KHR_mesh_quantization`
+  devuelven `RuntimeLoader.Error` (y `balsam` no saca ninguna malla de ahí tampoco).
+  Los glTF **sin comprimir** sí cargan (`KHR_materials_unlit` incluido).
+- `ModelScale` (Double 0.05–50, default 1.0) es un **multiplicador** del auto-ajuste, no
+  una escala absoluta: el efecto mide `bounds` del modelo y lo encoge/crece para que quepa
+  dentro del sólido (60 % de la altura interior). Así un modelo en metros (1.7) y uno en
+  unidades de 400 quedan visibles sin que el usuario calcule nada. Con `bounds` todavía
+  inválido (antes del primer frame renderizado) el nodo permanece invisible.
+- **Degradación**: el `import QtQuick3D.AssetUtils` vive aislado en `InteriorModel.qml`,
+  cargado con `Loader`. Si el módulo falta, solo ese Loader falla; el cubo se pinta igual.
+  Si el fichero está mal o es ilegible, se avisa **una vez** con el `errorString` de Qt
+  (así el usuario ve que su `.glb` venía comprimido con Draco) y no se pinta nada.
+- Rotación: el modelo es **hijo del sólido**, gira con él (ADR-027/ADR-028 no lo separan).
+  El objeto «estático aunque gire» del listado de arriba sigue sin implementar.
+- Sin `native/`: la feature es 100 % QML (`native: false` en `features.json`).
+
 ## 5. Activación y comportamiento
 
 | Clave                  | Tipo   | Rango       | Default | Requerimiento                                                                                                                                                                                                                                                                                                                                                                        |
@@ -649,6 +706,9 @@ Enum `CapImageFit`: `Cover` (0, default) / `Contain` (1) / `Stretch` (2).
 `CapOpacity` es Int 0–100 (no Double); el helper `capOpacity()` de
 `constants.js` lo pasa a 0..1. Los Bool `CapTop` / `CapBottom` (default false)
 habilitan cada tapa por separado.
+`ModelFile` es Url (default vacío = interior sin modelo) y `ModelScale` es Double
+0.05–50 (default 1.0, **multiplicador** del auto-ajuste por `bounds`): ADR-029 y
+§4.1. Helpers `modelSource()` / `modelScale()` en `constants.js`.
 
 Las claves exactas y sus defaults para el MVP están en
 `package/contents/config/main.xml`. El config arranca con el del cubo virgen y

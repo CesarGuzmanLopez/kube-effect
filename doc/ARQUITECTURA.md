@@ -230,9 +230,27 @@ plate z       = -2                                                  (velo de hue
 El **velo (plate)** va a `z = −(2)`: justo detrás del plano de la cara, delante
 del interior — su papel es velar los huecos (hueco sin velo = interior del cubo
 asomando, medido). Como los quads empiezan en +ε, el plate queda SIEMPRE detrás
-de todos y nunca tapa una ventana. Solo se ve a través de los huecos. Quads y
-plate heredan la opacidad de la cara (ADR-021): la pila funde entera, no solo la
-base.
+de todos y nunca tapa una ventana. Solo se ve a través de los huecos.
+
+**Opacidad de la pila (enmienda del orden, 2026-11-27)**: los quads ya NO
+heredan la opacidad de la cara — tienen la suya propia,
+`WindowLayerRotationOpacity` (Double 0–1, default 0.7), servida por
+`ScreenView.layerOpacity = Constants.faceOpacity(1, resolvedor, cubeMoving)
++`la misma animación FaceFadeMs de las caras (cero machinery nueva). En reposo
+la pila vale SIEMPRE 1 (ventanas sólidas, umbral Mask incluido, sea cual sea el
+rest de las caras); al girar vale la clave. Como 0.7 es también el default de
+`FaceRotationOpacity`, out-of-the-box la pila funde igual que la cara (paridad
+por construcción; medido numéricamente en check-constants). Con 1.0 las
+ventanas quedan sólidas también al girar y conservan el orden por profundidad.
+El plate funde con la pila: `plateOpacity × layerOpacity`. Con
+`WindowLayering = false` la clave es INERTE (no hay quads que leerla; las
+ventanas son píxeles del grab y comparten su transparencia — gate (g1)).
+
+**Umbral de material de los quads (medido)**: `alphaMode` mira
+`layerOpacity` — `≥ 0.99 → Mask` (pase opaco, escribe profundidad: el orden
+se resuelve por geometría real, la capa más exterior gana el píxel) y
+`< 0.99 → Blend` (pase transparente, fundido con la pila). El `alphaCutoff`
+va clavado a 0.5, igual que en la cara: no depender del default de Qt.
 
 Descartados en ADR-028 (para no reabrirlos): **retraer la cara** detrás del stack
 dejando los quads en la posición del shell — aquí la cara ES el grab del
@@ -268,7 +286,11 @@ tambor).
   captura; `visible: false` por sí solo NO lo hace, y un `0` entero no convierte a
   QUuid — trucos-aprendidos §N).
 - **Dos lados**: ninguna regla nueva — los quads comparten el `Material.NoCulling`
-  de la cara (ADR-025) y el umbral `Mask`/`Blend` de ADR-026.
+  de la cara (ADR-025). El umbral `Mask`/`Blend` de ADR-026 aplica también a los
+  quads, pero leído sobre `layerOpacity` (la opacidad propia de la pila), no sobre
+  la de la cara: a diferencia de la cara (Mask solo en cilindro, donde la pila
+  plana nunca se solapaba), los quads se solapan entre sí a cualquier forma, así
+  que el umbral corre en polígono, hoja y tambor por igual.
 
 ### Consejos (trampas)
 
@@ -285,9 +307,18 @@ tambor).
 - **Signo hacia fuera**: un quad con z negativa (o la pila antigua
   `-((maxRank-rank)·fitted + ε)`) vuelve a medir dentro del sólido los dos
   problemas: interior asomando + parpadeo con la cara por el sort de centroides.
+- **Centroide ≠ rank**: el centroide de un quad = centro de cara + offset
+  lateral de la ventana + profundidad exterior; la pasada transparente ordena por
+  él y NO respeta el rank (medido: en reposo oblicuo una capa inferior pintaba
+  sobre la superior y quads de caras vecinas se intercalaban). Los quads usan el
+  umbral `Mask`/`Blend` de ADR-026 sobre `layerOpacity`, no `Blend` fijo: en
+  reposo (o con la clave a 1.0) ganan por profundidad escrita; el intercambio
+  residual por centroide solo existe MIENTRAS GIRAR.
 - **Hueco con borde duro**: el `alphaCutoff 0.5` del Mask corta en seco el borde
-  AA/sombras de la ventana contra el hueco en reposo (solo cilindro; hoja y
-  polígono funden su alfa natural). Verificar en el anidado; si molesta, tocar el
+  AA/sombras de la ventana contra el hueco en reposo — con la enmienda del orden
+  esto YA aplica a TODAS las formas en los QUADS (Mask en reposo, cutoff clavado;
+  las caras siguen con el suyo: Mask solo en cilindro, hoja y polígono funden su
+  alfa natural). Verificar en el anidado; si molesta, tocar el
   cutoff de las CAPAS antes que el de las caras (es contrato ADR-026).
 - **Unidades**: 1 unidad = 1 px solo con el escalado de la cara (`faceSize/100`
   sobre `#Rectangle` en polígono/hoja, o la malla del cilindro ya en px, ADR-025).

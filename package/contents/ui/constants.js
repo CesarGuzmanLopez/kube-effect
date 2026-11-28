@@ -793,6 +793,13 @@ const DEFAULT_CAP_CONTENT = CapContent.Color;
 const DEFAULT_CAP_GRADIENT_TYPE = CapGradientType.LinearVertical;
 const DEFAULT_CAP_IMAGE_FIT = CapImageFit.Cover;
 const DEFAULT_CAP_OPACITY = 80;
+// Interior model (ADR-029): ModelScale is a MULTIPLIER of the automatic bounds
+// fit, so its unusable-value fallback is 1.0 (draw the model at the fitted
+// size) and the clamp mirrors the min/max declared for the entry in
+// config/main.xml — the same pairing rule as the cap ranges.
+const DEFAULT_MODEL_SCALE = 1;
+const MIN_MODEL_SCALE = 0.05;
+const MAX_MODEL_SCALE = 50;
 
 // CapOpacity is an Int 0..100 (ADR-027 chose it over a Double for parity
 // with DimWhileRotatingAmount); the material needs 0..1. An unset or
@@ -839,6 +846,26 @@ function capImageFit(value) {
 // when the effect activates — 2.2 of doc/requerimientos.md).
 function capImageSource(value) {
   return localSource(value, ["file", "image"]);
+}
+
+// Interior model (ADR-029): local files only, and NOT the image: scheme — a
+// 3D asset has no KDE provider, so "file:" (or a bare absolute path, which
+// localSource keeps) is all a model can be. An empty or remote value means the
+// feature is off: no Loader, no node, no read of the file.
+function modelSource(value) {
+  return localSource(value, ["file"]);
+}
+
+// ModelScale is a MULTIPLIER on top of the automatic bounds fit done by
+// InteriorModel.qml, never an absolute size, so it only needs clamping: unset
+// or unusable is 1.0 (the schema default), everything else lands in 0.05..50
+// (the range declared in config/main.xml, same finiteOr rule as the rest).
+function modelScale(value) {
+  const number = finiteOr(value);
+  if (number === null) {
+    return DEFAULT_MODEL_SCALE;
+  }
+  return Math.min(MAX_MODEL_SCALE, Math.max(MIN_MODEL_SCALE, number));
 }
 
 // The cap MESH generators (capPolygonGeometry / capDiscGeometry) live in

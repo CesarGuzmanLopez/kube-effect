@@ -235,9 +235,11 @@
       <min>0</min>
       <max>100</max>
     </entry>
-    <!-- Window layers (ADR-028, model H): each window of a face becomes a
-             quad sunk INWARDS by its stacking rank, and the face grab keeps
-             a transparent hole exactly where that window was. No new enums
+    <!-- Window layers (ADR-028 model H as amended 2026-11-27): each window
+             of a face becomes a quad pushed OUTWARDS (+z, the face normal)
+             by its stacking rank, and the face grab keeps
+             a transparent hole exactly where that window was (the plate at
+             z = -2 veils the holes). No new enums
              (the KConfigXT integer rule): WindowLayerGap is an Int 0-600 px
              and WindowLayerPlateOpacity a plain Double 0-1 — the ranges are
              declared here for the KCM widgets AND re-resolved by
@@ -261,6 +263,46 @@
     </entry>
     <entry name="WindowLayerPlateOpacity" type="Double">
       <default>0.25</default>
+      <min>0</min>
+      <max>1</max>
+    </entry>
+    <!-- Interior model (ADR-029, doc/requerimientos.md 4.1): the user picks a
+             3D file from their own disk and the effect loads it AS-IS at
+             runtime with RuntimeLoader (QtQuick3D.AssetUtils) — no balsam
+             step, no compiling, no downloads. ModelFile is a Url and stays
+             LOCAL ONLY (file: or an absolute bare path, the same localSource
+             filter as SkyBox/CapImage): the compositor must never fetch
+             content when the effect activates. Empty = feature off, nothing
+             is loaded and no node is created. Only .glb/.gltf/.obj reach the
+             runtime loader (Qt supports nothing else there), so the KCM hint
+             says it. ModelScale is a plain Double MULTIPLIER of the automatic
+             bounds fit (the effect normalises the model to 60% of the inner
+             height), so a model authored in metres and one authored in
+             hundreds of units both land visible without the user doing math.
+             Appended last: the convention for new entries. -->
+    <entry name="ModelFile" type="Url">
+      <default/>
+    </entry>
+    <entry name="ModelScale" type="Double">
+      <default>1.0</default>
+      <min>0.05</min>
+      <max>50</max>
+    </entry>
+    <!-- WindowLayerRotationOpacity (ADR-028 amendment, the pile's own fade):
+             the ABSOLUTE opacity of the layer quads while the cube turns.
+             At rest the layers are always 1 (solid windows — the Mask
+             threshold writes depth and the outermost rank wins overlaps by
+             geometry, not by sort centroid). Resolved by
+             layerGeometry.rotationOpacity then fed to the existing
+             Constants.faceOpacity(1, v, cubeMoving) machinery (FaceFadeMs):
+             same animation as the faces, zero new mechanism. Default 0.7
+             EQUALS FaceRotationOpacity's default, so out of the box the
+             pile fades exactly like the face; 1.0 keeps the windows solid
+             AND depth-ordered while turning; with WindowLayering false the
+             key is inert (no quads exist; the windows stay pixels of the
+             grab and share the desktop's transparency). Appended last. -->
+    <entry name="WindowLayerRotationOpacity" type="Double">
+      <default>0.7</default>
       <min>0</min>
       <max>1</max>
     </entry>

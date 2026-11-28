@@ -87,6 +87,12 @@ Node {
   property bool layersActive: false
   property real layerGap: 120
   property real layerPlateOpacity: 0.25
+  // The effective pile opacity (WindowLayerRotationOpacity while turning, 1
+  // at rest), animated upstream in ScreenView next to faceOpacity and
+  // forwarded untouched to WindowLayers. The face material above NEVER
+  // reads it: flag off or on, the grab keeps exactly the desktop's
+  // transparency (the face parity contract of the amendment).
+  property real layerOpacity: 1
 
   // The face surface: the grab of the whole desktop EXCEPT the windows that
   // won a layer (their ids get wId = "" — the hole is the clip, ADR-028).
@@ -137,10 +143,16 @@ Node {
     active: faceRoot.layersActive
     layerGap: faceRoot.layerGap
     plateOpacity: faceRoot.layerPlateOpacity
-    faceOpacity: faceRoot.faceOpacity
+    layerOpacity: faceRoot.layerOpacity
   }
 
   // --- gate accessors (scripts/check-layers.py reads the live tree) --------
   readonly property QtObject windowLayers: faceLayers
   readonly property QtObject grab: faceGrab
+  // The FACE material, live: the parity contract is that these values follow
+  // faceOpacity (and the mesh/cull rules) and are never touched by the layer
+  // machinery — with the flag off or the rotation key at any value.
+  readonly property string faceMatModeNow: face.materials[0].alphaMode === PrincipledMaterial.Mask ? "mask" : face.materials[0].alphaMode === PrincipledMaterial.Opaque ? "opaque" : face.materials[0].alphaMode === PrincipledMaterial.Blend ? "blend" : "unknown"
+  readonly property real faceMatOpacityNow: face.materials[0].opacity
+  readonly property real faceMatCutoffNow: face.materials[0].alphaCutoff
 }

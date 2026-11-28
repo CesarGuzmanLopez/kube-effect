@@ -493,6 +493,35 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                                         </property>
                                                     </widget>
                                                 </item>
+                                                <item row="2" column="0">
+                                                    <widget class="QLabel" name="layerRotationLabel">
+                                                        <property name="text">
+                                                            <string>Opacidad de las capas al girar:</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="2" column="1">
+                                                    <widget class="QDoubleSpinBox" name="kcfg_WindowLayerRotationOpacity">
+                                                        <property name="enabled">
+                                                            <bool>false</bool>
+                                                        </property>
+                                                        <property name="toolTip">
+                                                            <string>Opacidad ABSOLUTA de las ventanas-capa mientras gira el cubo (en reposo valen siempre 1). Por defecto 0.7, igual que la opacidad de giro de las caras: las capas funden como el escritorio. Con 1.0 las ventanas se mantienen sólidas también al girar y conservan el orden por profundidad (la capa más exterior gana los solapes). Con capas apagadas esta clave no hace nada: las ventanas son píxeles del grab y comparten su transparencia.</string>
+                                                        </property>
+                                                        <property name="minimum">
+                                                            <double>0</double>
+                                                        </property>
+                                                        <property name="maximum">
+                                                            <double>1</double>
+                                                        </property>
+                                                        <property name="singleStep">
+                                                            <double>0.05</double>
+                                                        </property>
+                                                        <property name="decimals">
+                                                            <number>2</number>
+                                                        </property>
+                                                    </widget>
+                                                </item>
                                             </layout>
                                         </item>
                                     </layout>
@@ -950,7 +979,84 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                         </layout>
                     </widget>
 
-                    <!-- 5. Input -->
+                    <!-- 5. Interior (ADR-029) -->
+                    <widget class="QWidget" name="tabInterior">
+                        <attribute name="title">
+                            <string>Interior</string>
+                        </attribute>
+                        <layout class="QVBoxLayout" name="tabInteriorLayout">
+                            <item>
+                                <!-- One KConfigXT entry = one widget: ModelFile is the
+                                     switch (empty = nothing loaded) and ModelScale only
+                                     multiplies the automatic bounds fit, so both stay
+                                     visible; a designer connection cannot OR/disable on a
+                                     URL change (QUrlRequester has no bool signal). -->
+                                <layout class="QFormLayout" name="modelForm">
+                                    <item row="0" column="0">
+                                        <widget class="QLabel" name="modelFileLabel">
+                                            <property name="text">
+                                                <string>Modelo 3D (file://):</string>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                    <item row="0" column="1">
+                                        <widget class="KUrlRequester" name="kcfg_ModelFile">
+                                            <property name="toolTip">
+                                                <string>Solo archivos locales. Qt carga el modelo en runtime sin convertirlo ni compilar nada: glTF 2.0 (.glb, .gltf) sin comprimir, u .obj. Draco, meshopt y KHR_mesh_quantization NO se pueden leer; .fbx/.dae/.stl tampoco existen para el cargador de runtime.</string>
+                                            </property>
+                                            <property name="nameFilters">
+                                                <stringlist>
+                                                    <string>Modelos 3D (*.glb *.gltf *.obj)</string>
+                                                    <string>Todos los archivos (*)</string>
+                                                </stringlist>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                    <item row="1" column="0">
+                                        <widget class="QLabel" name="modelScaleLabel">
+                                            <property name="text">
+                                                <string>Escala extra del modelo:</string>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                    <item row="1" column="1">
+                                        <widget class="QDoubleSpinBox" name="kcfg_ModelScale">
+                                            <property name="toolTip">
+                                                <string>Multiplicador SOBRE el auto-ajuste: el efecto ya encoge o agranda el modelo para que quepa dentro del sólido (60% de la altura interior). 1.00 = tal cual; 2.00 = el doble de eso.</string>
+                                            </property>
+                                            <property name="decimals">
+                                                <number>2</number>
+                                            </property>
+                                            <property name="minimum">
+                                                <double>0.05</double>
+                                            </property>
+                                            <property name="maximum">
+                                                <double>50</double>
+                                            </property>
+                                            <property name="singleStep">
+                                                <double>0.1</double>
+                                            </property>
+                                            <property name="suffix">
+                                                <string> ×</string>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                    <item row="2" column="0" colspan="2">
+                                        <widget class="QLabel" name="modelHint">
+                                            <property name="text">
+                                                <string>El efecto dibuja TU modelo dentro del sólido (ADR-029): búscalo tú (Poly Haven es CC0, Sketchfab/Fab dejan exportar glTF), pon la ruta abajo y listo — nada que compilar ni convertir. Se recomienda un glTF binario (.glb) con las texturas dentro y sin comprimir: las extensiones Draco y EXT_meshopt_compression Qt no las lee y el modelo no aparece (se avisa una vez en el log del efecto, con kwriteconfig6 --file kwinrc --group Effect-kube-effect --key ModelFile /ruta/modelo.glb puedes probar sin el diálogo). Vacío = apagado. Con la hoja 2D (Polígono con 1-2 escritorios) no hay volumen: el modelo se desactiva solo. El objeto gira junto con el sólido.</string>
+                                            </property>
+                                            <property name="wordWrap">
+                                                <bool>true</bool>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                </layout>
+                            </item>
+                        </layout>
+                    </widget>
+
+                    <!-- 6. Input -->
                     <widget class="QWidget" name="tabInput">
                         <attribute name="title">
                             <string>Input</string>
@@ -1021,7 +1127,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                         </layout>
                     </widget>
 
-                    <!-- 6. Presets -->
+                    <!-- 7. Presets -->
                     <widget class="QWidget" name="tabPresets">
                         <attribute name="title">
                             <string>Presets</string>
@@ -1040,7 +1146,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                         </layout>
                     </widget>
 
-                    <!-- 7. Advanced: the only place for advanced options (ADR-014) -->
+                    <!-- 8. Advanced: the only place for advanced options (ADR-014) -->
                     <widget class="QWidget" name="tabAdvanced">
                         <attribute name="title">
                             <string>Advanced</string>
@@ -1418,6 +1524,12 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
             <sender>kcfg_WindowLayering</sender>
             <signal>toggled(bool)</signal>
             <receiver>kcfg_WindowLayerPlateOpacity</receiver>
+            <slot>setEnabled(bool)</slot>
+        </connection>
+        <connection>
+            <sender>kcfg_WindowLayering</sender>
+            <signal>toggled(bool)</signal>
+            <receiver>kcfg_WindowLayerRotationOpacity</receiver>
             <slot>setEnabled(bool)</slot>
         </connection>
     </connections>

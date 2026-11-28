@@ -307,6 +307,31 @@ Item {
       check("guard parity layer " + String(probe), LayerGeo.isFiniteNumber(probe), base);
     });
 
+    // WindowLayerRotationOpacity (ADR-028 order amendment, the pile's own
+    // fade): the layerGeometry resolver clamps 0-1 with the SCHEMA DEFAULT
+    // (0.7) for unset/non-finite (never the floor, ADR-022), and the chain
+    // ScreenView feeds to Cube is Constants.faceOpacity(1, resolved,
+    // moving): rest HARD 1 (solid windows at rest — clause (g2) of the
+    // layers gate), while turning the key's value with the shared 0.1 fade
+    // floor. Parity by construction: Constants.faceOpacity(1, v, true) ==
+    // v for every reachable v, so a key equal to FaceRotationOpacity fades
+    // the pile exactly like the face (and the 0.7 default equals the
+    // face's 0.7 default out of the box).
+    check("layer rotation default null", LayerGeo.rotationOpacity(null), 0.7);
+    check("layer rotation default empty", LayerGeo.rotationOpacity(""), 0.7);
+    check("layer rotation default text", LayerGeo.rotationOpacity("x"), 0.7);
+    check("layer rotation clamp high", LayerGeo.rotationOpacity(3), 1);
+    check("layer rotation clamp low", LayerGeo.rotationOpacity(-5), 0);
+    check("layer rotation string", LayerGeo.rotationOpacity("0.35"), 0.35);
+    check("layer fade rest solid", Constants.faceOpacity(1, LayerGeo.rotationOpacity(0.2), false), 1);
+    check("layer fade identity 0.7", Constants.faceOpacity(1, LayerGeo.rotationOpacity(0.7), true), 0.7);
+    check("layer fade identity 0.2", Constants.faceOpacity(1, LayerGeo.rotationOpacity(0.2), true), 0.2);
+    check("layer fade identity 1.0", Constants.faceOpacity(1, LayerGeo.rotationOpacity(1.0), true), 1);
+    check("layer fade floor raw 0", Constants.faceOpacity(1, LayerGeo.rotationOpacity(0), true), 0.1);
+    // Same value the FACE answers when its rotation key holds the same
+    // number: the parity clause, asserted numerically at the resolver.
+    check("layer fade equals face fade at 0.7", Constants.faceOpacity(1, LayerGeo.rotationOpacity(0.7), true), Constants.faceOpacity(1, 0.7, true));
+
     const arc = ArcGeo.cylinderArcGeometry(2560, 1440, Constants.cylinderRadius(4, 2560, 100), Constants.CYLINDER_SEGMENTS);
     check("arc positions", arc.positions.length, 130);
     check("arc normals", arc.normals.length, 130);

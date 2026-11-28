@@ -27,7 +27,29 @@ updated by the amendment):
   (e) gap 0: every layer of a face shares z == +epsilon;
   (f) plate: z == -2 (the veil just behind the face plane), strictly behind
       EVERY quad (-2 < +epsilon) so it veils the holes without covering
-      the windows.
+      the windows;
+  (g) material contract (the ORDER amendment, measured 2026-11-27: a quad's
+      sort centroid carries the window's lateral offset and does NOT follow
+      the rank — the opaque pass fixes it): with the pile effectively opaque
+      (layerOpacity >= 0.99: at rest, or WindowLayerRotationOpacity 1.0
+      while turning) every shown quad is Mask with alphaCutoff pinned at
+      0.5 and material opacity == layerOpacity; below the threshold it is
+      Blend with the same opacity (the turn fade, ADR-021 pattern with the
+      pile's own key). The plate is Blend ALWAYS (uniform veil, nothing to
+      order) with opacity == resolved(plate) x layerOpacity. And the two
+      parity clauses the user confirmed: (g1) flag OFF makes
+      WindowLayerRotationOpacity inert at ANY value (0.2/0.7/1.0 tested):
+      zero quads, zero layeredIds, the grab intact, and the live FACE
+      materials still follow ONLY faceOpacity (never layerOpacity —
+      without layers the windows are pixels of the grab and share the
+      desktop's transparency); (g2) flag ON at rest (faceOpacity 1, not
+      rotating) gives every shown quad opacity 1 and Mask — a layered
+      window looks exactly like the flat window it replaces, hole aside.
+      The rotation resolver parity is numeric too: expected layerOpacity
+      while turning is Constants.faceOpacity(1, resolved(key), true),
+      i.e. the same value the face fade answers with the same key (the
+      default 0.7 equals FaceRotationOpacity's default: parity by
+      construction).
 
 Stub window layout (mirrored from qml_check_harness.STUB_MODULE; keep the
 two in sync when the stub changes): desktop n has rows i = 0..5 with
@@ -48,6 +70,14 @@ PLATE_EXTRA = 2
 GAP_MIN, GAP_MAX, GAP_DEFAULT = 0, 600, 120
 LOD_MIN, LOD_MAX, LOD_DEFAULT = 0, 8, 1
 PLATE_MIN, PLATE_MAX, PLATE_DEFAULT = 0.0, 1.0, 0.25
+ROT_MIN, ROT_MAX, ROT_DEFAULT = 0.0, 1.0, 0.7
+# The fade floor of constants.js Constants.faceOpacity (MIN_FACE_OPACITY):
+# the layer chain reuses that machinery (rest=1, rotation=this key), so
+# while turning the value also floors at 0.1 — the same rule the faces
+# already follow. A drift here fails the gate against check-constants.py.
+FADE_FLOOR = 0.1
+MASK_THRESHOLD = 0.99
+FACE_CUTOFF = 0.5
 
 STUB_ROWS = 6
 STUB_SHOWN = (0, 1, 2)
@@ -91,6 +121,25 @@ def resolved_plate(raw):
   return min(PLATE_MAX, max(PLATE_MIN, value))
 
 
+def resolved_rotation(raw):
+  # layerGeometry.rotationOpacity: unset/non-finite -> the SCHEMA DEFAULT
+  # (0.7), never the range floor (the ADR-022 rule the other resolvers obey).
+  try:
+    value = float(raw)
+  except (TypeError, ValueError):
+    return ROT_DEFAULT
+  return min(ROT_MAX, max(ROT_MIN, value))
+
+
+def expected_layer_opacity(rotating, raw):
+  # ScreenView's chain, mirrored: Constants.faceOpacity(1, resolved, moving)
+  # -> rest is hard-wired 1 (solid windows at rest, clause (g2)); while
+  # turning, the key's value floored by the shared 0.1 fade floor.
+  if not rotating:
+    return 1.0
+  return min(1.0, max(FADE_FLOOR, resolved_rotation(raw)))
+
+
 def expected_fitted_gap(gap, max_rank):
   steps = max(1, int(max_rank))
   return min(gap, CAP / steps)
@@ -108,12 +157,16 @@ def _face_context(face, dump):
   gap = resolved_gap(dump["gapRaw"])
   plate = resolved_plate(dump["plateRaw"])
   current = int(dump["currentFaceIndex"])
+  layer = expected_layer_opacity(bool(dump["rotating"]), dump["layerRotationRaw"])
+  face_opacity = float(dump["faceOpacityLive"])
   return {
     "label": f"face {face['index']} (desktop {face['desktopNumber']})",
     "layering": layering,
     "lod": lod,
     "gap": gap,
     "plate": plate,
+    "layer": layer,
+    "face_opacity": face_opacity,
     "current": current,
     "expect_active": layering
     and (
@@ -349,12 +402,82 @@ def _plate_problems(ctx, face, shown, problems):
     )
 
 
+def _face_material_problems(ctx, face, problems):
+  """(g1) Parity of the FACE material - read live from the engine, flag off
+  or on, at any rotation value: it follows ONLY faceOpacity (and the shape
+  rules), never layerOpacity. With no layers the windows are pixels of the
+  grab, so the desktop's transparency IS the windows' transparency.
+  The harness builds plain polygon faces (cylinderMesh null), where
+  CubeFace.qml pins Blend at every opacity; a Mask here would mean the
+  layer machinery touched the face material."""
+  label = ctx["label"]
+  if face["faceAlphaMode"] != "blend":
+    problems.append(
+      f"{label}: face material alphaMode {face['faceAlphaMode']!r} - the plain face must stay Blend (the face rule, never driven by the layer keys)"
+    )
+  if not close(face["faceOpacityLive"], ctx["face_opacity"]):
+    problems.append(
+      f"{label}: face material opacity {face['faceOpacityLive']} != faceOpacity {ctx['face_opacity']} (the face fade must stay its own)"
+    )
+  # The cutoff the face pins explicitly (ADR-026): a drift means somebody
+  # rewired the face material block.
+  if not close(face["faceCutoffLive"], FACE_CUTOFF):
+    problems.append(
+      f"{label}: face alphaCutoff {face['faceCutoffLive']} != pinned {FACE_CUTOFF}"
+    )
+
+
+def _plate_material_problems(ctx, face, problems):
+  """(g) The plate stays Blend ALWAYS (uniform veil, nothing to order) and
+  fades with the pile: opacity == resolved(plate) x layerOpacity, read
+  live from the engine."""
+  label = ctx["label"]
+  if face["plateAlphaMode"] != "blend":
+    problems.append(
+      f"{label}: plate alphaMode {face['plateAlphaMode']!r} - the veil must stay Blend always"
+    )
+  expected = ctx["plate"] * ctx["layer"]
+  if not close(face["plateOpacityLive"], expected):
+    problems.append(
+      f"{label}: plate opacity {face['plateOpacityLive']} != plateOpacity x layerOpacity = {ctx['plate']} x {ctx['layer']} = {expected}"
+    )
+
+
+def _quad_material_problems(ctx, shown, problems):
+  """(g)+(g2) The quad threshold over the EFFECTIVE pile opacity: at rest
+  (layerOpacity 1 by construction) every shown quad is Mask, cutoff pinned,
+  opacity 1 - a layered window looks exactly like the flat window it
+  replaces, hole aside (the user-confirmed rest parity). While turning
+  below the threshold: Blend with opacity == the fade value (== what the
+  face machinery answers for the same key, so the 0.7 default parities the
+  face out of the box). At or above it (key 1.0): Mask ALSO while turning -
+  solid windows, depth-ordered."""
+  label = ctx["label"]
+  layer = ctx["layer"]
+  expected = "mask" if layer >= MASK_THRESHOLD else "blend"
+  for quad in shown:
+    if quad["alphaMode"] != expected:
+      problems.append(
+        f"{label}: quad {quad['id']} alphaMode {quad['alphaMode']!r} != {expected!r} for layerOpacity {layer} (>= {MASK_THRESHOLD} means the depth-ordered Mask)"
+      )
+    if not close(quad["materialOpacity"], layer):
+      problems.append(
+        f"{label}: quad {quad['id']} material opacity {quad['materialOpacity']} != layerOpacity {layer}"
+      )
+    if expected == "mask" and not close(quad["alphaCutoff"], FACE_CUTOFF):
+      problems.append(
+        f"{label}: quad {quad['id']} alphaCutoff {quad['alphaCutoff']} != pinned {FACE_CUTOFF} while Mask"
+      )
+
+
 def _face_problems(face, dump, problems):
   """Every clause of one face: context, then the assert groups (each group
   lives in its own helper, same order and short-circuits as the original
   monolith)."""
   ctx = _face_context(face, dump)
   _active_problems(ctx, face, problems)
+  _face_material_problems(ctx, face, problems)
+  _plate_material_problems(ctx, face, problems)
   _grab_rows_problems(ctx, problems)
   if not ctx["expect_active"]:
     _inactive_face_problems(ctx, face, problems)
@@ -366,6 +489,7 @@ def _face_problems(face, dump, problems):
   ladder = _depths_problems(ctx, face, dump, shown, problems)
   _stack_shape_problems(ctx, shown, ladder, problems)
   _plate_problems(ctx, face, shown, problems)
+  _quad_material_problems(ctx, shown, problems)
   return problems
 
 
@@ -375,6 +499,19 @@ def validate(dump):
   faces = dump["faces"]
   if len(faces) != int(dump["faceCount"]):
     problems.append(f"dump: {len(faces)} faces listed, faceCount {dump['faceCount']}")
+  # Root mirror of the rotation chain: the live Cube propagation must carry
+  # exactly what the resolver + the shared faceOpacity machinery answer (rest
+  # 1; turning = clamped key with the 0.1 fade floor; unset raw = the schema
+  # default 0.7). The flag-off inactivation itself is pinned per face by
+  # _inactive_face_problems (zero quads/layeredIds, intact grabs) plus
+  # _face_material_problems (the face follows ONLY faceOpacity).
+  expected_layer = expected_layer_opacity(
+    bool(dump["rotating"]), dump["layerRotationRaw"]
+  )
+  if not close(dump["layerOpacityLive"], expected_layer):
+    problems.append(
+      f"dump: Cube.layerOpacity {dump['layerOpacityLive']} != mirrored {expected_layer} (rotating {dump['rotating']}, raw {dump['layerRotationRaw']})"
+    )
   if (
     int(dump["currentStubNumber"]) >= 1
     and int(dump["currentFaceIndex"]) != int(dump["currentStubNumber"]) - 1
@@ -403,6 +540,12 @@ def _good_dump():
     "gapRaw": 20,
     "lodRaw": 0,
     "plateRaw": 0.25,
+    # Material contract defaults: rest (not rotating) -> the fade chain
+    # answers 1, quads Mask, plate Blend; the face follows its own 1.0.
+    "rotating": False,
+    "layerRotationRaw": 0.7,
+    "faceOpacityLive": 1.0,
+    "layerOpacityLive": 1.0,
     "faces": [],
   }
   for n in range(1, 4):
@@ -458,14 +601,126 @@ def _good_dump():
         "plateZ": -PLATE_EXTRA,
       }
     )
+  return _with_layer_fields(dump)
+
+
+def _with_layer_fields(dump, layer=1.0):
+  """Stamp the material-contract fields of the live engine onto a synthetic
+  dump at the given effective pile opacity (>= MASK_THRESHOLD: Mask with
+  the cutoff pinned, below: Blend). The face material only ever follows
+  the face knob."""
+  for face in dump["faces"]:
+    face["faceAlphaMode"] = "blend"
+    face["faceOpacityLive"] = dump["faceOpacityLive"]
+    face["faceCutoffLive"] = FACE_CUTOFF
+    face["plateAlphaMode"] = "blend"
+    face["plateOpacityLive"] = dump["plateRaw"] * layer
+    for quad in face["quads"]:
+      quad["alphaMode"] = "mask" if layer >= MASK_THRESHOLD else "blend"
+      quad["alphaCutoff"] = FACE_CUTOFF
+      quad["materialOpacity"] = layer
   return dump
+
+
+def _turning_dump(raw=0.7):
+  """A good dump with the cube rotating: the fade chain answers min(1,
+  max(0.1, clamp(raw))) (raw None = the schema default 0.7)."""
+  dump = _good_dump()
+  layer = expected_layer_opacity(True, raw)
+  dump["rotating"] = True
+  dump["layerRotationRaw"] = raw
+  dump["layerOpacityLive"] = layer
+  return _with_layer_fields(dump, layer)
+
+
+def _flag_off_dump():
+  """A good dump with WindowLayering false: zero quads, zero layeredIds,
+  every grab id kept intact, plate hidden — and the face material still
+  its own (the parity contract with any rotation value in the key)."""
+  dump = _good_dump()
+  dump["layering"] = False
+  for face in dump["faces"]:
+    face["active"] = False
+    face["quads"] = []
+    face["layeredIds"] = []
+    face["grabs"] = [{"id": row["id"], "wId": row["id"]} for row in face["grabs"]]
+    face["plateVisible"] = False
+  return dump
+
+
+def _material_cases(expects_rejection, failures):
+  """The material contract + the two user-confirmed parity clauses (the
+  ORDER amendment). Lives apart from selftest() for cognitive complexity
+  (Sonar S3776): the geometry regressions are selftest's, the MATERIAL and
+  PARITY families are this one's."""
+  # --- material contract + the two parity clauses (the ORDER amendment) ---
+  expects_rejection(
+    "quad Blend at rest",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("alphaMode", "blend"),
+  )
+  expects_rejection(
+    # (g2) regression: a layered window at rest must be SOLID (opacity 1)
+    # — an opacity off 1 breaks the rest parity with the flat window.
+    "rest quad opacity off 1",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("materialOpacity", 0.7),
+  )
+  expects_rejection(
+    "quad cutoff drifted while Mask",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("alphaCutoff", 0.4),
+  )
+  expects_rejection(
+    "plate lost Blend always",
+    lambda d: d["faces"][0].__setitem__("plateAlphaMode", "mask"),
+  )
+  # (g1): flag off, the key inert at ANY rotation value: the FACE material
+  # must not move. A face opacity that stopped matching the face knob is
+  # exactly "the face material touched by layerOpacity with the flag off".
+  expects_rejection(
+    "face touched with flag off",
+    lambda d: d["faces"][0].__setitem__("faceOpacityLive", 0.55),
+    _flag_off_dump,
+  )
+
+  # Positive turning/solid/unset dumps: the fade chain answers 0.7 for the
+  # default key (== the face's answer for the same key: parity by
+  # construction), 1.0 keeps Mask also WHILE turning, and an unset raw
+  # falls back to the schema default.
+  turning = _turning_dump()
+  if validate(turning):
+    failures.append(f"the turning dump (0.7) was rejected: {validate(turning)}")
+  expects_rejection(
+    "quad Mask while turning at 0.7",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("alphaMode", "mask"),
+    _turning_dump,
+  )
+  expects_rejection(
+    "plate opacity ignores the fade",
+    lambda d: d["faces"][0].__setitem__("plateOpacityLive", 0.25),
+    _turning_dump,
+  )
+  solid = _turning_dump(1.0)
+  if validate(solid):
+    failures.append(f"the solid-turn dump (key 1.0) was rejected: {validate(solid)}")
+  expects_rejection(
+    "solid-turn quad dropped the Mask",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("alphaMode", "blend"),
+    lambda: _turning_dump(1.0),
+  )
+  unset = _turning_dump(None)
+  if validate(unset):
+    failures.append(f"the unset-key dump (default 0.7) was rejected: {validate(unset)}")
+  expects_rejection(
+    "layerOpacity off the mirrored chain",
+    lambda d: d.__setitem__("layerOpacityLive", 0.5),
+    _turning_dump,
+  )
 
 
 def selftest():
   failures = []
 
-  def expects_rejection(name, mutate):
-    dump = _good_dump()
+  def expects_rejection(name, mutate, factory=None):
+    dump = (factory or _good_dump)()
     mutate(dump)
     found = validate(dump)
     if not found:
@@ -527,6 +782,8 @@ def selftest():
   expects_rejection(
     "wrong current face", lambda d: d.__setitem__("currentFaceIndex", 2)
   )
+
+  _material_cases(expects_rejection, failures)
 
   if validate(_good_dump()):
     failures.append(f"the good synthetic dump did not pass: {validate(_good_dump())}")
