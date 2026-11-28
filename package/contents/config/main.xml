@@ -306,5 +306,33 @@
       <min>0</min>
       <max>1</max>
     </entry>
+    <!-- WindowLayerThickness / WindowLayerEdgeColor (ADR-028 fourth
+             amendment, the simulated slab, FINAL design): each layer is
+             ONE closed box (a shared ProceduralMesh with two material
+             subsets: textured front, coloured sides + back, BackFaceCulling
+             so nothing of the box's inside can leak - the first two-object
+             design showed a giant black bezel through the thumbnail's
+             transparent shadow margins, measured 2026-11-28). The
+             thickness is an Int 0-300 px whose EFFECTIVE value is always
+             clipped to half the fitted step (two layers can never
+             intersect; layerGeometry.js thicknessEffective); default 2 =
+             a thin real edge out of the box - the box spans the EXACT
+             window rect (win.width x win.height), not the grab with its
+             shadow margins, so 2 px never become a bezel. 0 stays a real
+             value: flat quad, pixel parity with the quad-only model. The
+             edge colour is a plain Color entry (KColorButton in the
+             Windows tab) sharing the plate's dark tone by default. Both
+             live in Ventanas with the rest of the
+             layering look; raw kwinrc strings cannot leak a bad colour:
+             layerGeometry.edgeColor falls back to the schema default.
+             Appended last: the convention for new entries. -->
+    <entry name="WindowLayerThickness" type="Int">
+      <default>2</default>
+      <min>0</min>
+      <max>300</max>
+    </entry>
+    <entry name="WindowLayerEdgeColor" type="Color">
+      <default>#141719</default>
+    </entry>
   </group>
 </kcfg>

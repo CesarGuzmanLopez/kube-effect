@@ -406,6 +406,13 @@ Node {
   property int windowLayerGap: LayerGeometry.GAP_DEFAULT
   property int windowLayerLodFaces: LayerGeometry.LOD_FACES_DEFAULT
   property real windowLayerPlateOpacity: LayerGeometry.PLATE_OPACITY_DEFAULT
+  // Slab body (fourth amendment): the thickness REQUEST travels down
+  // unchanged - layerGeometry.thicknessEffective clips it to half the
+  // fitted step inside WindowLayers, where the step is known per face.
+  // The edge colour is resolved here (raw KConfig strings can mean
+  // garbage; the resolver answers the schema default for those).
+  property int windowLayerThickness: LayerGeometry.THICKNESS_DEFAULT
+  property string windowLayerEdgeColor: LayerGeometry.EDGE_COLOR_DEFAULT
   // The effective opacity of the pile, animated in ScreenView exactly like
   // faceOpacity (rest 1, rotation WindowLayerRotationOpacity).
   property real layerOpacity: 1
@@ -417,6 +424,7 @@ Node {
   readonly property real layerGapResolved: LayerGeometry.gapUnits(cube.windowLayerGap)
   readonly property int layerLodResolved: LayerGeometry.lodFaces(cube.windowLayerLodFaces)
   readonly property real layerPlateResolved: LayerGeometry.plateOpacity(cube.windowLayerPlateOpacity)
+  readonly property string layerEdgeResolved: LayerGeometry.edgeColor(cube.windowLayerEdgeColor)
   // The face index the current desktop sits on (-1 mid-sync: no desktop
   // found yet, so no face is "current" and the LOD keeps every face flat).
   readonly property int currentFaceIndex: {
@@ -489,6 +497,8 @@ Node {
       layerGap: cube.layerGapResolved
       layerPlateOpacity: cube.layerPlateResolved
       layerOpacity: cube.layerOpacity
+      layerThickness: cube.windowLayerThickness
+      edgeColor: cube.layerEdgeResolved
       // Flat sheet (ADR-024): both quads at the centre, one facing each
       // way (0 deg / 180 deg), separated by +/-sheetGap in z
       // (proportional, >= 2 units total) so the near-coplanar triangles

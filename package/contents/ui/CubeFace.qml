@@ -93,6 +93,12 @@ Node {
   // reads it: flag off or on, the grab keeps exactly the desktop's
   // transparency (the face parity contract of the amendment).
   property real layerOpacity: 1
+  // Slab body (fourth amendment): thickness REQUEST (clipped later, per
+  // face, where the fitted step is known) and the already-resolved edge
+  // colour. Both are read ONLY by WindowLayers - the face Model above
+  // never touches them.
+  property real layerThickness: 0
+  property color edgeColor: "#141719"
 
   // The face surface: the grab of the whole desktop EXCEPT the windows that
   // won a layer (their ids get wId = "" — the hole is the clip, ADR-028).
@@ -144,6 +150,8 @@ Node {
     layerGap: faceRoot.layerGap
     plateOpacity: faceRoot.layerPlateOpacity
     layerOpacity: faceRoot.layerOpacity
+    layerThickness: faceRoot.layerThickness
+    edgeColor: faceRoot.edgeColor
   }
 
   // --- gate accessors (scripts/check-layers.py reads the live tree) --------

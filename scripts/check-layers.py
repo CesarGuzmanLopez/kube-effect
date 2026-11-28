@@ -64,6 +64,18 @@ the ADR-028 "Puertas" (amended):
                                    off the windows are pixels of the
                                    grab and share the desktop's
                                    transparency.
+  thick    request 300 against -> (h) the EFFECTIVE thickness is half
+           a step of 40            the step (20) and the layer is ONE
+                                   closed two-subset box (front textured
+                                   at exactly the ladder z - eff/2, sides
+                                   + back in the edge colour, both
+                                   materials BackFaceCulling: NoCulling
+                                   was the measured black bezel).
+  thickfit request 10 (< half  -> eff 10: the request survives when it
+           the step)               already fits.
+  thickdefault raw 2 (schema    -> the thin real rim out of the box.
+  thickcolour custom #ff0000    -> the edge rgba read live from the
+                                   engine matches the resolver.
 
 For EVERY active face the oracle additionally pins the (d) hole contract
 (each layeredIds entry has wId == "" in ITS OWN face grab — the hole
@@ -75,9 +87,13 @@ re-exposure and the plate position.
 --selftest validates the ORACLE (layers_contract.selftest): coplanar
 layers, over-cap depths, holes without quads, unreleased grabs, LOD-active
 faces instantiating, a plate in front of the bottom layer or off the veil
-plane, stretched fitted steps, per-layer clamps short of the cap and
-off-+epsilon gap-0 planes must all be rejected; the fitting, exact-fit and
-zero-gap good dumps must pass.
+plane, stretched fitted steps, per-layer clamps short of the cap, the
+bottom quad glued to the plane with a positive gap, the slab family
+(request beating the half-step clip, front not pinned with thickness on,
+a body surviving eff 0, a fixed edge alphaMode, intersecting slabs,
+edge-colour drift) and off-+epsilon gap-0 planes must all be rejected;
+the fitting, exact-fit, zero-gap, thick and fitting-request good dumps
+must pass.
 
 Skipped (exit 0) when PySide6 is missing (the shared skip contract).
 """
@@ -290,6 +306,63 @@ _SCENARIOS = [
       "faceOp": 0.5,
     },
   ),
+  # --- slab body (fourth amendment) ---
+  # request 300 against a step of 40: the EFFECTIVE thickness is half the
+  # step (20), the front stays exactly on the ladder, the body sits
+  # eff/2 + epsilon behind it.
+  (
+    "thick",
+    {
+      "desktops": 3,
+      "layering": True,
+      "gap": 40,
+      "lod": 0,
+      "plate": 0.25,
+      "current": 1,
+      "thickness": 300,
+    },
+  ),
+  # request below half the step: the raw value survives (eff 10).
+  (
+    "thickfit",
+    {
+      "desktops": 3,
+      "layering": True,
+      "gap": 40,
+      "lod": 0,
+      "plate": 0.25,
+      "current": 1,
+      "thickness": 10,
+    },
+  ),
+  # the SCHEMA DEFAULT 2 px against the default step: a thin real box
+  # (eff 2) out of the box - the rim the user sees immediately.
+  (
+    "thickdefault",
+    {
+      "desktops": 3,
+      "layering": True,
+      "gap": 120,
+      "lod": 0,
+      "plate": 0.25,
+      "current": 1,
+      "thickness": 2,
+    },
+  ),
+  # custom edge colour through the raw-string resolver:
+  (
+    "thickcolour",
+    {
+      "desktops": 3,
+      "layering": True,
+      "gap": 40,
+      "lod": 0,
+      "plate": 0.25,
+      "current": 1,
+      "thickness": 300,
+      "edge": "#ff0000",
+    },
+  ),
 ]
 
 
@@ -318,6 +391,14 @@ def _instantiate(application, import_root, scenario):
   )
   engine.rootContext().setContextProperty(
     "stubFaceOpacity", scenario.get("faceOp", 1.0)
+  )
+  # Slab body (fourth amendment): the thickness REQUEST and the raw edge
+  # colour string. Default 0 keeps every older scenario flat, so the (h)
+  # parity is checked across them all; the thicknessEffective clip and
+  # the edgeColor fallback are mirrored from these raw values.
+  engine.rootContext().setContextProperty("stubThickness", scenario.get("thickness", 0))
+  engine.rootContext().setContextProperty(
+    "stubEdgeColor", scenario.get("edge", "#141719")
   )
   engine.rootContext().setContextProperty("stubCurrentNumber", scenario["current"])
   component = QQmlComponent(engine)
@@ -369,8 +450,12 @@ def main():
     "layeredIds say, dropped rows flat, plate on the -2 veil plane behind "
     "every quad, kwinrc clamps, the Mask/Blend material contract over "
     "layerOpacity (rest Mask + pinned cutoff + opacity 1, turning Blend, "
-    "key 1.0 solid Mask, plate Blend x plate-opacity times the fade) and "
-    "the face-material parity with the flag off at any rotation value)"
+    "key 1.0 solid Mask, plate Blend x plate-opacity times the fade), the "
+    "face-material parity with the flag off at any rotation value, and "
+    "the single closed slab box (flat #Rectangle at effective thickness 0 "
+    "= parity; two-subset ProceduralMesh with BackFaceCulling when "
+    "requested, z scale clipped to half the fitted step; the textured "
+    "front exactly on the ladder; consecutive boxes never crossing)"
   )
   return 0
 

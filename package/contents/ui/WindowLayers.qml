@@ -46,7 +46,27 @@ import "layerGeometry.js" as LayerGeometry
 // The plate is the optional dark veil (WindowLayerPlateOpacity) just BEHIND
 // the face plane (z = -2), in front of the interior: through the holes it is
 // what the windows read against, and it is what stops the inside of the cube
-// from showing through them. Quads and plate fade with the LAYER opacity
+// from showing through them.
+//
+// The slab (fourth amendment, FINAL design): with an effective thickness
+// above 0 a layer is ONE closed ProceduralMesh box (SlabMesh.qml, shared
+// unit box, scaled to win.width x win.height x eff) instead of the flat
+// quad: subset 0 is the FRONT with the textured material and the proven
+// #Rectangle UVs, subset 1 the four sides plus the back with the edge
+// colour. The front stays exactly on the ladder - the cap is marked by
+// the FRONT, not by the centre - and eff is clipped to half the fitted
+// step (layerGeometry.thicknessEffective), so the back of one box never
+// reaches the front of the next: two layers can never intersect. Both
+// materials use BackFaceCulling on the box: the first attempt (a separate
+// solid #Cube behind a Mask quad, NoCulling everywhere) let the
+// TRANSPARENT shadow margins of the thumbnail show the box's inner black
+// side - a giant bezel, measured 2026-11-28; a closed culled box cannot
+// leak, and the margin pixels fall through to the plate/interior exactly
+// as before. With eff 0 (or the Helpers module missing, where the Loader
+// degrades to a null mesh) the Model keeps the built-in #Rectangle with
+// NoCulling: pixel-for-pixel the flat quad model.
+//
+// Quads and plate fade with the LAYER opacity
 // (WindowLayerRotationOpacity while rotating, 1 at rest) instead of the face
 // opacity: with the default 0.7 equal to the face rotation default the whole
 // pile fades exactly like the face while turning (the ADR-021 behaviour),
@@ -112,6 +132,19 @@ Node {
   // is the same fixed budget for every shape.
   property real layerGap: LayerGeometry.GAP_DEFAULT
   property real plateOpacity: LayerGeometry.PLATE_OPACITY_DEFAULT
+  // Slab box (fourth amendment): the thickness REQUEST (clamped 0-300 with
+  // the schema default 2 - a thin real edge out of the box, see
+  // layerGeometry - and then clipped to half the fitted STEP inside
+  // thicknessEffective, the step being per face) and the resolved edge
+  // colour. raw 0 = flat quads exactly as before (pixel parity).
+  property real layerThickness: LayerGeometry.THICKNESS_DEFAULT
+  property color edgeColor: LayerGeometry.EDGE_COLOR_DEFAULT
+  readonly property real layerSlabEff: LayerGeometry.thicknessEffective(root.layerThickness, root.fittedGap)
+  // The shared unit box mesh via a runtime Loader (the arc/cap isolation
+  // pattern): without QtQuick3D.Helpers the Loader simply fails to load,
+  // slabBox stays null and every layer keeps the flat #Rectangle - the
+  // thickness degrades, the effect does not.
+  readonly property Geometry slabBox: slabMeshLoader.status === Loader.Ready && slabMeshLoader.item !== null && slabMeshLoader.item !== undefined ? slabMeshLoader.item.mesh : null
   // The EFFECTIVE opacity of the pile, animated by ScreenView with the very
   // faceOpacity mechanism (Constants.faceOpacity(1, resolved
   // WindowLayerRotationOpacity, cubeMoving) + FaceFadeMs): 1 at rest, the
@@ -205,6 +238,19 @@ Node {
     windowModel: KWinComponents.WindowModel {}
   }
 
+  // The slab unit box (fourth amendment): reached through a runtime
+  // Loader exactly like the arc and the caps — QtQuick3D.Helpers missing
+  // only ever fails THIS loader (slabBox stays null, every layer keeps the
+  // flat quad); the file itself is static-import-safe. Active whenever a
+  // slab could be needed on this face (an effective thickness above 0 -
+  // fitted-step changes re-evaluate it, the unit geometry itself never
+  // changes once loaded).
+  Loader {
+    id: slabMeshLoader
+    active: root.layerSlabEff > 0
+    source: "SlabMesh.qml"
+  }
+
   // The veil just behind the face plane (z = -2, the amended ARQUITECTURA
   // 2.4 rule): it veils the grab holes so the interior of the solid never
   // shows through them, and it stays strictly behind every quad (those start
@@ -266,6 +312,14 @@ Node {
       // and the depth of THIS quad in sync with the others without a bare
       // statement qmllint would flag.
       readonly property real layerDepthOut: root.revision >= 0 ? LayerGeometry.layerDepthOut(root.rankOf(layer.winnerId()), root.fittedGap) : LayerGeometry.LAYER_EPSILON
+      // Effective slab thickness for THIS delegate (per face, same fitted
+      // step as the ladder): 0 (or a missing Helpers module) keeps the
+      // built-in flat quad.
+      readonly property real slabEff: root.layerSlabEff
+      // The layer renders as the closed box only when there is real depth
+      // AND the mesh loaded; otherwise it is the flat #Rectangle of the
+      // original model (NoCulling, parity).
+      readonly property bool boxActive: root.slabBox !== null && root.slabBox !== undefined && layer.slabEff > 0
       // Captured while the window still exists: onDestruction may already
       // face a null row, and the id is still needed to prune the map.
       property var trackedId: null
@@ -294,19 +348,33 @@ Node {
       pickable: true
       castsShadows: false
       receivesShadows: false
-      source: "#Rectangle"
-      // Exactly the window size in face units (1 unit = 1 px).
-      scale: Qt.vector3d(win !== null && win.width > 0 ? win.width / 100 : 1, win !== null && win.height > 0 ? win.height / 100 : 1, 1)
+      // One Model per layer: the flat built-in quad, or the shared unit
+      // box scaled to this window when the slab is active (a custom
+      // geometry requires source "" - the CubeFace/arc rule).
+      source: layer.boxActive ? "" : "#Rectangle"
+      geometry: layer.boxActive ? root.slabBox : null
+      // Exactly the window size in face units (1 unit = 1 px); the box's
+      // z scale turns the unit depth 100 into the EFFECTIVE thickness (a
+      // raw request beyond half the step is clipped, never obeyed).
+      scale: Qt.vector3d(win !== null && win.width > 0 ? win.width / 100 : 1, win !== null && win.height > 0 ? win.height / 100 : 1, layer.boxActive ? layer.slabEff / 100 : 1)
       // Outwards (+z is the face normal), the whole stack floating: the
       // bottom sits one fitted step + epsilon off the face, the top window
       // is the outermost (exactly cap + epsilon when the stack overflows).
       // The epsilon inside layerDepthOut keeps every quad strictly in
-      // front of the face plane even at gap 0.
-      position: Qt.vector3d(localX, localY, layerDepthOut)
+      // front of the face plane even at gap 0. The box CENTRES on that
+      // rule: its FRONT (local +50 z, scaled) lands exactly back on the
+      // ladder, so the cap and the no-crossing guarantee are all measured
+      // at the front face, never at the centre.
+      position: Qt.vector3d(localX, localY, layer.boxActive ? layerDepthOut - layer.slabEff / 2 : layerDepthOut)
       materials: [
         PrincipledMaterial {
           lighting: PrincipledMaterial.NoLighting
-          cullMode: Material.NoCulling
+          // Subset 0 (front): NoCulling keeps the proven two-sided rule of
+          // the FLAT quad (the ADR-025 look when the box is off); the box
+          // itself must be culled — NoCulling on a closed box showed its
+          // inner black side through the thumbnail's transparent shadow
+          // margins (the measured bezel, 2026-11-28).
+          cullMode: layer.boxActive ? Material.BackFaceCulling : Material.NoCulling
           // The ADR-026 threshold over the LAYER opacity (measured, the
           // amendment to the amendment): a quad's sort centroid carries the
           // window's lateral offset, so the transparent-pass centroid order
@@ -337,6 +405,25 @@ Node {
               height: layer.win !== null && layer.win.height > 0 ? layer.win.height : 1
             }
           }
+        },
+        // Subset 1 (the four sides + the back): the uniform edge colour.
+        // BackFaceCulling always on the box — through the back you must
+        // see the plate/interior (the flat-model behaviour), never the
+        // inside of the box. Same threshold and opacity as the front: the
+        // rim joins the opaque depth-writing pass exactly when the pile
+        // is solid. The colour is baseColor: PrincipledMaterial has no
+        // diffuseColor (that name belongs to DefaultMaterial; assigning
+        // it here was a "non-existent property" load error, measured).
+        // While the layer is flat this material simply never binds a
+        // subset (the #Rectangle has one) - harmless, and it keeps the
+        // materials list shape constant for the gate.
+        PrincipledMaterial {
+          lighting: PrincipledMaterial.NoLighting
+          cullMode: Material.BackFaceCulling
+          alphaMode: root.layerOpacity < 0.99 ? PrincipledMaterial.Blend : PrincipledMaterial.Mask
+          alphaCutoff: 0.5
+          baseColor: root.edgeColor
+          opacity: root.layerOpacity
         }
       ]
 

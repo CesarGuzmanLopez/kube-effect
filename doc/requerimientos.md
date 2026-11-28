@@ -295,6 +295,8 @@ se ve por los bordes del hueco (parallax). Con el flag apagado (default) una car
 | `WindowLayerLodFaces`     | Int    | 0–8      | 1         | Caras alrededor del escritorio actual con capas (distancia por índice; 0 = todas)                  |
 | `WindowLayerPlateOpacity` | Double | 0–1      | 0.25      | Velo oscuro justo detrás del plano de la cara (z = −2): vela los huecos para que no asome el interior del sólido (0 = sin velo)      |
 | `WindowLayerRotationOpacity` | Double | 0–1   | 0.7       | Opacidad ABSOLUTA de las capas al girar (en reposo valen SIEMPRE 1); 1.0 = ventanas sólidas también al girar, ordenadas por profundidad; default = paridad con el fundido de la cara |
+| `WindowLayerThickness`    | Int    | 0–300 px | **2**     | Grosor simulado: la capa es UNA caja cerrada (frente texturizado + cantos del color de canto); el **efectivo** se recorta a gap/2 (dos capas jamás se atraviesan); 0 = plano (paridad píxel) |
+| `WindowLayerEdgeColor`    | Color  | —      | #141719   | Color de los cantos del slab (mismo tono oscuro del velo por defecto); solo se ve con grosor efectivo > 0 |
 
 Reglas:
 
@@ -337,6 +339,26 @@ Reglas:
 - **Trade-off medido y aceptado**: al orbitar, los quads pueden asomar fuera de la
   silueta de su cara (ventanas flotando sobre el escritorio). Es el look pedido
   (metáfora del escritorio), no un defecto.
+- **Grosor simulado (cuarta ampliación, 2026-11-27; rediseño medido
+  2026-11-28)**: con `WindowLayerThickness` > 0 (default **2**) cada capa es
+  **una sola caja cerrada** — un `ProceduralMesh` unitario compartido con dos
+  subsets de material: subset 0 el frente (texturizado con la ventana, UVs
+  idénticas al `#Rectangle` probado — el índice frontal es construido, no
+  adivinado), subset 1 los cuatro cantos + la posterior con
+  `WindowLayerEdgeColor`; ambos materiales con `BackFaceCulling`. La vía "un
+  cubo con seis materiales" no existe (`Model.customMaterials` no está en Qt
+  6.12, medido en el motor vivo; el built-in **#Cube** es un solo subset), y el
+  intermedio "quad delante + cubo detrás sin culling" quedó refutado con
+  captura: los márgenes transparentes del thumbnail dejaban ver el interior
+  negro de la caja — un bisel gigante, no un canto. Reglas: el grosor
+  **efectivo** es `min(solicitado, fittedGap/2)` → dos capas **jamás se
+  atraviesan** (pedir más que gap/2 no separa nada, se recorta); la caja mide
+  el **rectángulo exacto** de la ventana (el margen de sombra del grab NO
+  entra: por eso 2 px es un canto fino); **el frente de la caja marca la
+  profundidad** — el nodo se centra en `layerDepthOut − eff/2` y la ladder y el
+  tope 150 siguen midiendo el frente, no el centro; **0 = plano exacto**
+  (paridad píxel con el modelo sin grosor; sin `QtQuick3D.Helpers` la caja
+  degrada a plano, el patrón arc/capas).
 - Profundidad **fija** mientras gira (no se anima): el stack se lee como un sólido;
   animar el hueco produce un «pop» al parar.
 - Solo cuentan las ventanas de esa cara/escritorio/pantalla. Descartes: las
@@ -378,9 +400,10 @@ Reglas:
   quads **planos** sobre la normal de la cara) y colisiones con otros efectos.
 - UI del KCM (**enmienda 2026-11-27**, sustituye el reparto ADR-014 original):
   la pestaña **Ventanas** lleva `WindowLayering` + `WindowLayerGap` +
-  `WindowLayerPlateOpacity` + `WindowLayerRotationOpacity` — son configuración
-  normal de la feature (los tres controles arrancan deshabilitados y siguen al
-  checkbox). **Avanzado** conserva SOLO
+  `WindowLayerPlateOpacity` + `WindowLayerRotationOpacity` +
+  `WindowLayerThickness` + `WindowLayerEdgeColor` — son configuración
+  normal de la feature (los cinco controles arrancan deshabilitados y siguen al
+  checkbox; el color de canto solo se nota con grosor > 0). **Avanzado** conserva SOLO
   `WindowLayerLodFaces`: es un presupuesto de coste GPU por frame, no un ajuste de
   aspecto, y ahí sí aplica el patrón ADR-014. Las claves del esquema (main.xml) no
   se mueven: solo cambia dónde se pintan los controles.

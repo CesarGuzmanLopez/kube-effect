@@ -619,6 +619,12 @@ Item {
       windowLayerGap: effect.configuration.WindowLayerGap
       windowLayerLodFaces: effect.configuration.WindowLayerLodFaces
       windowLayerPlateOpacity: effect.configuration.WindowLayerPlateOpacity
+      // Slab thickness arrives as the REQUEST; layerGeometry.thicknessEffective
+      // clips it to half the fitted step where the step is known (WindowLayers).
+      // The edge colour arrives as the raw KConfig string; Cube re-resolves it
+      // through layerGeometry.edgeColor so garbage never reaches the scene.
+      windowLayerThickness: effect.configuration.WindowLayerThickness
+      windowLayerEdgeColor: effect.configuration.WindowLayerEdgeColor
       currentDesktop: root.currentDesktop
       // Live camera distance for the culling seed kept ready
       // (ADR-025 point 12 reverted): the runtime ignores it

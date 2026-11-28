@@ -32,6 +32,11 @@ import "../package/contents/ui/layerGeometry.js" as LayerGeo
 //   stubFaceOpacity    the cube's face material opacity (default 1): the
 //     parity clause reads the live FACE materials and expects them to
 //     follow ONLY this value, never layerOpacity.
+//   stubThickness      the raw WindowLayerThickness Int request: the
+//     effective value is clipped per face to half the fitted step in
+//     layerGeometry.thicknessEffective (the oracle mirrors both steps).
+//   stubEdgeColor      the raw WindowLayerEdgeColor string (garbage must
+//     fall back to the schema default through layerGeometry.edgeColor).
 Item {
   id: harness
 
@@ -43,6 +48,18 @@ Item {
   readonly property bool knobRotating: typeof stubRotating === "boolean" && stubRotating
   readonly property real knobFaceOpacity: typeof stubFaceOpacity === "number" ? stubFaceOpacity : 1
   readonly property int rawCurrent: typeof stubCurrentNumber === "number" ? stubCurrentNumber : 0
+  readonly property var rawThickness: typeof stubThickness === "number" ? stubThickness : 0
+  readonly property string rawEdgeColor: typeof stubEdgeColor === "string" ? stubEdgeColor : "#141719"
+  // Whether the runtime module set (QtQuick3D.Helpers behind SlabMesh.qml)
+  // loaded: without it the box degrades to the flat quad and the oracle
+  // relaxes the box clauses exactly like the effect does. (A probe
+  // Loader, not a Component: Component elements take no properties
+  // besides id, the loader is the URL-based compile path.)
+  readonly property bool helpersOk: slabProbe.status === Loader.Ready
+  Loader {
+    id: slabProbe
+    source: "../package/contents/ui/SlabMesh.qml"
+  }
 
   // The fake current desktop: a real QObject with the number Cube
   // compares (identity across model wrappers is not guaranteed; the
@@ -71,6 +88,8 @@ Item {
     windowLayerGap: harness.rawGap
     windowLayerLodFaces: harness.rawLod
     windowLayerPlateOpacity: harness.rawPlate
+    windowLayerThickness: harness.rawThickness
+    windowLayerEdgeColor: harness.rawEdgeColor
     currentDesktop: harness.currentStub
     faceOpacity: harness.knobFaceOpacity
     // The runtime ScreenView chain, mirrored (see the knob comment): the
@@ -105,6 +124,20 @@ Item {
       }
       return "unknown";
     }
+    // Material.CullMode on Qt 6.12: BackFace=1, Front=2, None=3 (the enum
+    // note in Cube.qml) - name it for the oracle instead of an int.
+    function cullName(c) {
+      if (c === Material.BackFaceCulling) {
+        return "back";
+      }
+      if (c === Material.FrontFaceCulling) {
+        return "front";
+      }
+      if (c === Material.NoCulling) {
+        return "none";
+      }
+      return "unknown";
+    }
     const faces = [];
     for (let i = 0; i < count; ++i) {
       const face = cube.faceNodeAt(i);
@@ -132,7 +165,24 @@ Item {
           desktopOk: quad.desktop === face.desktop,
           alphaMode: modeName(quad.materials[0].alphaMode),
           alphaCutoff: quad.materials[0].alphaCutoff,
-          materialOpacity: quad.materials[0].opacity
+          materialOpacity: quad.materials[0].opacity,
+          // Slab (fourth amendment, FINAL single-box design): one Model
+          // per layer; flat = built-in #Rectangle, boxed = the shared
+          // unit ProceduralMesh (two subsets) scaled to the window.
+          boxMode: quad.geometry !== null && quad.geometry !== undefined ? "box" : "flat",
+          boxSubsets: quad.geometry !== null && quad.geometry !== undefined ? quad.geometry.subsets.length : 0,
+          scaleX: quad.scale.x,
+          scaleY: quad.scale.y,
+          scaleZ: quad.scale.z,
+          frontCull: cullName(quad.materials[0].cullMode),
+          edgeCull: cullName(quad.materials[1].cullMode),
+          frontHasMap: quad.materials[0].baseColorMap !== null && quad.materials[0].baseColorMap !== undefined,
+          edgeAlphaMode: modeName(quad.materials[1].alphaMode),
+          edgeOpacity: quad.materials[1].opacity,
+          edgeR: quad.materials[1].baseColor.r,
+          edgeG: quad.materials[1].baseColor.g,
+          edgeB: quad.materials[1].baseColor.b,
+          edgeA: quad.materials[1].baseColor.a
         });
       }
       const grabs = [];
@@ -176,6 +226,9 @@ Item {
       gapRaw: harness.rawGap,
       lodRaw: harness.rawLod,
       plateRaw: harness.rawPlate,
+      thicknessRaw: harness.rawThickness,
+      edgeRaw: harness.rawEdgeColor,
+      helpers: harness.helpersOk,
       layerRotationRaw: harness.rawLayerRotation,
       rotating: harness.knobRotating,
       faceOpacityLive: cube.faceOpacity,

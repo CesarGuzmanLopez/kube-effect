@@ -23,6 +23,24 @@ updated by the amendment):
       on cap (maxRank + 1 steps span the budget; one fitted step for all,
       no per-layer clamp, no stretch when the configured gap already fits)
       — the same fixed cap for every shape, sheet included;
+  (h) slab box (fourth amendment, final single-box design): eff =
+      min(request clamped 0-300 with default 2, fitted/2) decides the
+      shape. eff 0 (or no QtQuick3D.Helpers) -> flat built-in #Rectangle,
+      NoCulling front, unit z scale: pixel parity with the quad-only
+      model. eff > 0 -> ONE closed ProceduralMesh box per layer: TWO
+      material subsets (0 = textured front, 1 = sides + back edge colour
+      - the subset order is BUILT in SlabMesh.qml, not guessed from Qt
+      docs, because Model has no customMaterials in 6.12: verified
+      against the live engine), scale (win.w/100, win.h/100, eff/100) so
+      the box spans the EXACT window rect, the node CENTRED at
+      ladder - eff/2 so the FRONT lands exactly on the ladder (cap and
+      no-crossing measured at the front), z scale eff/100 (a request
+      beyond half the step is CLIPPED, never obeyed), both materials
+      BackFaceCulling (NoCulling was the measured black bezel through
+      the thumbnail's transparent shadow margins), the front keeping its
+      WindowThumbnail map and both materials sharing the threshold and
+      opacity; consecutive ranks satisfy back(rank n+1) >= front(rank n):
+      two layers never intersect.
   (c) LOD off and flag off: zero quads instantiated and the grab keeps
       every internalId (pixel parity with the cube of before);
   (d) every id in layeredIds has wId == "" in its face grab, and every id
@@ -81,6 +99,17 @@ ROT_MIN, ROT_MAX, ROT_DEFAULT = 0.0, 1.0, 0.7
 FADE_FLOOR = 0.1
 MASK_THRESHOLD = 0.99
 FACE_CUTOFF = 0.5
+# Slab body (fourth amendment): the thickness request clamps 0-300 with a
+# default of 0 (= flat quad, pixel parity); the EFFECTIVE value is then
+# clipped to half the fitted step, so two layers can never intersect. The
+# edge colour defaults to the plate tone; anything the QML resolver maps
+# to the default must map to the same rgba here.
+THICK_MIN, THICK_MAX, THICK_DEFAULT = 0, 300, 0
+EDGE_DEFAULT_HEX = "#141719"
+# The slab body sits HALF its effective depth plus the epsilon behind the
+# front plane (its own front face rests epsilon behind the textured quad -
+# the anti-Z-fight offset; see WindowLayers.qml).
+EDGE_TOL = 1e-5
 
 STUB_ROWS = 6
 STUB_SHOWN = (0, 1, 2)
@@ -134,6 +163,49 @@ def resolved_rotation(raw):
   return min(ROT_MAX, max(ROT_MIN, value))
 
 
+def resolved_thickness(raw):
+  try:
+    value = float(raw)
+  except (TypeError, ValueError):
+    return float(THICK_DEFAULT)
+  return min(THICK_MAX, max(THICK_MIN, value))
+
+
+def expected_effective(raw, fitted):
+  """layerGeometry.thicknessEffective: the request clipped to half the
+  fitted step (the step per face; the cap/overflow repartition can shrink
+  it, and the clip follows it down)."""
+  return min(resolved_thickness(raw), max(0.0, float(fitted)) / 2)
+
+
+def edge_rgba(raw):
+  """Mirror of layerGeometry.edgeColor + Qt's hex parsing, reduced to the
+  forms the schema/KCM produce (#rrggbb, #rgb; anything else the QML
+  resolver maps to the default string, mirrored here as the default rgba).
+  Returns (r, g, b, a) floats."""
+  value = raw.strip() if isinstance(raw, str) else ""
+  if len(value) >= 4 and value[0] == "#":
+    digits = value[1:]
+    try:
+      if len(digits) == 3:
+        r, g, b = (int(c * 2, 16) / 255.0 for c in digits)
+        return (r, g, b, 1.0)
+      if len(digits) == 6:
+        r = int(digits[0:2], 16) / 255.0
+        g = int(digits[2:4], 16) / 255.0
+        b = int(digits[4:6], 16) / 255.0
+        return (r, g, b, 1.0)
+    except ValueError:
+      pass
+  digits = EDGE_DEFAULT_HEX[1:]
+  return (
+    int(digits[0:2], 16) / 255.0,
+    int(digits[2:4], 16) / 255.0,
+    int(digits[4:6], 16) / 255.0,
+    1.0,
+  )
+
+
 def expected_layer_opacity(rotating, raw):
   # ScreenView's chain, mirrored: Constants.faceOpacity(1, resolved, moving)
   # -> rest is hard-wired 1 (solid windows at rest, clause (g2)); while
@@ -179,6 +251,11 @@ def _face_context(face, dump):
     "plate": plate,
     "layer": layer,
     "face_opacity": face_opacity,
+    "thickness_raw": dump["thicknessRaw"],
+    "edge_raw": dump["edgeRaw"],
+    "helpers": bool(dump.get("helpers", True))
+    if isinstance(dump.get("helpers"), bool)
+    else True,
     "current": current,
     "expect_active": layering
     and (
@@ -323,7 +400,13 @@ def _depths_problems(ctx, face, dump, shown, problems):
     rank = sum(1 for other in orders if other < quad["order"])
     depths[quad["id"]] = (rank + 1) * fitted
     _quad_depth_problems(label, quad, rank, fitted, dump, problems)
-  return {"depths": depths, "fitted": fitted, "max_rank": max_rank, "orders": orders}
+  return {
+    "depths": depths,
+    "fitted": fitted,
+    "max_rank": max_rank,
+    "orders": orders,
+    "eff": expected_effective(dump["thicknessRaw"], fitted),
+  }
 
 
 def _quad_depth_problems(label, quad, rank, fitted, dump, problems):
@@ -333,7 +416,16 @@ def _quad_depth_problems(label, quad, rank, fitted, dump, problems):
   plane, centred over its own window (the hole and the quad coincide;
   local px, Y flips)."""
   depth = (rank + 1) * fitted
-  expected_z = layer_depth_out(rank, fitted)
+  # With the box the NODE sits centred eff/2 behind the ladder (the front
+  # lands back on it); flat layers sit ON it. The mirror follows the
+  # dump's own mode so a scene that stays flat when the eff demands a box
+  # is caught by the (h) clause, not hidden here.
+  box_shift = (
+    expected_effective(dump.get("thicknessRaw", 0), fitted) / 2
+    if quad.get("boxMode") == "box"
+    else 0.0
+  )
+  expected_z = depth + EPSILON - box_shift
   if not close(quad["z"], expected_z, POSITION_TOL):
     problems.append(
       f"{label}: quad {quad['id']} z {quad['z']} != {expected_z} (rank {rank}, fitted {fitted})"
@@ -484,6 +576,98 @@ def _quad_material_problems(ctx, shown, problems):
       )
 
 
+def _slab_problems(ctx, shown, ladder, problems):
+  """(h) The single closed box (fourth amendment, final design): eff =
+  min(request, fitted/2) decides. Split per case for readability (S3776):
+  _slab_rect_problems is the flat parity, _slab_box_problems the boxed
+  layer; both share the window-rect scale check."""
+  label = ctx["label"]
+  eff = ladder["eff"]
+  helpers = ctx["helpers"]
+  ordered = sorted(shown, key=lambda q: q["z"])
+  previous_front = None
+  for quad in ordered:
+    _slab_rect_problems(label, quad, problems)
+    if eff <= 1e-12 or not helpers:
+      # Flat (or the documented degradation without QtQuick3D.Helpers):
+      # the node sits ON the ladder, there is no front offset.
+      previous_front = quad["z"]
+      _slab_flat_case(label, quad, eff, helpers, problems)
+      continue
+    previous_front = _slab_box_case(label, quad, eff, ctx, previous_front, problems)
+
+
+def _slab_rect_problems(label, quad, problems):
+  """The box - flat or not - spans the EXACT window rect in x/y (a fatter
+  box is the bezel bug in geometry form: the shadow margins must not be
+  part of the slab)."""
+  i = int(quad["id"].rsplit("-", 1)[1])
+  expect_w = (320 - 40 * i) / 100
+  expect_h = (200 + 30 * i) / 100
+  if not close(quad["scaleX"], expect_w, POSITION_TOL) or not close(
+    quad["scaleY"], expect_h, POSITION_TOL
+  ):
+    problems.append(
+      f"{label}: layer {quad['id']} x/y scale {quad['scaleX']}x{quad['scaleY']} != window {expect_w}x{expect_h} (box larger than the window)"
+    )
+
+
+def _slab_flat_case(label, quad, eff, helpers, problems):
+  """eff 0 (or no Helpers): the built-in #Rectangle with NoCulling and a
+  unit z scale - pixel parity with the quad-only model."""
+  if quad["boxMode"] != "flat":
+    problems.append(
+      f"{label}: {quad['id']} renders the box with effective thickness {eff} and helpers={helpers} (flat parity broken)"
+    )
+  if not close(quad["scaleZ"], 1.0, POSITION_TOL):
+    problems.append(
+      f"{label}: {quad['id']} flat layer carries a z scale {quad['scaleZ']} (the #Rectangle stays 2D)"
+    )
+
+
+def _slab_box_case(label, quad, eff, ctx, previous_front, problems):
+  """eff > 0 with Helpers: the two-subset closed box. Returns the front
+  plane for the caller's no-crossing walk."""
+  layer = ctx["layer"]
+  expected_mode = "mask" if layer >= MASK_THRESHOLD else "blend"
+  edge = edge_rgba(ctx["edge_raw"])
+  if quad["boxMode"] != "box" or int(quad["boxSubsets"]) != 2:
+    problems.append(
+      f"{label}: {quad['id']} is not the two-subset box (mode {quad['boxMode']!r}, subsets {quad['boxSubsets']}) with eff {eff}"
+    )
+  if not close(quad["scaleZ"], eff / 100, POSITION_TOL):
+    problems.append(
+      f"{label}: {quad['id']} box z scale {quad['scaleZ']} != eff/100 = {eff / 100} (request beyond half the step must be CLIPPED)"
+    )
+  if quad["frontCull"] != "back" or quad["edgeCull"] != "back":
+    problems.append(
+      f"{label}: {quad['id']} box cull {quad['frontCull']!r}/{quad['edgeCull']!r} != back/back (NoCulling on a closed box shows its inner side through the shadow margins: the measured black bezel)"
+    )
+  if not quad["frontHasMap"]:
+    problems.append(f"{label}: {quad['id']} box front lost its WindowThumbnail map")
+  if quad["edgeAlphaMode"] != expected_mode:
+    problems.append(
+      f"{label}: edge material alphaMode {quad['edgeAlphaMode']!r} != {expected_mode!r} (same threshold as the front, never fixed)"
+    )
+  if not close(quad["edgeOpacity"], layer):
+    problems.append(
+      f"{label}: edge material opacity {quad['edgeOpacity']} != layerOpacity {layer}"
+    )
+  for want, got in zip(
+    edge, (quad["edgeR"], quad["edgeG"], quad["edgeB"], quad["edgeA"])
+  ):
+    if not close(got, want, EDGE_TOL):
+      problems.append(
+        f"{label}: edge colour component {got} != resolved {want} (raw {ctx['edge_raw']!r})"
+      )
+  front = quad["z"] + eff / 2
+  if previous_front is not None and front - eff < previous_front - POSITION_TOL:
+    problems.append(
+      f"{label}: boxes intersect: {quad['id']} reaches back to {front - eff}, behind the previous front {previous_front} (eff {eff} must stay <= half the step)"
+    )
+  return front
+
+
 def _face_problems(face, dump, problems):
   """Every clause of one face: context, then the assert groups (each group
   lives in its own helper, same order and short-circuits as the original
@@ -504,6 +688,7 @@ def _face_problems(face, dump, problems):
   _stack_shape_problems(ctx, shown, ladder, problems)
   _plate_problems(ctx, face, shown, problems)
   _quad_material_problems(ctx, shown, problems)
+  _slab_problems(ctx, shown, ladder, problems)
   return problems
 
 
@@ -554,6 +739,9 @@ def _good_dump():
     "gapRaw": 20,
     "lodRaw": 0,
     "plateRaw": 0.25,
+    # Slab defaults: no request -> flat quads, bodies hidden.
+    "thicknessRaw": 0,
+    "edgeRaw": "#141719",
     # Material contract defaults: rest (not rotating) -> the fade chain
     # answers 1, quads Mask, plate Blend; the face follows its own 1.0.
     "rotating": False,
@@ -621,10 +809,13 @@ def _good_dump():
 
 
 def _with_layer_fields(dump, layer=1.0):
-  """Stamp the material-contract fields of the live engine onto a synthetic
-  dump at the given effective pile opacity (>= MASK_THRESHOLD: Mask with
-  the cutoff pinned, below: Blend). The face material only ever follows
-  the face knob."""
+  """Stamp the material-contract + FLAT-slab fields of the live engine
+  onto a synthetic dump at the given effective pile opacity (>= MASK_
+  THRESHOLD: Mask with the cutoff pinned, below: Blend). The face
+  material only ever follows the face knob. Flat stamp: no box, unit
+  z-scale 1, the front material NoCulling (the two-sided flat rule)
+  while the edge material exists but binds no subset."""
+  edge = edge_rgba(dump["edgeRaw"])
   for face in dump["faces"]:
     face["faceAlphaMode"] = "blend"
     face["faceOpacityLive"] = dump["faceOpacityLive"]
@@ -635,6 +826,42 @@ def _with_layer_fields(dump, layer=1.0):
       quad["alphaMode"] = "mask" if layer >= MASK_THRESHOLD else "blend"
       quad["alphaCutoff"] = FACE_CUTOFF
       quad["materialOpacity"] = layer
+      i = int(quad["id"].rsplit("-", 1)[1])
+      quad["boxMode"] = "flat"
+      quad["boxSubsets"] = 0
+      quad["scaleX"] = (320 - 40 * i) / 100
+      quad["scaleY"] = (200 + 30 * i) / 100
+      quad["scaleZ"] = 1.0
+      quad["frontCull"] = "none"
+      quad["edgeCull"] = "back"
+      quad["frontHasMap"] = True
+      quad["edgeAlphaMode"] = "mask" if layer >= MASK_THRESHOLD else "blend"
+      quad["edgeOpacity"] = layer
+      quad["edgeR"], quad["edgeG"], quad["edgeB"], quad["edgeA"] = edge
+  return dump
+
+
+def _thick_dump(raw, gap):
+  """A good dump with the slab request (px) and the configured step: the
+  faces' ladder uses the fitted step of that gap, and every SHOWN layer
+  becomes the closed box - z centre shifted back eff/2 so the FRONT
+  stays exactly on the ladder, scale z = eff/100, both materials culled,
+  the front still textured. (Hidden rows stay flat: they exist only to
+  pin the shown/hidden split.)"""
+  dump = _good_dump()
+  dump["gapRaw"] = gap
+  dump["thicknessRaw"] = raw
+  fitted = expected_fitted_gap(resolved_gap(gap), 2)
+  eff = expected_effective(raw, fitted)
+  for face in dump["faces"]:
+    face["fittedGap"] = fitted
+    for quad in face["quads"]:
+      if quad["showLayer"]:
+        quad["z"] = (quad["order"] + 1) * fitted + EPSILON - eff / 2
+        quad["boxMode"] = "box"
+        quad["boxSubsets"] = 2
+        quad["scaleZ"] = eff / 100
+        quad["frontCull"] = "back"
   return dump
 
 
@@ -729,6 +956,97 @@ def _material_cases(expects_rejection, failures):
     "layerOpacity off the mirrored chain",
     lambda d: d.__setitem__("layerOpacityLive", 0.5),
     _turning_dump,
+  )
+
+
+def _slab_cases(expects_rejection, failures):
+  """The (h) family: positive thick/fitting dumps and the regressions the
+  user's spec asked to kill — request beating the half-step clip, front
+  not pinned, a body surviving eff 0, a hard-coded edge alphaMode, and
+  two slabs intersecting. Apart from selftest() for S3776."""
+
+  def thick300():
+    return _thick_dump(300, 40)
+
+  thick = thick300()
+  if validate(thick):
+    failures.append(
+      f"the thick slab dump (raw 300, gap 40) was rejected: {validate(thick)}"
+    )
+  fitting = _thick_dump(10, 40)
+  if validate(fitting):
+    failures.append(
+      f"the fitting-request dump (raw 10 < half step) was rejected: {validate(fitting)}"
+    )
+  coloured = _thick_dump(300, 40)
+  coloured["edgeRaw"] = "#ff0000"
+  for face in coloured["faces"]:
+    for quad in face["quads"]:
+      quad["edgeR"], quad["edgeG"], quad["edgeB"], quad["edgeA"] = edge_rgba("#ff0000")
+  if validate(coloured):
+    failures.append(f"the custom edge-colour dump was rejected: {validate(coloured)}")
+
+  # The request beyond half the step must appear CLIPPED: an engine
+  # honouring the raw 300 instead of the effective 20 is the crossing bug.
+  expects_rejection(
+    "request beating the half-step clip",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("scaleZ", 1.0),
+    thick300,
+  )
+  # The FRONT must stay on the ladder even with a body: pushing the front
+  # (the delegate itself) back by the half depth is the old assumption
+  # that the centre marks the depth.
+  expects_rejection(
+    "front not pinned to the ladder with thickness on",
+    lambda d: d["faces"][0]["quads"][1].__setitem__(
+      "z", d["faces"][0]["quads"][1]["z"] - 10
+    ),
+    thick300,
+  )
+  # eff 0 keeps the FLAT quad - a boxed layer without effective depth
+  # breaks the pixel parity with the quad-only model.
+  expects_rejection(
+    "boxed layer with zero effective thickness",
+    lambda d: (
+      d["faces"][0]["quads"][0].__setitem__("boxMode", "box"),
+      d["faces"][0]["quads"][0].__setitem__("boxSubsets", 2),
+    ),
+  )
+  # The box must span the EXACT window rect (a fatter box is the bezel
+  # bug in geometry form).
+  expects_rejection(
+    "box larger than the window",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("scaleX", 4.0),
+    thick300,
+  )
+  # NoCulling on the closed box = the measured black bezel (the inner
+  # side showing through the thumbnail's transparent shadow margins).
+  expects_rejection(
+    "edge culled NoCulling (the measured bezel)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("edgeCull", "none"),
+    thick300,
+  )
+  # A hard-coded edge alphaMode (never following the threshold):
+  expects_rejection(
+    "edge material with a fixed alphaMode",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("edgeAlphaMode", "opaque"),
+    thick300,
+  )
+  # Intersecting boxes: rank 1 shifted forward enough that its back face
+  # crosses rank 0's front (the scale also stops matching the mirror, so
+  # this scene dies twice - fine for a regression).
+  expects_rejection(
+    "slabs intersect",
+    lambda d: d["faces"][0]["quads"][1].__setitem__(
+      "z", d["faces"][0]["quads"][1]["z"] + 30
+    ),
+    thick300,
+  )
+  # Edge colour off the resolved value:
+  expects_rejection(
+    "edge colour drift",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("edgeR", 0.5),
+    thick300,
   )
 
 
@@ -857,6 +1175,7 @@ def selftest():
   )
 
   _material_cases(expects_rejection, failures)
+  _slab_cases(expects_rejection, failures)
 
   _ladder_cases(failures)
   return failures

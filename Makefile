@@ -106,7 +106,18 @@ lint-ci: check
 # compartido con las caras, raw sin grabar = default 0.7), plate Blend
 # siempre con opacity == plate × layer, y paridad con el flag apagado a
 # cualquier valor de la clave (cero quads, grab íntegro, la cara sigue
-# dependiendo SOLO de faceOpacity). Su --selftest comprueba
+# dependiendo SOLO de faceOpacity). Y la cláusula (h), la caja slab (cuarta
+# ampliación, rediseño medido 2026-11-28): eff = min(solicitado, fitted/2)
+# con default 2; eff 0 (o sin QtQuick3D.Helpers) = #Rectangle plano exacto;
+# eff > 0 = UNA caja ProceduralMesh de dos subsets (0 frente texturizado con
+# UVs del #Rectangle probado, 1 cantos + posterior con el color resuelto)
+# centrada eff/2 detrás de la ladder (el frente cae EXACTO en ella; el tope
+# y el no-cruce se miden en el frente); scale (w/100, h/100, eff/100) =
+# rectángulo exacto de la ventana (sin el margen de sombra: default 2 =
+# canto fino, no bisel); BackFaceCulling en ambos materiales (NoCulling =
+# el bisel negro medido por los márgenes transparentes del thumbnail); el
+# canto comparte umbral y opacidad del frente (baseColor, que diffuseColor
+# no existe en PrincipledMaterial). Su --selftest comprueba
 # el oráculo sin motor. Se salta (exit 0) si falta PySide6.
 # check-cylinder-wiring.py instancia el Cube.qml REAL (no la malla suelta) contra
 # el stub org.kde.kwin del harness comun (qml_check_harness.STUB_MODULE)

@@ -224,8 +224,11 @@ cap           = 150 px                                             (tope duro de
 fittedGap     = min(WindowLayerGap, cap / (maxRank + 1))            (cap directo en todas las formas;
                                                                   el stack ocupa maxRank+1 pasos)
 layerDepthOut = (rank + 1) * fittedGap + epsilon        (pila flotante: abajo = +paso, arriba = +cap)
-position.z    = +layerDepthOut                                      (+z = normal hacia fuera)
+eff           = min(WindowLayerThickness, fittedGap / 2) (grosor simulado EFECTIVO; default 2; 0 = plano)
+position.z    = +layerDepthOut  (flat)  |  = layerDepthOut - eff/2 (box: el FRENTE cae en la ladder)
 plate z       = -2                                                  (velo de huecos, detrás de todos los quads)
+caja          = ProceduralMesh unit box (subsets: 0 = frente, 1 = cantos + posterior)
+caja scale    = (win.w/100, win.h/100, eff/100)  +  BackFaceCulling en ambos materiales
 ```
 
 El **velo (plate)** va a `z = −(2)`: justo detrás del plano de la cara, delante
@@ -315,6 +318,37 @@ tambor).
 - **Signo hacia fuera**: un quad con z negativa (o la pila antigua
   `-((maxRank-rank)·fitted + ε)`) vuelve a medir dentro del sólido los dos
   problemas: interior asomando + parpadeo con la cara por el sort de centroides.
+- **El tope lo marca la cara frontal, no el centro** (cuarta ampliación,
+  grosor simulado): con eff > 0 la capa es UNA caja cerrada (ProceduralMesh
+  unit box compartido, ver SlabMesh.qml) cuyo nodo se centra en
+  `layerDepthOut - eff/2`, de modo que el **frente** (cara local +z) cae
+  EXACTO en la ladder y el cap de 150 se sigue midiendo ahí; la caja mide el
+  rectángulo exacto de la ventana (scale x/y = win/100 — el margen de sombra
+  del grab NO entra). El recorte `eff ≤ fittedGap/2` garantiza que la cara
+  posterior de una caja no alcanza nunca el frente de la siguiente: dos capas
+  jamás se atraviesan. eff 0 = quad plano exacto (paridad píxel).
+- **No hay "cubo de seis materiales"**: `Model.customMaterials` NO existe en
+  Qt 6.12 (verificado en el motor vivo: leerlo da `undefined` y asignarlo
+  lanza `Cannot assign to non-existent property`) y el built-in **#Cube** es
+  un solo subset → no puede mezclar frente texturizado y cantos de color. La
+  solución aplicada es un `ProceduralMesh` propio con DOS `subsets` (orden
+  = orden de `materials`, regla documentada de ProceduralMesh): subset 0 el
+  frente (UVs idénticas al #Rectangle probado — bottom-left origin, nada que
+  espejar; el índice "frontal" es así construido, no adivinado), subset 1 los
+  cuatro cantos + la posterior con `WindowLayerEdgeColor`. (El intento
+  intermedio —quad Mask delante + #Cube uniforme detrás, sin culling— quedó
+  refutado por píxeles: ver la trampa del bisel.) Y `PrincipledMaterial`
+  llama `baseColor` a su color uniforme (`diffuseColor` es de
+  DefaultMaterial: asignarlo rompe la carga del componente, medido).
+- **Caja con NoCulling = bisel negro** (medido 2026-11-28): el frente con
+  Mask descarta los píxeles TRANSPARENTES del WindowThumbnail (los márgenes
+  de sombra/decoración del compositor); con la geometría sin culling esos
+  píxeles dejaban ver la cara interior NEGRA de la caja — un bisel gigante
+  alrededor de cada ventana en lugar de un canto. Ambos materiales de la caja
+  van con `BackFaceCulling`: una caja cerrada culada no tiene interior que
+  asomar, y por los márgenes transparentes se ve el plate/interior del sólido
+  igual que con el quad plano. El quad plano (eff 0) conserva NoCulling (la
+  regla de dos lados de ADR-025).
 - **Centroide ≠ rank**: el centroide de un quad = centro de cara + offset
   lateral de la ventana + profundidad exterior; la pasada transparente ordena por
   él y NO respeta el rank (medido: en reposo oblicuo una capa inferior pintaba

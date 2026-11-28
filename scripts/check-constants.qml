@@ -332,6 +332,52 @@ Item {
     // number: the parity clause, asserted numerically at the resolver.
     check("layer fade equals face fade at 0.7", Constants.faceOpacity(1, LayerGeo.rotationOpacity(0.7), true), Constants.faceOpacity(1, 0.7, true));
 
+    // Slab thickness (ADR-028 fourth amendment): the request clamps 0-300
+    // (default 0 = flat) and the EFFECTIVE value is clipped to half the
+    // fitted step, so two layers can never intersect. The edge colour
+    // resolver keeps valid #hex strings and maps anything else to the
+    // schema default (the never-to-the-floor rule again).
+    check("thickness default null", LayerGeo.thicknessEffective(null, 100), 2);
+    check("thickness clamp high request", LayerGeo.thicknessEffective(300, 20), 10);
+    check("thickness fitting request", LayerGeo.thicknessEffective(10, 100), 10);
+    check("thickness half of repartitioned step", LayerGeo.thicknessEffective(300, 0), 0);
+    check("thickness negative request", LayerGeo.thicknessEffective(-5, 40), 0);
+    check("thickness string coercion", LayerGeo.thicknessEffective("25", 100), 25);
+    check("edge default on null", LayerGeo.edgeColor(null), "#141719");
+    check("edge default on garbage", LayerGeo.edgeColor("rojo"), "#141719");
+    check("edge keeps hex", LayerGeo.edgeColor("#ff0000"), "#ff0000");
+    check("edge keeps short hex", LayerGeo.edgeColor("#0f0"), "#0f0");
+
+    // The slab box generator (fourth amendment, final design): 24 vertices
+    // (4 per face, true outward normals), 36 indexes, the FIRST 6 being the
+    // front (material/subset 0 - the order SlabMesh.qml builds and the
+    // layers gate re-derives); front UVs the proven #Rectangle bottom-left
+    // pattern; degenerate input the empty answer (the cap/arc contract).
+    const slab = LayerGeo.slabVertices(100, 100, 100);
+    check("slab vertices", slab.positions.length, 24);
+    check("slab normals", slab.normals.length, 24);
+    check("slab uvs", slab.uvs.length, 24);
+    check("slab indexes", slab.indexes.length, 36);
+    check("slab front subset", slab.frontCount, 6);
+    check("slab side subset", slab.sideCount, 30);
+    check("slab front normal +z", slab.normals[0].z, 1);
+    check("slab front uv bottom-left", slab.uvs[0].x, 0);
+    check("slab front uv bottom-left v", slab.uvs[0].y, 0);
+    check("slab front uv top-right u", slab.uvs[3].x, 1);
+    check("slab front uv top-right v", slab.uvs[3].y, 1);
+    check("slab front z at half depth", slab.positions[0].z, 50);
+    check("slab back face normal", slab.normals[4].z, -1);
+    check("slab degenerate width", LayerGeo.slabVertices(0, 100, 2).positions.length, 0);
+    check("slab degenerate depth", LayerGeo.slabVertices(100, 100, -5).indexes.length, 0);
+    check("slab garbage input", LayerGeo.slabVertices("x", 100, 100).positions.length, 0);
+    // The exact window box: front face at +t/2 so a Model centred at
+    // ladder - t/2 lands the front exactly on the ladder (unit 100 scaled
+    // by eff/100 -> the front sits at +eff/2 local).
+    const winBox = LayerGeo.slabVertices(320, 200, 40);
+    check("slab window front z", winBox.positions[0].z, 20);
+    check("slab window half width", winBox.positions[0].x, -160);
+    check("slab window half height", winBox.positions[2].y, 100);
+
     const arc = ArcGeo.cylinderArcGeometry(2560, 1440, Constants.cylinderRadius(4, 2560, 100), Constants.CYLINDER_SEGMENTS);
     check("arc positions", arc.positions.length, 130);
     check("arc normals", arc.normals.length, 130);

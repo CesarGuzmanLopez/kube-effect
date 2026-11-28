@@ -5,7 +5,7 @@
 
 // Window-layer geometry (ADR-028 model H as amended 2026-11-27): the pure
 // depth formulas behind WindowLayers.qml and the Cube LOD gate, plus the
-// kwinrc clamps for the five WindowLayer* keys.
+// kwinrc clamps for the seven WindowLayer* keys.
 //
 // This module lives apart from constants.js on purpose, exactly like
 // arcGeometry.js and capGeometry.js (the ADR-027 precedent): constants.js
@@ -79,6 +79,20 @@ const PLATE_DEPTH_EXTRA = 2;
 // The dark veil colour behind the whole stack (WindowLayerPlateOpacity only
 // scales it); it is visible through the face holes and nothing else.
 const PLATE_COLOR = "#141719";
+// Simulated slab thickness (WindowLayerThickness, Int 0-300 px): default 2
+// gives a REAL thin edge out of the box - the box spans exactly the window
+// rect (win.width x win.height), NOT the grab with its shadow margins, so 2
+// px are a visible bezel-free rim (measured first attempt: a 0-default flat
+// box behind a Mask front showed a giant black bevel through the thumbnail
+// shadow margins - see SlabMesh.qml). 0 stays a real value: flat quad,
+// pixel parity with the quad-only model. 300 is the maximum REQUEST; the
+// effective value is always clipped to half the fitted step
+// (thicknessEffective).
+const THICKNESS_DEFAULT = 2;
+const THICKNESS_MAX = 300;
+// WindowLayerEdgeColor default: the slab sides take the same dark tone as
+// the plate veil out of the box (a coherent shadow between layers).
+const EDGE_COLOR_DEFAULT = "#141719";
 // Resolvers for the raw kwinrc entries (same rule as the constants.js
 // resolvers: an unset or hand-edited garbage value falls back to the schema
 // DEFAULT, never to the range floor, and everything else is clamped).
@@ -126,6 +140,129 @@ function lodFaces(rawLod) {
 // "no veil" value, exactly like the capOpacity contract.
 function plateOpacity(rawOpacity) {
   return clamped(rawOpacity, 0, 1, PLATE_OPACITY_DEFAULT);
+}
+
+// Simulated slab thickness (WindowLayerThickness, Int 0-300 px): the DEFAULT
+// 0 is a real value meaning "flat" (pixel parity with the quad-only model).
+// The EFFECTIVE thickness is min(requested, half the fitted step): the step
+// between two consecutive ranks is fittedGap, so an effective thickness of
+// at most fittedGap / 2 guarantees the back face of one slab can never
+// reach or cross the front face of the one in front of it (measured design
+// rule: two layers never intersect, at any gap; a request beyond half the
+// step buys no separation - it is clipped instead).
+function thicknessUnits(raw) {
+  return clamped(raw, 0, THICKNESS_MAX, THICKNESS_DEFAULT);
+}
+
+// The EFFECTIVE slab depth: the clamped request, then cut to half the
+// fitted step (the step between two consecutive ranks). With eff at most
+// half the step, the back face of one box can never reach the front face
+// of the one ahead - two layers can never intersect, at any gap, and a
+// request beyond half the step buys no separation (it is clipped, never
+// obeyed). A non-finite step answers 0 (flat): no NaN box depth.
+function thicknessEffective(raw, fitted) {
+  const step = finiteOr(fitted);
+  const limit = step === null ? 0 : Math.max(0, step) / 2;
+  return Math.min(thicknessUnits(raw), limit);
+}
+
+// The slab box as ONE closed volume with two material subsets (the fourth
+// amendment, final shape after the bevel was measured 2026-11-28: two
+// objects per layer - textured Mask quad + solid cube behind - let the
+// TRANSPARENT shadow margins of the thumbnail discard under the cutoff and
+// showed the cube's black front face through them: a giant bezel, no rim
+// at all. A single closed box cannot do that: there is no second surface
+// behind the front's transparent pixels, and with BackFaceCulling the box
+// is opaque from outside and invisible from inside, so the margins reveal
+// the plate/interior exactly as the flat model did).
+//
+// slabVertices(width, height, depth): an axis-aligned box centred on the
+// origin, the FRONT face at +depth/2 (the outward normal, +z), the BACK at
+// -depth/2, exact width x height in face pixels - one unit is one pixel,
+// the same convention as every other surface. Returns {positions, normals,
+// uvs, indexes, frontCount, sideCount}: the first frontCount (6) indexes
+// are the front (material/subset 0), the remaining sideCount (30) are the
+// four sides + the back (material/subset 1). 24 vertices (4 per face) with
+// true per-face outward normals, CCW winding seen from OUTSIDE - the
+// arcGeometry/capGeometry generator contract, so check-constants can
+// validate it without an engine.
+//
+// The front UVs repeat the proven built-in #Rectangle mapping (the arc
+// wall note in arcGeometry.js: bottom-left origin, v = 0 at the bottom
+// row): u = 0.5 + x/W, v = 0.5 + y/H - a WindowThumbnail item texture
+// lands upright and unmirrored exactly like the flat quad's today. The
+// side/back UVs are arbitrary (those faces take a uniform colour).
+//
+// Degenerate input (non-finite or <= 0 in any dimension) answers empty
+// arrays - the mesh simply renders nothing until the numbers settle, the
+// cap/arc convention. The QML side calls it once with the unit size
+// (100 x 100 x 100) and per-window dimensions arrive through the Model
+// scale (w/100, h/100, eff/100): one shared mesh for every layer, exactly
+// like the shared arc.
+function slabVertices(width, height, depth) {
+  const w = finiteOr(width);
+  const h = finiteOr(height);
+  const d = finiteOr(depth);
+  if (w === null || h === null || d === null || w <= 0 || h <= 0 || d <= 0) {
+    return { positions: [], normals: [], uvs: [], indexes: [], frontCount: 0, sideCount: 0 };
+  }
+  const hw = w / 2;
+  const hh = h / 2;
+  const hd = d / 2;
+  // Six faces written explicitly: outward normal + four corners, in CCW
+  // order seen from OUTSIDE (the arc/cap contract; every entry below was
+  // hand-checked with (v1-v0) x (v3-v0) = normal), triangles (0,1,3) and
+  // (3,2,0).
+  const faces = [
+    // front (+z): from +z looking -z, x grows right and y grows up.
+    { n: [0, 0, 1], c: [[-hw, -hh, hd], [hw, -hh, hd], [-hw, hh, hd], [hw, hh, hd]] },
+    // back (-z).
+    { n: [0, 0, -1], c: [[-hw, -hh, -hd], [-hw, hh, -hd], [hw, -hh, -hd], [hw, hh, -hd]] },
+    // right (+x).
+    { n: [1, 0, 0], c: [[hw, -hh, hd], [hw, -hh, -hd], [hw, hh, hd], [hw, hh, -hd]] },
+    // left (-x).
+    { n: [-1, 0, 0], c: [[-hw, -hh, -hd], [-hw, -hh, hd], [-hw, hh, -hd], [-hw, hh, hd]] },
+    // top (+y).
+    { n: [0, 1, 0], c: [[-hw, hh, hd], [hw, hh, hd], [-hw, hh, -hd], [hw, hh, -hd]] },
+    // bottom (-y).
+    { n: [0, -1, 0], c: [[-hw, -hh, -hd], [hw, -hh, -hd], [-hw, -hh, hd], [hw, -hh, hd]] },
+  ];
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indexes = [];
+  for (let f = 0; f < 6; ++f) {
+    const face = faces[f];
+    const base = f * 4;
+    for (let c = 0; c < 4; ++c) {
+      positions.push(Qt.vector3d(face.c[c][0], face.c[c][1], face.c[c][2]));
+      normals.push(Qt.vector3d(face.n[0], face.n[1], face.n[2]));
+      // The FRONT keeps the proven #Rectangle UVs (bottom-left origin: u
+      // grows with x, v with y - arcGeometry.js note), so a
+      // WindowThumbnail item texture lands upright and unmirrored exactly
+      // like the flat quad's today. The other faces take the same planar
+      // UV: the edge material is a uniform colour, it never matters.
+      uvs.push(Qt.vector2d(c === 1 || c === 3 ? 1 : 0, c >= 2 ? 1 : 0));
+    }
+    indexes.push(base + 0, base + 1, base + 3, base + 3, base + 2, base + 0);
+  }
+  return { positions: positions, normals: normals, uvs: uvs, indexes: indexes, frontCount: 6, sideCount: 30 };
+}
+
+// WindowLayerEdgeColor: the colour of the slab sides. KConfig delivers a
+// string; anything empty or not a #hex (hand-edited garbage) falls back to
+// the schema default, the same never-to-the-floor rule as the numeric
+// resolvers. "#rgb" is accepted (Qt parses it; the face/plate share the
+// exact default string "#141719").
+function edgeColor(rawColor) {
+  if (typeof rawColor !== "string") {
+    return EDGE_COLOR_DEFAULT;
+  }
+  const value = rawColor.trim();
+  if (value.length >= 4 && value.startsWith("#")) {
+    return value;
+  }
+  return EDGE_COLOR_DEFAULT;
 }
 
 // WindowLayerRotationOpacity (Double 0-1): the absolute layer opacity while

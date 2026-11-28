@@ -1460,6 +1460,61 @@ se conservan intactos. Gate: cláusula (b) espejada + rechazo sintético nuevo
 «bottom quad anchored on the plane with gap > 0» (el bug visto) y unidad
 single-window a +cap.
 
+**Cuarta ampliación (2026-11-27, rediseñada 2026-11-28 tras medirla) — grosor
+simulado de las capas**: decide el usuario dar a cada ventana-capa un
+**grosor real** (slab) con el canto de un color propio, sin que dos capas
+puedan atravesarse nunca. Nuevas claves (ambas en Ventanas, sin enums):
+`WindowLayerThickness` (Int 0–300 px, default **2** — un canto fino visible
+de entrada; 0 = plano, paridad píxel exacta con el modelo sin grosor) y
+`WindowLayerEdgeColor` (Color, default `#141719`, el tono del velo). Grosor
+EFECTIVO = `min(solicitado, fittedGap/2)` (layerGeometry.thicknessEffective):
+como el paso entre ranks es fittedGap, con eff ≤ half-step la cara posterior
+de una caja no alcanza jamás el plano frontal de la inferior — el recorte es
+el garante, no la prudencia del usuario (pedir 300 con gap 40 da 20).
+
+**Verificación de la premisa de implementación (no se asumió)**: el plan
+original proponía UN `#Cube` con `customMaterials[0..5]` =
+front/right/back/left/top/bottom. **No existe**: contra el motor vivo de esta
+máquina (Qt 6.12.1) `Model.customMaterials` responde `undefined` al leerlo y
+la asignación lanza `Cannot assign to non-existent property "customMaterials"`;
+la doc 6.11/6.12 del tipo Model tampoco lo lista, y el built-in #Cube es un
+único subset (las seis caras comparten material — el logo de hellocube sale en
+todas). El primer diseño aplicado fue por tanto **dos objetos** (el
+`#Rectangle` texturizado como frente + un #Cube de canto detrás, sin culling).
+**Medido en el anidado 2026-11-28: bisel negro** — el frente con Mask descarta
+los píxeles TRANSPARENTES del thumbnail (los márgenes de sombra que el
+compositor añade alrededor de cada ventana), y por esos huecos se veía la cara
+interior negra del cubo: un marco gigante "como pantalla extendida", sin canto
+alguno.
+
+**Diseño final (decidido sobre la medición)**: UNA sola caja cerrada por capa —
+`ProceduralMesh` unitario compartido (SlabMesh.qml, Loader aislado de
+QtQuick3D.Helpers con el patrón arc/capas: sin el módulo, la capa degrada a
+plano y el efecto sigue vivo) con **dos subsets** de material: subset 0 = cara
+frontal (material texturizado, UVs idénticas al `#Rectangle` probado —
+bottom-left origin, nada espejado; el índice frontal es **construido**, no
+adivinado, porque la premisa de los seis materiales murió arriba), subset 1 =
+los cuatro cantos + la posterior (material uniforme `WindowLayerEdgeColor`).
+Ambos materiales con **BackFaceCulling**: una caja cerrada y culada no tiene
+interior que asomar, y los márgenes transparentes del frente dejan ver el
+plate/interior exactamente como con el quad plano (la regla que el cubo detrás
+violaba). El nodo se centra en `layerDepthOut − eff/2`: el **frente** cae
+exacto en la ladder — el tope 150 y el no-cruce se miden en la cara frontal,
+nunca en el centro — y la caja escala a (win.w/100, win.h/100, eff/100): el
+rectángulo EXACTO de la ventana, sin el margen de sombra (con default 2 px eso
+es un canto fino, no un bisel). Con eff 0 (o sin Helpers) el Model conserva el
+built-in `#Rectangle` con NoCulling: píxel a píxel el modelo plano. Gate:
+cláusula (h) leída en vivo del motor (modo plano vs caja, **dos subsets**,
+scale (w/100, h/100, eff/100), culling back/back del frente y del canto,
+frente exacto en la ladder, alphaMode/opacidad/color resuelto del canto,
+no-cruce entre ranks consecutivos, y sonda de Helpers con la degradación a
+plano permitida) + rechazos sintéticos (request vence el clip, frente fuera de
+la ladder con grosor, caja con eff 0, **canto con NoCulling — el bisel
+medido**, caja mayor que la ventana, alphaMode fijo, cajas que se atraviesan,
+deriva de color) + escenarios `thick`/`thickfit`/`thickdefault`/
+`thickcolour` sobre el Cube real. Trampas documentadas en ARQUITECTURA 2.4:
+el tope lo marca la cara frontal; caja sin culling = bisel negro.
+
 **Orden por profundidad en reposo (medido 2026-11-27, segunda corrección del
 flip)**: con los quads en `Blend` fijo QtQuick3D ordena la pasada transparente
 por **centroide**, y el centroide de un quad = centro de cara + offset lateral

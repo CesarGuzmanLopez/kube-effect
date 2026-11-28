@@ -404,7 +404,8 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                     </widget>
 
                     <!-- 3. Windows 3D (ADR-028 as amended 2026-11-27): the
-                         switch and its LOOK controls (gap, plate) live here;
+                         switch and its LOOK controls (gap, plate, rotation fade,
+                         slab thickness and edge colour) live here;
                          only the cost budget (LOD faces) stays in Advanced —
                          user decision: gap/plate are normal feature settings,
                          not expert knobs (ADR-014 split kept for the LOD). -->
@@ -519,6 +520,49 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
                                                         </property>
                                                         <property name="decimals">
                                                             <number>2</number>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="3" column="0">
+                                                    <widget class="QLabel" name="layerThicknessLabel">
+                                                        <property name="text">
+                                                            <string>Grosor del canto (px):</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="3" column="1">
+                                                    <widget class="QSpinBox" name="kcfg_WindowLayerThickness">
+                                                        <property name="enabled">
+                                                            <bool>false</bool>
+                                                        </property>
+                                                        <property name="toolTip">
+                                                            <string>Grosor simulado de cada ventana-capa (por defecto 2 px): la capa es una caja cerrada — frente texturizado + cantos del color de canto — visible en oblicuo. La caja mide el rectángulo exacto de la ventana, no el grab con sombras. Se recorta a la mitad del paso entre capas, así que dos capas jamás se atraviesan; pedir más que gap/2 no separa nada. 0 = plano (paridad píxel con el modelo sin grosor).</string>
+                                                        </property>
+                                                        <property name="minimum">
+                                                            <number>0</number>
+                                                        </property>
+                                                        <property name="maximum">
+                                                            <number>300</number>
+                                                        </property>
+                                                        <property name="suffix">
+                                                            <string> px</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="4" column="0">
+                                                    <widget class="QLabel" name="layerEdgeLabel">
+                                                        <property name="text">
+                                                            <string>Color de canto:</string>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item row="4" column="1">
+                                                    <widget class="KColorButton" name="kcfg_WindowLayerEdgeColor">
+                                                        <property name="enabled">
+                                                            <bool>false</bool>
+                                                        </property>
+                                                        <property name="toolTip">
+                                                            <string>Color de los cantos del slab (el cuerpo que asoma al mirar en oblicuo). Solo se ve con grosor mayor que 0; por defecto el mismo tono oscuro del velo.</string>
                                                         </property>
                                                     </widget>
                                                 </item>
@@ -1530,6 +1574,18 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
             <sender>kcfg_WindowLayering</sender>
             <signal>toggled(bool)</signal>
             <receiver>kcfg_WindowLayerRotationOpacity</receiver>
+            <slot>setEnabled(bool)</slot>
+        </connection>
+        <connection>
+            <sender>kcfg_WindowLayering</sender>
+            <signal>toggled(bool)</signal>
+            <receiver>kcfg_WindowLayerThickness</receiver>
+            <slot>setEnabled(bool)</slot>
+        </connection>
+        <connection>
+            <sender>kcfg_WindowLayering</sender>
+            <signal>toggled(bool)</signal>
+            <receiver>kcfg_WindowLayerEdgeColor</receiver>
             <slot>setEnabled(bool)</slot>
         </connection>
     </connections>
