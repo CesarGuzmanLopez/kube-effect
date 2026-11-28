@@ -26,7 +26,7 @@ un bloque de diagnóstico (ADR-023) y una sección plegable de Kube Effect Plus
             <item>
                 <widget class="QLabel" name="versionLabel">
                     <property name="text">
-                        <string>kube-effect 0.0.0.5</string>
+                        <string>kube-effect 0.0.0.6</string>
                     </property>
                     <property name="alignment">
                         <set>Qt::AlignRight|Qt::AlignVCenter</set>

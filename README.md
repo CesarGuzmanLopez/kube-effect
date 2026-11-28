@@ -3,7 +3,7 @@
 Clon del cubo de escritorios de KDE (efecto KWin en **QML puro**). Arranca como
 el **cubo virgen** de KDE (caras planas en polígono) y crece feature a feature.
 
-- Id: `kube-effect`. Atajo: `Meta+K`. Licencia: GPL-2.0-or-later. Versión: 0.0.0.5.
+- Id: `kube-effect`. Atajo: `Meta+K`. Licencia: GPL-2.0-or-later. Versión: 0.0.0.6.
 
 ## Qué es (estado actual)
 
