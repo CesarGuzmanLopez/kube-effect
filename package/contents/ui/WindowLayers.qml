@@ -307,45 +307,42 @@ Node {
       // (Y flipped, QML down -> +Y up in the scene).
       readonly property real localX: win !== null ? win.x - root.screenGeometry.x + win.width / 2 - root.faceSize.width / 2 : 0
       readonly property real localY: win !== null ? root.faceSize.height / 2 - (win.y - root.screenGeometry.y + win.height / 2) : 0
-      // The VISIBLE rect (measured 2026-11-28: the grab rect
-      // x/y/width/height extends past the window by the SHADOW margin -
-      // the WindowThumbnail paints the whole window image, shadow
-      // included, positioned at x/y - and a box sized to it placed the
-      // dark edge OUTSIDE the visible content with a strip of wallpaper
-      // between: "separado el canto de la ventana"). In the EFFECT's QML
-      // the frame rect is called GEOMETRY: /usr/include/kwin/effect/
-      // effectwindow.h declares Q_PROPERTY(KWin::RectF geometry READ
-      // frameGeometry) - "the geometry of the window excluding
-      // server-side and client-side drop-shadows", a Q_GADGET exposing
-      // x/y/width/height. NOTE: "frameGeometry" is a property of the
-      // SCRIPTING Window (window.h), NOT of EffectWindow - reading
-      // win.frameGeometry here gave undefined, hasFrame stayed false and
-      // the box silently fell back to the grab (measured 2026-11-28, the
-      // second invented-property bug of the day after boundsMax; the
-      // gates now pin this with hasFrameNow). The box is sized and
-      // centred on GEOMETRY; the flat quad and the textured fronts stay
-      // on x/y/width/height (pixel parity with the grab). The fallback
-      // to the grab rect only applies when the wrapper truly has no
-      // geometry (never in KWin 6.8; the noframe gate scenario exercises
-      // it with a visible NOTE, never a silent relaxation).
+      // The VISIBLE rect (measured, three rounds of "separado el canto":
+      // the grab rect x/y/width/height extends past the window by the
+      // SHADOW margin - the WindowThumbnail paints the whole window image
+      // including the shadow - and a box sized to it put the dark edge
+      // OUTSIDE the visible content with a strip of wallpaper between).
+      // WHICH OBJECT, MEASURED (overlay frame=0 in the real nested,
+      // 2026-11-28): model.window of KWinComponents.WindowFilterModel is
+      // the SCRIPTING Window - /usr/include/kwin/window.h, QML_ELEMENT -
+      // whose frame rect is "frameGeometry" (window.h:612 Q_PROPERTY
+      // KWin::RectF frameGeometry; alongside bufferGeometry :115,
+      // clientGeometry :122, size :136, x/y/width/height :143-164 with
+      // NOTIFY frameGeometryChanged, decorationHasAlpha :635). There is
+      // NO plain "geometry" property there: "geometry" belongs to
+      // KWin::EffectWindow (effectwindow.h:50, a different class this
+      // model never hands out). The previous round read win.geometry, got
+      // undefined, and the box fell back to the grab silently - the third
+      // wrong-class stub of the day. The chain therefore tries, in order,
+      // THE NAMES THE ACTUAL CLASS EXPOSES: win.frameGeometry (primary),
+      // then win.geometry (forward-compatible, costs nothing), else the
+      // grab rect with a visible provenance. frameSource is exported for
+      // the gate - the stub and the oracle must mirror the SCRIPTING
+      // class, not the effect one.
       //
-      // Numbered convention (the stub's geometry mirrors the real
-      // headers: geometry = the grab minus the shadow margin, a 1000x700
-      // face, screen at (0,0), window row i=0): grab
-      // (x=100,y=80,w=320,h=200) -> localX = 100+160-500 = -240, localY =
-      // 350-(80+100) = 170. geometry (106, 82, 308, 188) -> boxCenterX =
-      // 106+154-500 = -240 (shadows symmetric left/right here), boxCenterY
-      // = 350-(82+94) = 174 -> the box rides 4 px higher (asymmetric
-      // shadow). The front face spans the frame rect but the item texture
-      // maps the WHOLE grab (uv 0..1 across the quad, slabVertices keeps
-      // the proven #Rectangle mapping): the grab is COMPRESSED into the
-      // frame by (308/320, 188/200) = (0.9625, 0.94) - a few percent,
-      // centred on the content - so the shadow margins shrink slightly
-      // instead of the box growing into the wallpaper. No pixels clip and
-      // no band can appear; on a maximised window the margin is bare
-      // shadow, under 1%.
-      readonly property var frameGeom: win !== null ? win.geometry : undefined
-      readonly property bool hasFrame: frameGeom !== undefined && frameGeom !== null && frameGeom.width > 0 && frameGeom.height > 0
+      // Numbered convention (1000x700 face, screen (0,0), stub row i=0,
+      // mirroring window.h): grab/x-y-wh (x=100,y=80,w=320,h=200) ->
+      // localX = -240, localY = 170; frameGeometry (120, 90, 260, 145)
+      // (left/top margins 20/10, right/bottom 40/35, Breeze-heavier
+      // bottom/right) -> boxCenterX = 120+130-500 = -250, boxCenterY =
+      // 350-(90+72.5) = 187.5. The front spans the FRAME rect and the
+      // Texture transform (texCrop below) crops the grab to the frame's
+      // sub-rect, so content lands 1:1 inside the box and no wallpaper
+      // band can appear on any side.
+      readonly property var frameGeomCandidate: win !== null && win.frameGeometry !== undefined && win.frameGeometry !== null && win.frameGeometry.width > 0 && win.frameGeometry.height > 0 ? win.frameGeometry : (win !== null && win.geometry !== undefined && win.geometry !== null && win.geometry.width > 0 && win.geometry.height > 0 ? win.geometry : undefined)
+      readonly property bool hasFrame: frameGeomCandidate !== undefined && frameGeomCandidate !== null
+      readonly property string frameSource: win !== null && win.frameGeometry !== undefined && win.frameGeometry !== null && win.frameGeometry.width > 0 && win.frameGeometry.height > 0 ? "frameGeometry" : win !== null && win.geometry !== undefined && win.geometry !== null && win.geometry.width > 0 && win.geometry.height > 0 ? "geometry" : "none"
+      readonly property var frameGeom: frameGeomCandidate
       readonly property real boxW: hasFrame ? frameGeom.width : (win !== null && win.width > 0 ? win.width : 100)
       readonly property real boxH: hasFrame ? frameGeom.height : (win !== null && win.height > 0 ? win.height : 100)
       readonly property real boxCenterX: hasFrame ? frameGeom.x - root.screenGeometry.x + frameGeom.width / 2 - root.faceSize.width / 2 : localX

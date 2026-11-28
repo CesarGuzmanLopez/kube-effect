@@ -314,6 +314,7 @@ def _face_context(face, dump):
     "thickness_raw": dump.get("thicknessRaw"),
     "edge_raw": dump.get("edgeRaw", "#141719"),
     "no_geometry": bool(dump.get("stubNoGeometry")),
+    "geometry_only": bool(dump.get("geometryOnly")),
     "helpers": bool(dump.get("helpersInstalled", True)),
     "current": current,
     "expect_active": layering
@@ -769,6 +770,7 @@ def _slab_box_case(label, quad, eff, ctx, previous_front, problems):
     )
   _slab_back_problems(label, quad, expected_mode, problems)
   _slab_uv_problems(label, quad, ctx, problems)
+  _frame_source_problems(label, quad, ctx, problems)
   if not close(quad["scaleZ"], eff / 100, POSITION_TOL):
     problems.append(
       f"{label}: {quad['id']} box z scale {quad['scaleZ']} != eff/100 = {eff / 100} (request beyond half the step must be CLIPPED)"
@@ -886,6 +888,31 @@ def _frame_presence_problems(label, face, ctx, problems):
         problems.append(
           f"{label}: {quad['id']} claims frame sizing in the stubNoGeometry scene"
         )
+
+
+def _frame_source_problems(label, quad, ctx, problems):
+  """Which name the delegate actually resolved (frameSource): the model
+  class is the SCRIPTING Window (window.h) so the primary name is
+  "frameGeometry" - "geometry" belongs to EffectWindow and is only the
+  fallback rung; "none" means the grab fallback. Hard per scenario, and
+  consistent with hasFrameNow (the third invented/vacuum class of bug
+  of 2026-11-28: stub mirroring the WRONG header passed everything in
+  vacuum while the real nested showed frame=0)."""
+  src = quad.get("frameSource", "none")
+  if ctx["no_geometry"]:
+    want = "none"
+  elif ctx["geometry_only"]:
+    want = "geometry"
+  else:
+    want = "frameGeometry"
+  if src != want:
+    problems.append(
+      f"{label}: quad {quad['id']} frameSource {src!r} != {want!r} (the delegate must read frameGeometry first - the scripting Window name - then geometry, then none)"
+    )
+  if quad.get("hasFrameNow", False) == (src == "none"):
+    problems.append(
+      f"{label}: quad {quad['id']} frameSource {src!r} contradicts hasFrameNow {quad.get('hasFrameNow')} (they must agree - one chain, one answer)"
+    )
 
 
 def _face_problems(face, dump, problems):
@@ -1065,6 +1092,7 @@ def _with_layer_fields(dump, layer=1.0):
       quad["boxMode"] = "flat"
       quad["boxSubsets"] = 0
       quad["hasFrameNow"] = True
+      quad["frameSource"] = "frameGeometry"
       quad["boxSubsetCounts"] = []
       quad["backHasMap"] = True
       quad["texShared"] = True
@@ -1129,6 +1157,7 @@ def _thick_dump(raw, gap):
         quad["texPosV"] = sv0
         quad["texScaleV"] = sv1 - sv0
         quad["boxSubsetCounts"] = [6, 6, 24]
+        quad["frameSource"] = "frameGeometry"
         quad["backHasMap"] = True
         quad["texShared"] = True
         quad["backCull"] = "back"
@@ -1185,6 +1214,7 @@ def _noframe_dump(raw=300, gap=40):
   for face in dump["faces"]:
     for quad in face["quads"]:
       quad["hasFrameNow"] = False
+      quad["frameSource"] = "none"
       quad["texPosU"] = 0.0
       quad["texScaleU"] = 1.0
       quad["texPosV"] = 0.0
@@ -1195,6 +1225,17 @@ def _noframe_dump(raw=300, gap=40):
         quad["y"] = dump["faceHeight"] / 2 - (80 + 120 * i + (200 + 30 * i) / 2)
         quad["scaleX"] = (320 - 40 * i) / 100
         quad["scaleY"] = (200 + 30 * i) / 100
+  return dump
+
+
+def _geometryonly_dump(raw=300, gap=40):
+  """Chain rung 2: the class exposes ONLY the secondary "geometry" name -
+  the delegate must still find the frame, and frameSource must say so."""
+  dump = _thick_dump(raw, gap)
+  dump["geometryOnly"] = True
+  for face in dump["faces"]:
+    for quad in face["quads"]:
+      quad["frameSource"] = "geometry"
   return dump
 
 
@@ -1409,6 +1450,19 @@ def _slab_cases(expects_rejection, failures):
     failures.append(
       f"the helpers-missing degradation was rejected: {validate(degraded)}"
     )
+
+  # Chain rung 2: a class that only exposes "geometry" must still work
+  # (frameSource says geometry, crop stays the frame's).
+  geoonly = _geometryonly_dump()
+  if validate(geoonly):
+    failures.append(f"the geometryonly chain scene was rejected: {validate(geoonly)}")
+  # A box claiming frame sizing while the resolved name is "none" is the
+  # contradictory state the overlay showed as frame=0: must be rejected.
+  expects_rejection(
+    "frameSource none but box sized to the frame (contradiction)",
+    lambda d: d["faces"][0]["quads"][0].__setitem__("frameSource", "none"),
+    thick300,
+  )
 
   # The glass-back family (the "por detras no se ve" fix): the back must
   # carry the SAME capture, mirrored by the per-position UVs.

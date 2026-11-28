@@ -248,13 +248,20 @@ ListModel {
 }
 """,
   # Six fake windows per desktop (the layering gate needs a real stack):
-  # EVERY property the stub windows expose must have a matching Q_PROPERTY
-  # in /usr/include/kwin/effect/effectwindow.h - frameGeometry and
-  # boundsMax were real bugs of exactly this class (properties invented
-  # from the scripting API or from imagination; both passed the gates in
-  # vacuum and were caught late, in the nested session, 2026-11-28). The
-  # frame rect here is "geometry" (READ frameGeometry in effectwindow.h),
-  # NOT "frameGeometry" (scripting-only, does not exist on EffectWindow).
+  # the stub windows MIRROR /usr/include/kwin/window.h - the SCRIPTING
+  # KWin::Window (QML_ELEMENT) that KWinComponents.WindowFilterModel
+  # actually hands out - NOT effectwindow.h (KWin::EffectWindow is a
+  # different class the model never exposes). Every property here needs a
+  # Q_PROPERTY there: x/y/width/height (:143-164, the grab rect including
+  # the shadow margin - NOTIFY frameGeometryChanged), frameGeometry (:612,
+  # THE frame rect - primary name), size (:136), internalId (:387),
+  # stackingOrder (:403), minimized (:178), dock (:220), desktopWindow
+  # (:204). History of this very comment lying: boundsMax (invented on a
+  # subset), then "geometry" (right property, WRONG class - the overlay
+  # showed frame=0 and the user saw no fix for three rounds; all three
+  # incidents 2026-11-28). Lesson: the stub mirrors the class THE MODEL
+  # DELIVERS, verified header by header, never the one another class
+  # suggests.
   # three ordinary ones with DISTINCT stackingOrder values (i = 0, 1, 2,
   # varied x/y/w/h) that must win quads, and one each flagged minimized,
   # dock and desktopWindow (i = 3, 4, 5) that must NEVER be layered nor
@@ -282,33 +289,33 @@ ListModel {
         const number = desktop.x11DesktopNumber;
         for (let i = 0; i < 6; ++i) {
             // createQmlObject: a ListModel parses any nested element as a ListElement.
-            const win = Qt.createQmlObject("import QtQuick; QtObject { property string internalId; property real x; property real y; property real width; property real height; property var geometry; property int stackingOrder; property bool minimized; property bool dock; property bool desktopWindow }", wfm);
+            const win = Qt.createQmlObject("import QtQuick; QtObject { property string internalId; property real x; property real y; property real width; property real height; property var frameGeometry; property var geometry; property int stackingOrder; property bool minimized; property bool dock; property bool desktopWindow }", wfm);
             win.internalId = "stub-" + number + "-" + i;
             win.x = 100 + 150 * i;
             win.y = 80 + 120 * i;
             win.width = 320 - 40 * i;
             win.height = 200 + 30 * i;
-            // geometry - the EFFECT's name for the frame rect:
-            // /usr/include/kwin/effect/effectwindow.h declares
-            // Q_PROPERTY(KWin::RectF geometry READ frameGeometry) ("the
-            // geometry of the window excluding server-side and client-side
-            // drop-shadows"), a Q_GADGET with x/y/width/height. It is NOT
-            // called frameGeometry there - that name belongs to the
-            // SCRIPTING Window; reading win.frameGeometry here produced the
-            // second invented-property bug of 2026-11-28 (boundsMax was the
-            // first): the stub now mirrors ONLY properties that exist in
-            // effectwindow.h. The grab (x/y/width/height) extends past the
-            // frame by the shadow margin with the ASYMMETRY Breeze shows
-            // (heavier right/bottom): geometry = (x+20, y+10, w-60, h-45)
-            // - left margin 20, top 10, right 40, bottom 35. Deliberately different in size AND centre so the slab gate
-            // moves real geometry: the box must span THIS rect, and the
-            // front's whole-grab texture gets compressed into it (no
-            // wallpaper band between content and edge).
-            // The stubNoGeometry context property (the noframe scenario)
-            // leaves it undefined to exercise the documented grab fallback
-            // - with a visible NOTE, never a silent relaxation.
-            if (typeof stubNoGeometry !== "boolean" || !stubNoGeometry) {
-                win.geometry = (typeof stubFrameZero === "boolean" && stubFrameZero)
+            // frameGeometry - THE frame rect of the scripting Window
+            // (window.h:612), strictly inside the grab (x/y/width/height
+            // carry the shadow margin, Breeze-heavier right/bottom):
+            // frameGeometry = (x+20, y+10, w-60, h-45) - left 20, top 10,
+            // right 40, bottom 35. Deliberately different in size AND
+            // centre so the slab gate moves real geometry: the box spans
+            // THIS rect and the Texture crops the grab to its sub-rect (no
+            // wallpaper band). The stub leaves "geometry" UNSET: the real
+            // class does not have it (it belongs to EffectWindow); the
+            // geometryonly scenario (stubFrameOnlyGeometry) defines only
+            // that fallback name to prove the delegate's chain, and
+            // stubNoFrameProps leaves both unset for the grab fallback
+            // with its visible NOTE.
+            if (typeof stubNoFrameProps === "boolean" && stubNoFrameProps) {
+                // noframe scenario: neither name resolves -> grab fallback.
+            } else if (typeof stubFrameOnlyGeometry === "boolean" && stubFrameOnlyGeometry) {
+                // geometryonly scenario: the class WITHOUT frameGeometry but
+                // WITH geometry (the fallback branch of the chain, exercised).
+                win.geometry = Qt.rect(win.x + 20, win.y + 10, win.width - 60, win.height - 45);
+            } else {
+                win.frameGeometry = (typeof stubFrameZero === "boolean" && stubFrameZero)
                     ? Qt.rect(win.x, win.y, win.width, win.height)
                     : Qt.rect(win.x + 20, win.y + 10, win.width - 60, win.height - 45);
             }

@@ -1566,13 +1566,19 @@ palabras del usuario); la coherencia flat↔caja es la regla. (2) la caja se
 dimensionaba al rect del GRAB (`win.width/height`, que incluye la sombra del
 compositor) → "el grosor está separado de la imagen": franja de wallpaper entre
 contenido y canto; la caja pasa a dimensionarse y centrarse en el
-`geometry` (rect visible; effectwindow.h: Q_PROPERTY(KWin::RectF geometry
-READ frameGeometry) - el nombre `frameGeometry` en QML es de la API de
-scripting y NO existe en EffectWindow: la primera lectura por ese nombre
-daba undefined y la caja caía al fallback del grab - segunda propiedad
-inventada del día, cazada ya con assert duro `hasFrameNow` + escenario
-`noframe` con NOTE), con fallback al grab solo si el wrapper no expone
-geometry. Gates: subsetCounts [6,6,24] leídos del motor (0 frente, 1
+rect visible de SCRIPTING `frameGeometry` (window.h:612; la clase que
+`model.window` entrega: window.h:105 QML_ELEMENT, con bufferGeometry
+:115, clientGeometry :122, size :136, x/y/width/height :143-164 y
+decorationHasAlpha :635; NO tiene un `geometry` pelado - ese es de
+KWin::EffectWindow, effectwindow.h:50, otra clase que el modelo nunca
+entrega). Corrección dura con overlay real (2026-11-28, tercera de la
+jornada): la ronda anterior leía `win.geometry`, daba undefined y el
+overlay del usuario mostraba `frame=0` - tres rondas sin arreglo por
+espejar el header equivocado. El delegate lee ahora la cadena
+`frameGeometry` → `geometry` → grab y exporta `frameSource`; el gate lo exige
+duro (`frameGeometry` en thick*/defaultsunset, `geometry` con NOTE en
+geometryonly, `none` con NOTE en noframe, consistente con `hasFrameNow`).
+Lección en la cabecera del stub: espejar la clase que el MODELO entrega. Gates: subsetCounts [6,6,24] leídos del motor (0 frente, 1
 posterior, 2 cantos), back == mismo material/Texture del frente (una captura,
 un crop) y el sub-rect del frame llevado por la transform position/scale del
 Texture (la malla sigue compartida y estática), caja == frame (size AND centre),

@@ -101,7 +101,7 @@ installed is a HARD FAIL (an invented API once made SlabMesh.qml an
 eternal Loader.Error while the gate "relaxed" on a false
 missing-module and the box silently never existed). Relaxations apply
 ONLY to the two explicit scenes - module absent (visible NOTE SKIP) and
-the noframe scenario (stub without geometry, visible NOTE, box sized to
+the noframe scenario (no frame name resolves, visible NOTE, box sized to
 the grab) - never a silent OK. The dump carries
 slabLoaderStatus/slabLoaderError/hasFrameNow per face/quad and
 helpersInstalled/stubNoGeometry at root for exactly that.
@@ -439,6 +439,22 @@ _SCENARIOS = [
       "no_geometry": True,
     },
   ),
+  # geometryonly: the scripting name "frameGeometry" is ABSENT and only the
+  # EffectWindow-style "geometry" exists (forward-compatible rung of the
+  # delegate chain; frameSource must report "geometry").
+  (
+    "geometryonly",
+    {
+      "desktops": 3,
+      "layering": True,
+      "gap": 40,
+      "lod": 0,
+      "plate": 0.25,
+      "current": 1,
+      "thickness": 300,
+      "geometry_only": True,
+    },
+  ),
 ]
 
 
@@ -482,15 +498,18 @@ def _instantiate(application, import_root, scenario):
   engine.rootContext().setContextProperty(
     "stubDefaultsUnset", scenario.get("defaults_unset", False)
   )
-  # noframe: the stub leaves the geometry property UNSET (undefined) so
-  # the delegate's documented fallback to the grab rect is exercised -
-  # the oracle accepts it only here, with a visible NOTE, never as a
-  # silent relaxation of the thick scenarios (an invented property name
-  # once again passed the gate in vacuum: win.frameGeometry exists in
-  # the SCRIPTING API, not in EffectWindow - effectwindow.h names the
-  # frame rect "geometry").
+  # noframe: the stub windows expose NEITHER frameGeometry (the scripting
+  # name - window.h:612 - which is what WindowFilterModel's Window class
+  # ACTUALLY has) NOR geometry (the EffectWindow-only name the previous
+  # round wrongly trusted) - the delegate chain falls to the grab rect and
+  # the oracle accepts the identity crop only here, with a visible NOTE.
+  # geometryonly exposes ONLY the secondary "geometry" name to prove the
+  # chain's second rung works.
   engine.rootContext().setContextProperty(
-    "stubNoGeometry", scenario.get("no_geometry", False)
+    "stubNoFrameProps", scenario.get("no_geometry", False)
+  )
+  engine.rootContext().setContextProperty(
+    "stubFrameOnlyGeometry", scenario.get("geometry_only", False)
   )
   engine.rootContext().setContextProperty("stubCurrentNumber", scenario["current"])
   component = QQmlComponent(engine)
@@ -503,6 +522,16 @@ def _instantiate(application, import_root, scenario):
   application.processEvents()
   dump = json.loads(str(harness.property("dumpJson")))
   return harness, dump, (engine, component)
+
+
+def _first_frame_source(dump):
+  """frameSource of the first shown quad (proof of life printed per
+  scenario; apart from main() for S3776)."""
+  for face in dump["faces"]:
+    for quad in face["quads"]:
+      if quad["showLayer"]:
+        return str(quad.get("frameSource", "none"))
+  return "none"
 
 
 def main():
@@ -528,8 +557,13 @@ def main():
       # Visible NOTE for the exercised fallback (never a silent relax).
       if bool(dump.get("stubNoGeometry")):
         print(
-          name + ": NOTE the windows expose no geometry - the box "
-          "fell back to the grab rect (documented degradation)"
+          name + ": NOTE no frame name resolves - the box fell back "
+          "to the grab rect (documented degradation)"
+        )
+      if bool(dump.get("geometryOnly")):
+        print(
+          name + ": NOTE frameGeometry absent - the chain resolved via "
+          "geometry (forward-compatible rung)"
         )
       # A visible SKIP, never a silent OK: the box clauses only relax
       # when QtQuick3D.Helpers is genuinely not installed (a Loader
@@ -540,7 +574,19 @@ def main():
       for message in messages:
         problems.append(f"{name} qml: {message.strip()}")
       counts = [len(face["quads"]) for face in dump["faces"]]
-      print(name + ": faces=" + str(len(counts)) + " quads=" + str(counts))
+      # frame=<source>: proof of life of the chain against the CLASS THE
+      # MODEL DELIVERS (scripting Window) - thick*/defaultsunset must show
+      # frame=frameGeometry; anything else while the box claims frame data
+      # is the frame=0 silent-fallback that fooled three rounds.
+      print(
+        name
+        + ": faces="
+        + str(len(counts))
+        + " quads="
+        + str(counts)
+        + " frame="
+        + _first_frame_source(dump)
+      )
   if problems:
     print("check-layers: FAIL")
     for problem in problems:

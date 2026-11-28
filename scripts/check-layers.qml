@@ -55,7 +55,8 @@ Item {
   readonly property bool knobDefaultsUnset: typeof stubDefaultsUnset === "boolean" && stubDefaultsUnset
   readonly property real knobFaceOpacity: typeof stubFaceOpacity === "number" ? stubFaceOpacity : 1
   readonly property int rawCurrent: typeof stubCurrentNumber === "number" ? stubCurrentNumber : 0
-  readonly property bool knobNoGeometry: typeof stubNoGeometry === "boolean" && stubNoGeometry
+  readonly property bool knobNoFrameProps: typeof stubNoFrameProps === "boolean" && stubNoFrameProps
+  readonly property bool knobGeometryOnly: typeof stubFrameOnlyGeometry === "boolean" && stubFrameOnlyGeometry
   readonly property var rawThickness: typeof stubThickness === "number" ? stubThickness : null
   readonly property string rawEdgeColor: typeof stubEdgeColor === "string" ? stubEdgeColor : "#141719"
   // Whether the runtime module set (QtQuick3D.Helpers behind SlabMesh.qml)
@@ -223,6 +224,7 @@ Item {
           // unit ProceduralMesh (three subsets: front/back/sides) scaled
           boxMode: quad.geometry !== null && quad.geometry !== undefined ? "box" : "flat",
           hasFrameNow: quad.hasFrame,
+          frameSource: quad.frameSource,
           boxSubsets: quad.geometry !== null && quad.geometry !== undefined ? quad.geometry.subsets.length : 0,
           boxSubsetCounts: quad.geometry !== null && quad.geometry !== undefined ? [quad.geometry.subsets[0].count, quad.geometry.subsets[1].count, quad.geometry.subsets[2].count] : [],
           backHasMap: quad.materials[1].baseColorMap !== null && quad.materials[1].baseColorMap !== undefined,
@@ -303,7 +305,8 @@ Item {
       thicknessRaw: harness.knobDefaultsUnset ? undefined : harness.rawThickness,
       edgeRaw: harness.knobDefaultsUnset ? "" : harness.rawEdgeColor,
       helpers: harness.helpersOk,
-      stubNoGeometry: harness.knobNoGeometry,
+      stubNoGeometry: harness.knobNoFrameProps,
+      geometryOnly: harness.knobGeometryOnly,
       helpersInstalled: harness.helpersInstalled,
       headlightCount: harness.headlightCount,
       layerRotationRaw: harness.knobDefaultsUnset ? undefined : harness.rawLayerRotation,

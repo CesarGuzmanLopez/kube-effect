@@ -116,8 +116,10 @@ lint-ci: check
 # el punto de vista-, 2 los CUATRO cantos con el color resuelto y luz
 # Fragment) centrada eff/2 detrás de la ladder (el frente cae EXACTO en ella;
 # el tope y el no-cruce se miden en el frente); scale (geometry.w/100,
-# geometry.h/100, eff/100) = el rectángulo VISIBLE (`geometry` del efecto -
-# ojo: NO "frameGeometry", que es de scripting y dio undefined -; no el grab
+# geometry.h/100, eff/100) = el rectángulo VISIBLE del SCRIPTING Window
+# (window.h:612 "frameGeometry" - la clase que model.window entrega de
+# verdad; "geometry" es de EffectWindow y solo vale como fallback de la
+# cadena frameGeometry→geometry→grab, con frameSource auditado; no el grab
 # con sombra) = canto pegado al contenido, con el sub-rect del frame recortado
 # por la transform position/scale del Texture de cada capa (la malla jamás se
 # recompone); BackFaceCulling en los materiales de la caja (NoCulling = el
@@ -128,10 +130,11 @@ lint-ci: check
 # (el caso real: boundsMin/boundsMax inventados en ProceduralMeshSubset
 # hacían fallar el compile SIEMPRE y la caja nunca existió - FAIL jamás
 # relax, el relax solo con módulo ausente real y NOTE SKIP visible), y
-# hasFrameNow true en toda capa en caja (el efecto lee el marco como
-# "geometry" - "frameGeometry" es de scripting y dio undefined, segunda
-# propiedad inventada del día; el stub solo espeja Q_PROPERTY de
-# effectwindow.h) más el crop texPos/texScale == sub-rect del frame; el
+# hasFrameNow true en toda capa en caja CON frameSource consistente
+# ("frameGeometry" en thick*/defaultsunset - window.h es la clase del
+# modelo; leer "geometry" como único nombre dio frame=0 en el overlay real,
+# tercera incidencia del día; el stub espeja window.h, no effectwindow.h)
+# más el crop texPos/texScale == sub-rect del frame; el
 # escenario noframe ejercita el fallback con NOTE. El DebugOverlay pinta
 # slab=boxes/quads eff=N boxW/H grabW/H frame=0/1 en pantalla. Y la correccion de claves sin guardar
 # (medido 2026-11-28): el raw de las seis claves viaja en propiedades VAR

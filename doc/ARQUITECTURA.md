@@ -384,22 +384,32 @@ tambor).
   `console.warn` único con el errorString para que nested.log (truco §D) lo
   capture. El DebugOverlay lo pinta en pantalla: `slab=<boxes>/<quads>
   eff=<n>` — si la caja no vive, se ve (slab=0/N) sin abrir logs.
-- **El grab incluye la sombra: la caja se dimensiona a `geometry`**
-  (medido 2026-11-28: con grosor alto se veía contenido → franja de wallpaper
-  → banda negra: la caja usaba `win.width/height`, que es el rect del GRAB y
-  llega hasta el borde exterior de la sombra; el canto quedaba fuera del
-  contenido visible). Cuidado con el NOMBRE: en el efecto el rect visible es
-  `geometry` — effectwindow.h declara Q_PROPERTY(KWin::RectF geometry READ
-  frameGeometry) ("excluding drop-shadows"), gadget con x/y/width/height.
-  `frameGeometry` COMO PROPIEDAD QML es de la API de scripting (window.h) y
-  NO existe en EffectWindow: leer `win.frameGeometry` daba undefined, el
-  hasFrame caía a false y la caja volvía al grab — el segundo bug de propiedad
-  inventada del día (tras boundsMax), cazado ahora a fuego por el gate
-  (hasFrameNow duro). La caja escala a (geometry.width/100,
-  geometry.height/100, eff/100) y se CENTRA en el centro del frame (coords de
-  cara, Y flipped; ejemplo numérico en el comentario del delegate). Si el
-  wrapper no expone geometry (solo scenes de prueba), fallback al rect del
-  grab con NOTE visible — nunca OK silencioso. El sub-rect del frame DENTRO
+- **El grab incluye la sombra: la caja se dimensiona al marco — y el nombre
+  correcto es `frameGeometry` (clase SCRIPTING), con `geometry` de
+  fallback** (medido 2026-11-28, tres rondas de «sigue la separación»):
+  el grab `x/y/width/height` llega hasta el borde exterior de la sombra y la
+  caja dimensionada a él ponía el canto fuera del contenido (franja de
+  wallpaper + banda negra, asimétrica: Breeze es más ancha abajo/derecha).
+  LA CLASE IMPORTA: `model.window` de KWinComponents.WindowFilterModel es el
+  KWin::Window de SCRIPTING (window.h:105 QML_ELEMENT): su rect visible es
+  `frameGeometry` (window.h:612; junto a bufferGeometry :115, clientGeometry
+  :122, size :136, x/y/width/height :143-164 con NOTIFY frameGeometryChanged,
+  decorationHasAlpha :635) — y NO tiene una propiedad `geometry` pelada: esa es
+  de KWin::EffectWindow (effectwindow.h:50, READ frameGeometry), OTRA clase
+  que el modelo nunca entrega. Leer `win.geometry` devolvía undefined, el
+  overlay real del usuario lo delató (`frame=0`, caja==grab) — tercera
+  incidencia del día con la lema: **el stub y los gates deben espejar la clase
+  que el MODELO entrega, verificada header a header, no la que sugiere el
+  header del efecto**. La cadena del delegate lee
+  `frameGeometry` → `geometry` → grab, y exporta
+  `frameSource` que el gate exige duro (`frameGeometry` en thick*/
+  defaultsunset, NOTE visible en geometryonly/noframe, consistencia con
+  `hasFrameNow`). La caja escala a (frame.width/100,
+  frame.height/100, eff/100) con FRAME = el rect que resuelve la cadena
+  (`frameGeometry` de scripting → `geometry` → grab) y se CENTRA en
+  su centro (coords de cara, Y flipped; ejemplo numérico en el comentario del
+  delegate). Si ningún nombre resuelve (solo scenes de prueba), fallback al
+  rect del grab con NOTE visible — nunca OK silencioso. El sub-rect del frame DENTRO
   del grab NO se hornea en la malla (la unidad es estática y compartida; un
   intento con UVs por-ventana quedó en UVs completas y el gate lo cazó con
   hasFrameNow/tex* en vivo): lo lleva la `Texture` de cada capa con

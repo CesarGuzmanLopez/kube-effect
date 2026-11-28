@@ -353,11 +353,15 @@ Reglas:
   y subset 2 los CUATRO cantos con `WindowLayerEdgeColor` (con luz: lighting
   Fragment + headlight en la cámara, gateado por el flag). Todos los
   materiales de la caja con `BackFaceCulling`. La caja mide el rectángulo
-  VISIBLE: `geometry` en el efecto (`frameGeometry` es el nombre de la API de
-  scripting y NO existe en EffectWindow, medido 2026-11-28), que cae dentro
-  del grab (x/y/width/height llegan hasta el borde exterior de la sombra);
-  dimensionada al grab el canto quedaba separado del contenido por una franja
-  de wallpaper asimétrica (medido) — por eso el sub-rect del frame se recorta
+  VISIBLE: en el modelo del efecto (`model.window` = el Window de SCRIPTING,
+  window.h) ese rect se llama `frameGeometry` (window.h:612); `geometry` es
+  de la clase EffectWindow y NO está en el modelo — leído como único nombre
+  produjo el `frame=0` del overlay y tres rondas sin arreglo (2026-11-28); la
+  cadena lee `frameGeometry` → `geometry` → grab y exporta `frameSource` que
+  el gate exige. El frame cae dentro del grab (x/y/width/height llegan hasta
+  el borde exterior de la sombra); dimensionada al grab el canto quedaba
+  separado del contenido por una franja de wallpaper asimétrica (medido) — por
+  eso el sub-rect del frame se recorta
   vía la Transform del Texture (positionU/scaleU/positionV/scaleV) y la malla
   sigue compartida; wrapper sin geometry → fallback al rect del grab
   (degradado, nunca roto, con NOTE visible en el gate). La vía "un
