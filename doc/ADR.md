@@ -1314,3 +1314,81 @@ salta con exit 0 sin ella. Contrato de material
 leídos en vivo del motor. `check-cap.qml` pasa sus Modelos de muestra a Z.
 Tapas apagadas (default del usuario) → render idéntico a 0.0.0.4 (contrato
 intacto); sin claves nuevas; sin bump de versión (0.0.0.5 no publicado).
+
+## ADR-028 — Capas de ventana: modelo H (huecos en la cara intacta).
+
+**Decisión**: `WindowLayering` (Bool, default **false** — paridad píxel con el
+cubo virgen, patrón opt-in de las tapas, ADR-027) convierte cada ventana de una
+cara en un quad propio empujado hacia dentro según su rango de apilado. La cara
+**no se mueve**: sigue siendo la superficie del shell, y su grab suelta
+(`wId = ""`) exactamente las ventanas que ganan quad, dejando huecos transparentes
+detrás de los cuales flota cada capa. Fórmula y presupuesto por representación en
+ARQUITECTURA §2.4; reglas completas en requerimientos §2.1. Puntos:
+
+1. **Huecos (H), no pared retraída (P) ni quads exteriores (F).** La cara de
+   kube-effect SÍ es el grab del escritorio completo (wallpaper incluido, a
+   diferencia del proyecto de referencia anterior, cuya cara no lo grababa): P
+   arrastraría el wallpaper al fondo del cubo y abriría la silueta al girar (se
+   miraría dentro del sólido por cada cara, rompiendo el cilindro cerrado de
+   ADR-025/026); F fue medido allí y cruzó paredes y caras vecinas («ventanas
+   hundiéndose a través del escritorio»); y una cara que conserve sus ventanas
+   opacas frente a la pila (C) es muerta: el `Mask` en reposo escribe profundidad
+   y la ventana plana ocluye a su propia capa.
+2. **El hueco es el recorte.** Cada quad queda recortado por el hueco de su cara en
+   cualquier vista, así que la **hoja 2D** (1-2 escritorios, sin interior) puede
+   llevar capas con presupuesto = cap directo (150 px) — detrás solo hay vacío y no
+   hay paredes que cruzar. En sólidos (polígono ≥3, tambor) sigue
+   `min(faceDistance · 0.5, cap)`; medido: con `faceDistance = sheetGap` de la hoja
+   la fórmula del sólido aplastaría el stack a ~1 px.
+3. **LOD = presupuesto de coste, no de orden.** El culling de `Model` no se
+   propaga al `Texture.sourceItem`: capa instanciada = captura por frame aunque no
+   se vea. `WindowLayerLodFaces` (0–8, default 1, 0 = todas) limita la instanciación
+   por distancia de índice al escritorio actual. El pintado no depende del LOD
+   (centroides + umbral Mask/Blend, ADR-026). Se retira de los docs la frase
+   «obligatorio»: es obligatorio *para el coste* en sesiones con muchas ventanas;
+   puede ponerse a 0 y medir. No reduce el grab de la cara (ADR-023 sigue intacto).
+4. **Descartes**: solo las ventanas con capa se sueltan del grab. Docks y
+   ventana-wallpaper quedan **planos** (hueco sin quad detrás = shell abierto);
+   minimizadas no existen. Soltar = `wId = ""` (QUuid nulo — un `0` entero no
+   libera la captura, trucos-aprendidos §N).
+5. **Picking**: quads `pickable` → clic = `switchTo(desktop)` (lo de la cara).
+   Activar la ventana clickeada queda **documentada como feature futura del módulo
+   nativo**: `Workspace::activateWindow` no es QML-expuesto para efectos (medido en
+   `/usr/include/kwin`: `Window` expone solo `setMaximize`). Esta feature no toca
+   `native/` y el efecto debe seguir funcionando sin compilar.
+6. **Claves y UI**: cuatro claves sin enums nuevos (KConfigXT: Int/Double puros).
+   `WindowLayering` en la pestaña Ventanas del KCM (placeholder existente);
+   `WindowLayerGap`, `WindowLayerLodFaces` y `WindowLayerPlateOpacity` en Avanzado
+   (ADR-014). La pila completa (quads + plate) multiplica la opacidad de la cara
+   (ADR-021): al girar funda la pila entera, no solo la base.
+7. **Alcance 0.0.0.6, por pasos**: polígono (sólido ≥3 + hoja 1-2, funciona desde 1
+   escritorio), luego tambor (cilindro 1-2). Si la verificación en el anidado no
+   cierra en el tambor (coste o visual), las capas del tambor se apagan por código y
+   esa fase se pospone — misma versión. Curvar/deformar capas con el cilindro y las
+   colisiones con otros efectos quedan como features futuras con clave propia (la
+   referencia usó quads planos sobre la normal; aquí igual).
+8. **Código**: helpers puros en módulo nuevo `layerGeometry.js` (rank, fittedGap,
+   layerDepth, plateDepth — patrón arcGeometry.js/capGeometry.js de la enmienda de
+   ADR-027: constants.js guarda solo resolvedores de valor). `constants.js` (882
+   líneas) NO se splitea aquí: queda anotado como refactor posterior independiente,
+   sin mezcla con la feature.
+
+**Porqué**: es el estrato hacia adentro del sólido ya cerrado
+geométricamente (cilindro 0.0.0.4, tapas 0.0.0.5); cada capa es un quad con su
+`WindowThumbnail` (`Texture.sourceItem`) y hereda directamente la regla de
+sort-centroides y el umbral alphaMode Mask/Blend de ADR-026; DesktopView ya tiene
+el `WindowFilterModel { screenName }` — es extender la maquinaria existente, no
+inventar. Y es la deuda que ADR-023 dejó escrita: el ahorro real por distancia llega
+con `WindowLayerLodFaces`, ahora con presupuesto de coste documentado.
+
+**Puertas**: gate offscreen en el harness extendido (stub de WindowFilterModel con
+N ventanas por cara y `stackingOrder` distintos) y 5 asserts: monotonía estricta de
+profundidad por rank (dos capas nunca coplanares); todo ≤ cap con fittedGap
+repartido; caras fuera de LOD no instancian quads; cada ventana con capa tiene
+`wId = ""` en el grab de su cara; gap = 0 → todas a −ε (paridad con el plano). Lo
+visual se verifica en el anidado (usuario): blend al girar (pilas ajenas visibles
+por transparencia), ángulo de dos caras simultáneas, vista superior/inferior con
+muchas ventanas, borde del hueco (el cutoff 0.5 corta en seco las sombras AA en
+reposo — riesgo conocido), rejilla del wallpaper para confirmar que nada asoma del
+hueco, gap 0 vs 120. `features.json`: window-layering planned→stable con
+`since 0.0.0.6` y metadata 0.0.0.5→0.0.0.6 en el mismo commit final.

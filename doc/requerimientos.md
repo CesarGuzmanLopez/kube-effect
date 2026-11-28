@@ -272,26 +272,73 @@ Reglas:
 
 ## 2.1 Capas de ventana (z-index / separación de ventanas)
 
-Cada ventana de una cara puede ser su propio quad 3D, empujado hacia DENTRO del
-sólido según su orden de apilado real (z-index del escritorio). Así las ventanas
-solapadas se separan en profundidad y la de atrás se ve por los bordes (parallax).
+Con `WindowLayering` activo, cada ventana de una cara es su propio quad 3D,
+empujado hacia DENTRO del sólido según su orden de apilado real (z-index del
+escritorio). La cara NO se mueve: sigue siendo la superficie del shell, pero su
+grab pone `wId = ""` en cada ventana que gana capa — el compuesto queda con un
+**hueco transparente** exacto donde estaba la ventana, y el quad flota **detrás de
+su propio hueco**. Las ventanas solapadas se separan en profundidad y la de atrás
+se ve por los bordes del hueco (parallax). Con el flag apagado (default) una cara
+= un compuesto plano, píxel a píxel como hoy (ADR-028).
 
-| Clave                     | Tipo   | Rango    | Default | Requerimiento                                                       |
-| ------------------------- | ------ | -------- | ------- | ------------------------------------------------------------------- |
-| `WindowLayering`          | Bool   | —        | true    | Cada ventana como capa 3D (si false, una cara = un compuesto plano) |
-| `WindowLayerGap`          | Int    | 0–600 px | 120     | Paso de profundidad entre capas (hacia dentro)                      |
-| `WindowLayerLodFaces`     | Int    | 0–8      | 1       | Caras con capas (distancia al escritorio actual; 0 = todas)         |
-| `WindowLayerPlateOpacity` | Double | 0–1      | 0.25    | Velo oscuro detrás de las capas (0 = sin velo)                      |
+| Clave                     | Tipo   | Rango    | Default   | Requerimiento                                                                                     |
+| ------------------------- | ------ | -------- | --------- | ------------------------------------------------------------------------------------------------- |
+| `WindowLayering`          | Bool   | —        | **false** | Cada ventana como capa 3D (si false, una cara = un compuesto plano; paridad píxel con el virgen)   |
+| `WindowLayerGap`          | Int    | 0–600 px | 120       | Paso de profundidad entre capas (hacia dentro); 0 = todas a −ε, paridad con el plano                 |
+| `WindowLayerLodFaces`     | Int    | 0–8      | 1         | Caras alrededor del escritorio actual con capas (distancia por índice; 0 = todas)                  |
+| `WindowLayerPlateOpacity` | Double | 0–1      | 0.25      | Velo oscuro detrás de la capa más profunda (0 = sin velo); solo se ve a través de los huecos      |
 
 Reglas:
 
 - Tope global del stack: **150 px**. Si no cabe, se **reparte** el paso (mismo paso
   menor para cada rango, orden preservado, sin aplanar dos capas en un plano).
-- La ventana de arriba (mayor z-index) es la más cercana; las de abajo se hunden.
-- Profundidad **fija** mientras gira (no se anima): el stack se lee como un sólido.
-- Solo cuentan las ventanas de esa cara/escritorio/pantalla; minimizadas, docks y
-  el wallpaper del escritorio se descartan.
-- las ventanas ventanas podrian o no deformarse con el cilindro esto abria que verificar y ser configurable para el usuario tambien en un futuro podria tener colisiones para otros tipos de efecto
+- Presupuesto de profundidad por representación: sólidos (polígono ≥3, tambor)
+  `min(faceDistance · 0.5, cap)`; **hoja 2D** (1-2 escritorios), el cap directo —
+  detrás de la hoja no hay paredes que cruzar y el hueco ya recorta cada quad. (En
+  la hoja `faceDistance = sheetGap`, unos pocos px: con la fórmula del sólido el
+  stack quedaría aplastado a ~1 px. Medido en `Cube.qml`.)
+- La ventana de arriba (mayor z-index) es la más cercana; las de abajo se hunden un
+  paso por rango.
+- Profundidad **fija** mientras gira (no se anima): el stack se lee como un sólido;
+  animar el hueco produce un «pop» al parar (medido en el proyecto de referencia).
+- Solo cuentan las ventanas de esa cara/escritorio/pantalla. Descartes: las
+  minimizadas no existen (igual que en el plano); **docks y ventana-wallpaper
+  quedan planos en el grab, nunca se huecan** (un hueco sin quad detrás abriría el
+  shell). La capa de una ventana se libera con `wId = ""` (QUuid nulo,
+  trucos-aprendidos §N), no con `visible: false`.
+- **LOD = presupuesto de coste, no de orden**: el culling de `Model` no se propaga
+  al `Texture.sourceItem`, así que una capa instanciada cuesta una captura por
+  frame aunque no se vea; `WindowLayerLodFaces` limita cuántas caras instancian
+  quads (distancia de índice al escritorio actual) y las demás mantienen el
+  compuesto plano. El orden de pintado NO depende del LOD: lo dan los centroides de
+  la pasada transparente (ADR-026) y el `Mask` con escritura de profundidad en
+  reposo.
+- Semántica ángulo/transparencia: en reposo (opacidad 1) cada cara es opaca y cada
+  hueco lo tapa su propia ventana — el escritorio se lee plano; al girar
+  (`FaceRotationOpacity`, ADR-021) las caras funden y se ven las pilas de las otras
+  caras a través; en ángulo de dos caras simultáneas ambas pilas se ven y ordenan
+  por centroide; en vistas muy picadas de arriba/abajo, con muchas ventanas, los
+  stacks asoman por huecos y caras translúcidas. **La pila completa (quads + plate)
+  multiplica la opacidad de su cara**: si solo fundiera la base, al girar quedarían
+  ventanas duras sobre cara derretida.
+- Picking: el quad es `pickable` y hace lo de su cara (clic → ese escritorio).
+  Activar la ventana clickeada **no** se implementa aquí: `Workspace::activateWindow`
+  no es QML-expuesto para efectos (medido en `/usr/include/kwin`: `Window` solo
+  expone `setMaximize`). Queda anotado como feature futura del módulo nativo. Esta
+  feature no toca C++ y debe seguir funcionando sin compilar.
+- Orden determinista: mapa `internalId → stackingOrder` + contador `revision` que
+  re-evalúa posiciones (no depende del orden de delegates); ventana cerrada sale del
+  mapa (los `internalId` se reciclan y una entrada vieja daría rango equivocado a la
+  siguiente ventana con ese id).
+- Pasos dentro de la MISMA versión (0.0.0.6): primero polígono (sólido ≥3 y hoja
+  1-2 — funciona desde 1 escritorio), después tambor (cilindro 1-2). Si en la
+  verificación del anidado el tambor no cierra (coste o visual), las capas del
+  tambor se apagan por código y esa fase se pospone sin cambiar de versión.
+- Futuro con clave propia: curvar/deformar las capas con el cilindro (esta feature:
+  quads **planos** sobre la normal de la cara) y colisiones con otros efectos.
+- UI del KCM: `WindowLayering` en la pestaña Ventanas (llena el placeholder
+  existente); `WindowLayerGap`, `WindowLayerLodFaces` y `WindowLayerPlateOpacity` en
+  Avanzado (patrón ADR-014: los ajustes finos van a Advanced).
 
 ## 2.2 Tapas (superior e inferior)
 

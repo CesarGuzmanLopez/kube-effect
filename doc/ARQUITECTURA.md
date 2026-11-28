@@ -201,48 +201,77 @@ y para el fallback sin `QtQuick3D.Helpers`.
   re-alinea (slot 0) y fuerza el radius nuevo (R del tambor), mismo
   mecanismo ADR-024.
 
-## 2.4 Capas de ventana (z-index / separación) — cómo se aplicó
+## 2.4 Capas de ventana (z-index / separación) — cómo se aplicará (ADR-028)
 
-Cada ventana de una cara = un quad propio (con su `WindowThumbnail`) colocado en la
-normal de la cara y **empujado hacia dentro** según su rango de apilado:
+`WindowLayering` (Bool, default **false** → paridad píxel con el cubo virgen;
+patrón opt-in de las tapas, ADR-027). Cada ventana de una cara = un quad propio
+(con su `WindowThumbnail`) colocado en la normal de la cara y **empujado hacia
+dentro** según su rango de apilado. La cara se queda en el shell: su grab suelta
+(`wId = ""`) solo las ventanas que ganan quad → hueco transparente exacto donde
+estaba cada una, y el quad flota detrás de su propio hueco. El hueco recorta la
+capa a su cara en cualquier vista: «nada sobresale del sólido» lo garantiza la
+transparencia, no la distancia al eje.
 
 ```
-rank          = nº de ventanas de la cara con menor stackingOrder  (0 = la de arriba)
+rank          = nº de ventanas de la cara con menor stackingOrder (la de arriba = maxRank)
 cap           = 150 px                                             (tope duro del stack)
-maxLayerDepth = min(faceDistance * 0.5, cap)
+maxLayerDepth = isSheet ? cap : min(faceDistance * 0.5, cap)       (hoja: sin paredes que cruzar)
 fittedGap     = min(WindowLayerGap, maxLayerDepth / max(1, maxRank))
 layerDepth    = (maxRank - rank) * fittedGap                       (la de arriba = 0)
 position.z    = -(layerDepth + epsilon)                            (+z = normal hacia fuera)
 ```
 
-El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 2)`.
+El **velo (plate)** va detrás de la capa más profunda: `z = -(maxLayerDepth + 2)`;
+solo se ve a través de los huecos. Quads y plate heredan la opacidad de la cara
+(ADR-021): la pila funde entera, no solo la base.
 
-### Cómo se aplicaria
+Descartados en ADR-028 (para no reabrirlos): **retraer la cara** detrás del stack
+dejando los quads en la posición del shell (así lo resuelve el proyecto de
+referencia anterior, cuya cara no grababa el escritorio completo; aquí abriría la
+silueta: al girar se mira dentro del cubo por cada cara, y el wallpaper
+retraído arrastra el fondo al interior del sólido) y **quads hacia fuera** (`+z`:
+al orbitar cruzan paredes y caras vecinas — leído como ventanas hundiéndose a
+través del escritorio; medido en la referencia). Detrás de una cara opaca que
+conserva sus ventanas planas la pila es directamente invisible (el `Mask` en
+reposo escribe profundidad).
 
-- **Orden determinista**: un mapa `id → stackingOrder` + un contador `revision` que
-  re-evalúa las posiciones. No depende del orden de creación de los delegates;
-  además se conecta a `onStackingOrderChanged` para mantenerlo vivo.
-- **LOD**: solo las caras cercanas al escritorio actual crean capas
-  (`WindowLayerLodFaces`). Cada `WindowThumbnail` es una captura offscreen por
-  frame, así que una capa que no se ve sigue costando GPU; las caras lejanas usan
-  el compuesto plano.
-- **Ventanas descartadas** (minimizadas, docks, ventana-wallpaper) → `nullWId`
-  (desasocia el thumbnail y libera la captura; `visible: false` por sí solo NO lo
-  hace). Cada capa descartada lleva `wId` nulo.
-- **Dos lados** (`Material.NoCulling`): como las capas van metidas DENTRO, no
-  sobresalen; las ventanas se ven a través. No hace falta un material de dos caras
-  con culling.
+### Cómo se aplicará
+
+- **Orden determinista**: un mapa `internalId → stackingOrder` + un contador
+  `revision` que re-evalúa las posiciones. No depende del orden de creación de los
+  delegates; se conecta a `onStackingOrderChanged`. Las ventanas cerradas salen del
+  mapa (los `internalId` se reciclan; una entrada vieja daría rango equivocado a la
+  siguiente ventana con ese id).
+- **LOD (presupuesto de COSTE, no de orden)**: `WindowLayerLodFaces` caras alrededor
+  del escritorio actual instancian quads; el resto mantiene el compuesto plano
+  (1 textura por cara). El culling de `Model` no se propaga al
+  `Texture.sourceItem`: una capa instanciada cuesta una captura por frame aunque no
+  se vea. El pintado NO depende de esto: ordenan los centroides de la pasada
+  transparente (ADR-026) y el `Mask` con profundidad en reposo.
+- **Ventanas descartadas**: minimizadas no existen; **docks y ventana-wallpaper
+  quedan planos en el grab, nunca se huecan** (hueco sin quad detrás = shell
+  abierto). Soltar una capa = `wId = ""` (desasocia el thumbnail y libera la
+  captura; `visible: false` por sí solo NO lo hace, y un `0` entero no convierte a
+  QUuid — trucos-aprendidos §N).
+- **Dos lados**: ninguna regla nueva — los quads comparten el `Material.NoCulling`
+  de la cara (ADR-025) y el umbral `Mask`/`Blend` de ADR-026.
 
 ### Consejos (trampas)
 
-- **Empujar hacia el exterior del radio tangencialmente fuera- **Tope duro + paso repartido**: no hacer clamp por capa (aplana las profundas en
+- **Tope duro + paso repartido**: no hacer clamp por capa (aplana las profundas en
   un mismo plano y se pierde el orden). Repartir un paso menor conserva el orden y
   que el más profundo caiga justo en el tope.
-- **Profundidad FIJA mientras gira**: animar el hueco producía un "pop" al parar.
+- **Profundidad FIJA mientras gira**: animar el hueco produce un «pop» al parar.
   El stack se lee como un sólido rígido.
 - **`plate` detrás de la más profunda**; si va delante, tapa las ventanas.
-- **Crear capas solo en caras cercanas** (LOD): una capa oculta sigue costando una
-  captura por frame.
+- **Hueco con borde duro**: el `alphaCutoff 0.5` del Mask corta en seco el borde
+  AA/sombras de la ventana contra el hueco en reposo (solo cilindro; hoja y
+  polígono funden su alfa natural). Verificar en el anidado; si molesta, tocar el
+  cutoff de las CAPAS antes que el de las caras (es contrato ADR-026).
+- **Unidades**: 1 unidad = 1 px solo con el escalado de la cara (`faceSize/100`
+  sobre `#Rectangle` en polígono/hoja, o la malla del cilindro ya en px, ADR-025).
+  Las capas usan la convención de su cara sin `/100` extra (si no, todas las
+  ventanas se apilan en el centro de la cara).
 
 ## 2.5 Tapas (superior e inferior) — cómo se aplicó (ADR-027)
 
@@ -347,12 +376,14 @@ CapGradientType/CapGradientStop/CapImage/CapImageFit/CapOpacity` en
   ADR-022 quedó retirado — con `Material.NoCulling` y caras separadas los
   interiores de las traseras se ven por los huecos (look del cubo virgen), y
   ocultarlas abría agujeros al casco en reposo. El `Texture.sourceItem` de
-  cada cara captura por frame sin excepciones; el ahorro llegará con el LOD
-  **por distancia** de WindowLayering (fase posterior).
+  cada cara captura por frame sin excepciones; el LOD **por distancia** de
+  WindowLayering (§2.4, ADR-028) limita el coste NUEVO de las capas — no reemplaza
+  el grab de la cara, que sigue siendo incondicional (ADR-023).
 - **Sin scope dinámico** (ADR-022): `DesktopView` no resuelve `targetScreen`
   subiendo el grafo de objetos; `ScreenView` → `Cube` → `CubeFace` →
   `DesktopView` pasan `screenName` y `screenGeometry` explícitos, y un modelo
-  nulo deja `wId = 0` (nullWId) para liberar la captura.
+  nulo deja `wId = ""` (nullWId; el QUuid nulo es cadena vacía, no 0 —
+  trucos-aprendidos §N) para liberar la captura.
 
 ### Modo debug (`DebugOverlay`)
 

@@ -112,7 +112,7 @@
     "label": "Ventanas: capas 3D (z-index)",
     "requires": [],
     "native": false,
-    "notes": "Cada ventana como quad empujado hacia dentro según su z-index, tope de 150 px. Claves: WindowLayering, WindowLayerGap, WindowLayerLodFaces, WindowLayerPlateOpacity.",
+    "notes": "Cada ventana como quad empujado hacia dentro según su z-index (tope 150 px). La cara sigue en el shell con huecos transparentes (wId='') donde estaba cada ventana con capa; el quad flota detrás de su hueco y nada asoma fuera. Default WindowLayering=false = paridad píxel con el virgen (ADR-028). Claves: WindowLayering, WindowLayerGap (0 = paridad), WindowLayerLodFaces (presupuesto de coste: capa instanciada captura por frame), WindowLayerPlateOpacity.",
     "status": "planned",
     "since": "0.0.0.1"
   }
